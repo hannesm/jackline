@@ -14,13 +14,15 @@ module XMPPClient = XMPP.Make (Lwt) (Xmlstream.XmlStream) (IDCallback)
 open XMPPClient
 
 module Version = XEP_version.Make (XMPPClient)
+module Roster = Roster.Make (XMPPClient)
 
 type otr = { mutable state : Otr.State.session }
 
 let message_callback otr t stanza =
   let send = match stanza.content.body with
-  | None -> print_endline "received nothing :/" ; []
+  | None -> t.user_data "nothing received\n" ; print_endline "received nothing :/" ; []
   | Some v ->
+    t.user_data (v ^ "\n") ;
     let ctx, out, warn, received, plain = Otr.Handshake.handle otr.state v in
     (match plain with
      | None -> print_endline "no plaintext received!"
@@ -108,12 +110,18 @@ let session t =
     (parse_message ~callback:(message_callback otr) ~callback_error:message_error);
   register_stanza_handler t (ns_client, "presence")
     (parse_presence ~callback:presence_callback ~callback_error:presence_error);
+  print_endline "fetching roster" ;
+  Roster.get t (fun ?jid_from ?jid_to ?lang ?ver items ->
+      let open Roster in
+      Printf.printf "%d items\n" (List.length items) ;
+      List.iter (fun x -> Printf.printf "jid %s\n%!" (JID.string_of_jid x.jid)) items;
+      return ()) >>= fun () ->
   print_endline "sending presence" ;
   send_presence t () >>= fun () ->
   print_endline "returning" ;
   return ()
 
-let connect _ =
+let connect user_data _ =
   let server = "jwchat.org"
   and username = "testbot2"
   and password = "fnord"
@@ -144,7 +152,7 @@ let connect _ =
     in
     print_endline "setting up" ;
     XMPPClient.setup_session
-      ~user_data:()
+      ~user_data
       ~myjid
       ~plain_socket:(module Socket_module : XMPPClient.Socket)
       ~tls_socket:make_tls
