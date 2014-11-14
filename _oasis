@@ -13,7 +13,7 @@ Description:
 
 Library "xmpp_client"
   Path            : src/
-  Modules         : Xmpp
+  Modules         : Xmpp_connection, Xmpp
   Pack            : true
   BuildDepends    : erm_xmpp, otr, tls, tls.lwt, lwt
 
