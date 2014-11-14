@@ -20,7 +20,7 @@ type otr = { mutable state : Otr.State.session }
 
 let message_callback otr t stanza =
   let send = match stanza.content.body with
-  | None -> t.user_data "nothing received\n" ; print_endline "received nothing :/" ; []
+  | None -> t.user_data "nothing received\n" ; []
   | Some v ->
     t.user_data (v ^ "\n") ;
     let ctx, out, warn, received, plain = Otr.Handshake.handle otr.state v in
