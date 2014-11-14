@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 89fb964e4caec7fc62cff5e775122a28)
+# DO NOT EDIT (digest: cf42004147f903040189ec80d9056e89)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -16,6 +16,7 @@ true: annot, bin_annot
 "_darcs": not_hygienic
 # Library xmpp_client
 "src/xmpp_client.cmxs": use_xmpp_client
+"src/xmpp_connection.cmx": for-pack(Xmpp_client)
 "src/xmpp.cmx": for-pack(Xmpp_client)
 # Executable gui_client
 "src/gui_client.native": pkg_erm_xmpp
