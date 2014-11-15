@@ -80,15 +80,16 @@ let sexp_of_t t =
   ]
 
 let load_users bytes =
-  match Sexp.of_string bytes with
-  | Sexp.List [ ver ; Sexp.List users ] ->
-    let version = int_of_sexp ver in
-    Printf.printf "parsing user db version %d\n" version ;
-    List.fold_left (fun acc s ->
-        try t_of_sexp s :: acc with
-          _ -> Printf.printf "parse error in user entry\n" ; acc)
-      [] users
-  | _ -> Printf.printf "parse failed while parsing db\n" ; []
+  try (match Sexp.of_string bytes with
+      | Sexp.List [ ver ; Sexp.List users ] ->
+        let version = int_of_sexp ver in
+        Printf.printf "parsing user db version %d\n" version ;
+        List.fold_left (fun acc s ->
+            try t_of_sexp s :: acc with
+              _ -> Printf.printf "parse error in user entry\n" ; acc)
+          [] users
+      | _ -> Printf.printf "parse failed while parsing db\n" ; [])
+  with _ -> []
 
 let store_users users =
   let users = List.map sexp_of_t users in

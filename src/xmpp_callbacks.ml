@@ -31,11 +31,14 @@ let read_config = return ""
 
 let read_users = return ""
 
+open Sexplib
+
 let init () =
   read_config >>= fun cfgdata ->
   let config = try Config.load_config cfgdata with _ -> Config.empty in
   read_users >>= fun userdata ->
   let users = try User.load_users userdata with _ -> [] in
+  Printf.printf "returning from init with:\n - config: %s\n - users:\n   %s\n" (Sexplib.Sexp.to_string_hum (Config.sexp_of_t config)) (String.concat "\n   " (List.map (fun u -> Sexplib.Sexp.to_string_hum (User.sexp_of_t u)) users)) ;
   return { config ; users }
 
 let message_callback (t : user_data session_data) stanza =
@@ -94,12 +97,13 @@ let session_callback t =
   return ()
 
 let connect (data, callbacks) _ =
+  Printf.printf "connecting\n%!" ;
   let open Config in
   let config = data.config in
-
   let server = JID.to_idn config.jid
   and port = config.port
   in
+  Printf.printf "connecting to %s %d\n%!" server port ;
   let inet_addr =
     try Unix.inet_addr_of_string server
     with Failure("inet_addr_of_string") ->

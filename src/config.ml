@@ -56,7 +56,7 @@ let sexp_of_t t =
   ]
 
 let load_config bytes =
-  t_of_sexp (Sexp.of_string bytes)
+  try t_of_sexp (Sexp.of_string bytes) with _ -> empty
 
 let store_config t =
   Sexp.to_string_mach (sexp_of_t t)
