@@ -8,11 +8,23 @@ open GText
 
 let add_text (t : buffer) (s : string) =
   let iter = t#get_iter `END in
-  t#insert s
-
-let config_dialog () = ()
+  t#insert ~iter s
 
 open Xmpp_callbacks
+
+let config_dialog config parent () =
+  let open Config in
+  Printf.printf "current jid %s\n" (JID.string_of_jid config.jid) ;
+  Printf.printf "server port %d\n" config.port ;
+  Printf.printf "password %s\n" config.password ;
+  Printf.printf "trust anchor %s\n" config.trust_anchor ;
+  (match config.otr_config with
+   | None -> Printf.printf "no OTR\n"
+   | Some x -> Printf.printf "some OTR\n") ;
+  let dialog = GWindow.dialog ~title:"barf" ~resizable:true ~modal:true ~parent () in
+  let ok = GButton.button ~stock:`OK ~packing:dialog#action_area#add () in
+  dialog#show () ;
+  ()
 
 let () = Lwt_main.run (
     ignore (GMain.init ());
@@ -46,6 +58,7 @@ let () = Lwt_main.run (
     } in
     (* Action menu *)
     let factory = new GMenu.factory menu ~accel_group in
+    ignore (factory#add_item "Config" ~callback:(config_dialog data.config window));
     ignore (factory#add_item "Connect" ~callback:(connect (data, callbacks)));
     ignore (factory#add_item "Quit" ~key:GdkKeysyms._Q ~callback:(before_exit wakener));
 
