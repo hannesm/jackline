@@ -2,6 +2,7 @@
 
 type session = {
   resource : string ;
+  mutable priority : int ;
   mutable messages : string list ;
   (*  presence : ?? ; *)
   mutable otr : Otr.State.session
