@@ -7,7 +7,6 @@ type t = {
   jid : JID.t ;
   port : int ;
   password : string ;
-  resource : string ;
   trust_anchor : string ;
   otr_config : Otr.State.config option ;
 }
@@ -18,7 +17,6 @@ let t_of_sexp t =
     jid = JID.of_string "a@b" ;
     port = 5222 ;
     password = "" ;
-    resource = "" ;
     trust_anchor = "" ;
     otr_config = None
   } in
@@ -35,8 +33,6 @@ let t_of_sexp t =
           { t with port = int_of_sexp port }
         | Sexp.List [ Sexp.Atom "password" ; Sexp.Atom password ] ->
           { t with password }
-        | Sexp.List [ Sexp.Atom "resource" ; Sexp.Atom resource ] ->
-          { t with resource }
         | Sexp.List [ Sexp.Atom "trust_anchor" ; Sexp.Atom trust_anchor ] ->
           { t with trust_anchor }
         | Sexp.List [ Sexp.Atom "otr_config" ; v ] ->
@@ -54,7 +50,6 @@ let sexp_of_t t =
     "jid" , sexp_of_string (JID.string_of_jid t.jid) ;
     "port" , sexp_of_int t.port ;
     "password" , sexp_of_string t.password ;
-    "resource" , sexp_of_string t.resource ;
     "trust_anchor" , sexp_of_string t.trust_anchor ;
     "otr_config" , sexp_of_option Otr.State.sexp_of_config t.otr_config ;
   ]
