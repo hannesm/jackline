@@ -36,7 +36,7 @@ let () = Lwt_main.run (
 
     (* Action menu *)
     let factory = new GMenu.factory menu ~accel_group in
-    ignore (factory#add_item "Connect" ~callback:(Xmpp.connect (add_text textbuf)));
+    ignore (factory#add_item "Connect" ~callback:(Xmpp_callbacks.connect (add_text textbuf)));
     ignore (factory#add_item "Quit" ~key:GdkKeysyms._Q ~callback:(before_exit wakener));
 
     (* Display the windows and enter Gtk+ main loop *)
