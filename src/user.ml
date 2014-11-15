@@ -2,9 +2,9 @@
 
 type session = {
   resource : string ;
-  messages : string list ;
-(*  presence : ?? ;
-    otr :  *)
+  mutable messages : string list ;
+  (*  presence : ?? ; *)
+  mutable otr : Otr.State.session
 }
 
 open Sexplib
@@ -20,7 +20,6 @@ type fingerprint = {
 } with sexp
 
 type t = {
-  version : int ;
   name : string ;
   jid : JID.t ;
   subscription : subscription_t ;
@@ -28,6 +27,13 @@ type t = {
   active_sessions : session list
 }
 
+let empty = {
+  name = "" ;
+  jid = JID.of_string "a@b" ;
+  subscription = SubscriptionNone ;
+  otr_fingerprints = [] ;
+  active_sessions = []
+}
 
 let subscription_of_sexp = function
   | Sexp.Atom "SubscriptionNone"   -> SubscriptionNone
@@ -38,20 +44,9 @@ let subscription_of_sexp = function
   | _ -> assert false
 
 let t_of_sexp t =
-  let empty = {
-    version = 0 ;
-    name = "" ;
-    jid = JID.of_string "a@b" ;
-    subscription = SubscriptionNone ;
-    otr_fingerprints = [] ;
-    active_sessions = []
-  } in
   match t with
   | Sexp.List l ->
       List.fold_left (fun t v -> match v with
-        | Sexp.List [ Sexp.Atom "version" ; v ] ->
-          let version = int_of_sexp v in
-          { t with version }
         | Sexp.List [ Sexp.Atom "name" ; Sexp.Atom name ] -> { t with name }
         | Sexp.List [ Sexp.Atom "jid" ; Sexp.Atom v ] ->
           let jid = try JID.of_string v with
@@ -78,7 +73,6 @@ let record kvs =
 
 let sexp_of_t t =
   record [
-    "version", sexp_of_int t.version ;
     "name" , sexp_of_string t.name ;
     "jid" , sexp_of_string (JID.string_of_jid t.jid) ;
     "subscription", sexp_of_subscription t.subscription ;
@@ -86,7 +80,16 @@ let sexp_of_t t =
   ]
 
 let load_users bytes =
-  list_of_sexp t_of_sexp (Sexp.of_string bytes)
+  match Sexp.of_string bytes with
+  | Sexp.List [ ver ; Sexp.List users ] ->
+    let version = int_of_sexp ver in
+    Printf.printf "parsing user db version %d\n" version ;
+    List.fold_left (fun acc s ->
+        try t_of_sexp s :: acc with
+          _ -> Printf.printf "parse error in user entry\n" ; acc)
+      [] users
+  | _ -> Printf.printf "parse failed while parsing db\n" ; []
 
 let store_users users =
-  Sexp.to_string_mach (Sexp.List (List.map sexp_of_t users))
+  let users = List.map sexp_of_t users in
+  Sexp.to_string_mach (Sexp.List [ sexp_of_int 0 ; Sexp.List users ])

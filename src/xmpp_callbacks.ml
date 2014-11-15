@@ -16,64 +16,40 @@ open XMPPClient
 module Version = XEP_version.Make (XMPPClient)
 module Roster = Roster.Make (XMPPClient)
 
-type otr = { mutable state : Otr.State.session }
+type data = {
+  config : Config.t ;
+  users : User.t list ;
+}
 
-let message_callback otr t stanza =
-  let send = match stanza.content.body with
-  | None -> t.user_data "nothing received\n" ; []
+type callbacks = {
+  received : string -> unit
+}
+
+type user_data = data * callbacks
+
+let read_config = return ""
+
+let read_users = return ""
+
+let init () =
+  read_config >>= fun cfgdata ->
+  let config = try Config.load_config cfgdata with _ -> Config.empty in
+  read_users >>= fun userdata ->
+  let users = try User.load_users userdata with _ -> [] in
+  return { config ; users }
+
+let message_callback (t : user_data session_data) stanza =
+  let data, callbacks = t.user_data in
+  match stanza.content.body with
+  | None -> callbacks.received "nothing received\n" ; return ()
   | Some v ->
-    t.user_data (v ^ "\n") ;
-    let ctx, out, warn, received, plain = Otr.Handshake.handle otr.state v in
-    (match plain with
-     | None -> print_endline "no plaintext received!"
-     | Some p -> print_endline ("plain message: " ^ p)) ;
-    (match warn with
-     | None -> print_endline "no warn"
-     | Some w -> print_endline ("warning: " ^ w)) ;
-    (match received with
-     | None -> print_endline "no text received"
-     | Some c -> print_endline ("received encrypted: " ^ c)) ;
-    otr.state <- ctx ;
-    let send msg =
-      let ctx, out, warn = Otr.Handshake.send_otr otr.state msg in
-      ( match warn with
-        | None -> ()
-        | Some t -> Printf.printf "warning from send_otr %s\n" t );
-      otr.state <- ctx ;
-      match out with
-      | Some x -> [ x ]
-      | None -> []
-    in
-    match out with
-    | None ->
-      ( match received with
-        | Some x when x = "bla" ->
-          []
-        | Some x when x = "bla2" ->
-          let msg1 = send "bla" in
-          let msg2 = send "bla" in
-          msg1 @ msg2
-        | Some x when x = "fin" ->
-          let ctx, out, warn = Otr.Handshake.end_otr otr.state in
-          ( match warn with
-            | None -> ()
-            | Some t -> Printf.printf "warning from end_otr %s\n" t );
-          otr.state <- ctx ;
-          ( match out with
-            | Some x -> [ x ]
-            | None -> [ "end_otr didn't want me to send anything" ] )
-        | Some x ->
-          send x
-        | None ->
-          send "nothing to send" )
-    | Some c -> [ c ]
-  in
-  Lwt_list.iter_s (fun out ->
-      send_message t ?jid_to:stanza.jid_from
-        ?id:stanza.id
-        ?kind:stanza.content.message_type
-        ?lang:stanza.lang
-        ?body:(Some out) ()) send
+    callbacks.received (v ^ "\n") ;
+    let out = "Nothing to send" in
+    send_message t ?jid_to:stanza.jid_from
+      ?id:stanza.id
+      ?kind:stanza.content.message_type
+      ?lang:stanza.lang
+      ?body:(Some out) ()
 
 let message_error t ?id ?jid_from ?jid_to ?lang error =
   print_endline ("message error: " ^ error.err_text);
@@ -90,11 +66,8 @@ let presence_error t ?id ?jid_from ?jid_to ?lang error =
   return ()
 
 
-let session t =
-  print_endline "in session" ;
-  let dsa = Nocrypto.Dsa.generate `Fips1024 in
-  Printf.printf "my fp" ; Cstruct.hexdump (Otr.Crypto.OtrDsa.fingerprint (Nocrypto.Dsa.pub_of_priv dsa)) ;
-  let otr = { state = (Otr.State.empty_session ~dsa ~policies:[`REQUIRE_ENCRYPTION] ()) } in
+let session_callback t =
+  print_endline "in session callback" ;
   register_iq_request_handler t Version.ns_version
     (fun ev _jid_from _jid_to _lang () ->
       match ev with
@@ -107,10 +80,9 @@ let session t =
           fail BadRequest
     );
   register_stanza_handler t (ns_client, "message")
-    (parse_message ~callback:(message_callback otr) ~callback_error:message_error);
+    (parse_message ~callback:message_callback ~callback_error:message_error);
   register_stanza_handler t (ns_client, "presence")
     (parse_presence ~callback:presence_callback ~callback_error:presence_error);
-  print_endline "fetching roster" ;
   Roster.get t (fun ?jid_from ?jid_to ?lang ?ver items ->
       let open Roster in
       Printf.printf "%d items\n" (List.length items) ;
@@ -121,15 +93,13 @@ let session t =
   print_endline "returning" ;
   return ()
 
-let connect user_data _ =
-  let server = "jwchat.org"
-  and username = "testbot2"
-  and password = "fnord"
-  and resource = "xmpp3.0"
-  and port = 5222
-  in
+let connect (data, callbacks) _ =
+  let open Config in
+  let config = data.config in
 
-  let myjid = JID.make_jid username server resource in
+  let server = JID.to_idn config.jid
+  and port = config.port
+  in
   let inet_addr =
     try Unix.inet_addr_of_string server
     with Failure("inet_addr_of_string") ->
@@ -143,7 +113,7 @@ let connect user_data _ =
       include PlainSocket
     end in
     let make_tls () =
-      TLSSocket.switch (PlainSocket.get_fd socket_data) server >>= fun socket_data ->
+      TLSSocket.switch (PlainSocket.get_fd socket_data) server config.trust_anchor >>= fun socket_data ->
       let module TLS_module = struct type t = Tls_lwt.Unix.t
         let socket = socket_data
         include TLSSocket
@@ -152,12 +122,13 @@ let connect user_data _ =
     in
     print_endline "setting up" ;
     XMPPClient.setup_session
-      ~user_data
-      ~myjid
+      ~user_data:(data, callbacks)
+      ~myjid:config.jid
       ~plain_socket:(module Socket_module : XMPPClient.Socket)
       ~tls_socket:make_tls
-      ~password session >>=
-    fun session_data -> XMPPClient.parse session_data >>= fun () ->
+      ~password:config.password
+      session_callback >>= fun session_data ->
+    XMPPClient.parse session_data >>= fun () ->
     let module S = (val session_data.socket : Socket) in
     S.close S.socket
   )

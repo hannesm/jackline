@@ -11,15 +11,16 @@ type t = {
   otr_config : Otr.State.config option ;
 }
 
+let empty = {
+  version = 0 ;
+  jid = JID.of_string "a@b" ;
+  port = 5222 ;
+  password = "" ;
+  trust_anchor = "" ;
+  otr_config = None
+}
+
 let t_of_sexp t =
-  let empty = {
-    version = 0 ;
-    jid = JID.of_string "a@b" ;
-    port = 5222 ;
-    password = "" ;
-    trust_anchor = "" ;
-    otr_config = None
-  } in
   match t with
   | Sexp.List l ->
       List.fold_left (fun t v -> match v with

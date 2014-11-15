@@ -10,9 +10,16 @@ let add_text (t : buffer) (s : string) =
   let iter = t#get_iter `END in
   t#insert s
 
+let config_dialog () = ()
+
+open Xmpp_callbacks
+
 let () = Lwt_main.run (
     ignore (GMain.init ());
     Lwt_glib.install ();
+
+    (* configuration *)
+    init () >>= fun data ->
 
     (* Thread which is wakeup when the main window is closed. *)
     let waiter, wakener = Lwt.wait () in
@@ -34,9 +41,12 @@ let () = Lwt_main.run (
     let button = GButton.button ~label:"Push me!" ~packing:vbox#add () in
     ignore (button#connect#clicked ~callback:(fun () -> Printf.printf "blablabla\n%!"));
 
+    let callbacks = {
+      received = add_text textbuf
+    } in
     (* Action menu *)
     let factory = new GMenu.factory menu ~accel_group in
-    ignore (factory#add_item "Connect" ~callback:(Xmpp_callbacks.connect (add_text textbuf)));
+    ignore (factory#add_item "Connect" ~callback:(connect (data, callbacks)));
     ignore (factory#add_item "Quit" ~key:GdkKeysyms._Q ~callback:(before_exit wakener));
 
     (* Display the windows and enter Gtk+ main loop *)
