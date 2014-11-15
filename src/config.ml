@@ -4,12 +4,55 @@ open Sexplib.Conv
 
 type t = {
   version : int ;
-  username : string ;
-  server : string ;
+  jid : JID.t ;
   password : string ;
+  resource : string ;
   trust_anchor : string ;
-  otr_config : Otr.State.config ;
-} with sexp
+  otr_config : Otr.State.config option ;
+}
+
+let t_of_sexp t =
+  let empty = {
+    version = 0 ;
+    jid = JID.of_string "a@b" ;
+    password = "" ;
+    resource = "" ;
+    trust_anchor = "" ;
+    otr_config = None
+  } in
+  match t with
+  | Sexp.List l ->
+      List.fold_left (fun t v -> match v with
+        | Sexp.List [ Sexp.Atom "version" ; v ] ->
+          let version = int_of_sexp v in
+          { t with version }
+        | Sexp.List [ Sexp.Atom "jid" ; Sexp.Atom v ] ->
+          let jid = try JID.of_string v with _ -> Printf.printf "parse error in jid" ; t.jid in
+          { t with jid }
+        | Sexp.List [ Sexp.Atom "password" ; Sexp.Atom password ] ->
+          { t with password }
+        | Sexp.List [ Sexp.Atom "resource" ; Sexp.Atom resource ] ->
+          { t with resource }
+        | Sexp.List [ Sexp.Atom "trust_anchor" ; Sexp.Atom trust_anchor ] ->
+          { t with trust_anchor }
+        | Sexp.List [ Sexp.Atom "otr_config" ; v ] ->
+          { t with otr_config = option_of_sexp Otr.State.config_of_sexp v }
+        | _ -> assert false)
+        empty l
+  | _ -> Printf.printf "unknown t\n" ; empty
+
+let record kvs =
+  Sexp.List List.(map (fun (k, v) -> (Sexp.List [Sexp.Atom k; v])) kvs)
+
+let sexp_of_t t =
+  record [
+    "version", sexp_of_int t.version ;
+    "jid" , sexp_of_string (JID.string_of_jid t.jid) ;
+    "password" , sexp_of_string t.password ;
+    "resource" , sexp_of_string t.resource ;
+    "trust_anchor" , sexp_of_string t.trust_anchor ;
+    "otr_config" , sexp_of_option Otr.State.sexp_of_config t.otr_config ;
+  ]
 
 let load_config bytes =
   t_of_sexp (Sexp.of_string bytes)

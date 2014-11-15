@@ -53,8 +53,9 @@ let t_of_sexp t =
           let version = int_of_sexp v in
           { t with version }
         | Sexp.List [ Sexp.Atom "name" ; Sexp.Atom name ] -> { t with name }
-        | Sexp.List [ Sexp.Atom "jid" ; Sexp.Atom v ]   ->
-          let jid = try JID.of_string v with _ -> Printf.printf "parse error in jid" ; t.jid in
+        | Sexp.List [ Sexp.Atom "jid" ; Sexp.Atom v ] ->
+          let jid = try JID.of_string v with
+              _ -> Printf.printf "parse error in jid" ; t.jid in
           { t with jid }
         | Sexp.List [ Sexp.Atom "subscription" ; s ] ->
           let subscription = subscription_of_sexp s in
