@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: cf42004147f903040189ec80d9056e89)
+# DO NOT EDIT (digest: 232faeed8d3a28e647c880e9db69991d)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -17,13 +17,16 @@ true: annot, bin_annot
 # Library xmpp_client
 "src/xmpp_client.cmxs": use_xmpp_client
 "src/xmpp_connection.cmx": for-pack(Xmpp_client)
-"src/xmpp.cmx": for-pack(Xmpp_client)
+"src/xmpp_callbacks.cmx": for-pack(Xmpp_client)
+"src/user.cmx": for-pack(Xmpp_client)
 # Executable gui_client
 "src/gui_client.native": pkg_erm_xmpp
 "src/gui_client.native": pkg_lablgtk2
 "src/gui_client.native": pkg_lwt
 "src/gui_client.native": pkg_lwt.glib
 "src/gui_client.native": pkg_otr
+"src/gui_client.native": pkg_sexplib
+"src/gui_client.native": pkg_sexplib.syntax
 "src/gui_client.native": pkg_tls
 "src/gui_client.native": pkg_tls.lwt
 "src/gui_client.native": use_xmpp_client
@@ -32,6 +35,8 @@ true: annot, bin_annot
 <src/*.ml{,i,y}>: pkg_lwt
 <src/*.ml{,i,y}>: pkg_lwt.glib
 <src/*.ml{,i,y}>: pkg_otr
+<src/*.ml{,i,y}>: pkg_sexplib
+<src/*.ml{,i,y}>: pkg_sexplib.syntax
 <src/*.ml{,i,y}>: pkg_tls
 <src/*.ml{,i,y}>: pkg_tls.lwt
 <src/*.ml{,i,y}>: use_xmpp_client
