@@ -3,6 +3,7 @@ open Sexplib
 open Sexplib.Conv
 
 type t = {
+  version : int ;
   username : string ;
   server : string ;
   password : string ;
@@ -15,4 +16,3 @@ let load_config bytes =
 
 let store_config t =
   Sexp.to_string_mach (sexp_of_t t)
-
