@@ -13,9 +13,9 @@ Description:
 
 Library "xmpp_client"
   Path            : src/
-  Modules         : Xmpp_connection, Xmpp
+  Modules         : Xmpp_connection, Xmpp_callbacks, User
   Pack            : true
-  BuildDepends    : erm_xmpp, otr, tls, tls.lwt, lwt
+  BuildDepends    : erm_xmpp, otr, tls, tls.lwt, lwt, sexplib, sexplib.syntax
 
 Executable "gui_client"
   Path            : src/
