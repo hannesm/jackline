@@ -5,6 +5,7 @@ open Sexplib.Conv
 type t = {
   version : int ;
   jid : JID.t ;
+  port : int ;
   password : string ;
   resource : string ;
   trust_anchor : string ;
@@ -15,6 +16,7 @@ let t_of_sexp t =
   let empty = {
     version = 0 ;
     jid = JID.of_string "a@b" ;
+    port = 5222 ;
     password = "" ;
     resource = "" ;
     trust_anchor = "" ;
@@ -29,6 +31,8 @@ let t_of_sexp t =
         | Sexp.List [ Sexp.Atom "jid" ; Sexp.Atom v ] ->
           let jid = try JID.of_string v with _ -> Printf.printf "parse error in jid" ; t.jid in
           { t with jid }
+        | Sexp.List [ Sexp.Atom "port" ; port ] ->
+          { t with port = int_of_sexp port }
         | Sexp.List [ Sexp.Atom "password" ; Sexp.Atom password ] ->
           { t with password }
         | Sexp.List [ Sexp.Atom "resource" ; Sexp.Atom resource ] ->
@@ -48,6 +52,7 @@ let sexp_of_t t =
   record [
     "version", sexp_of_int t.version ;
     "jid" , sexp_of_string (JID.string_of_jid t.jid) ;
+    "port" , sexp_of_int t.port ;
     "password" , sexp_of_string t.password ;
     "resource" , sexp_of_string t.resource ;
     "trust_anchor" , sexp_of_string t.trust_anchor ;
