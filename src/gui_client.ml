@@ -1,8 +1,9 @@
 open Lwt
 
-let before_exit wake =
+let before_exit wake () =
   Printf.printf "just about to finish up\n%!" ;
-  Lwt.wakeup wake
+  (* save config to disk *)
+  Lwt.wakeup wake ()
 
 open GText
 
