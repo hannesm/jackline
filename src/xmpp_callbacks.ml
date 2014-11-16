@@ -34,6 +34,7 @@ let read_users = return ""
 open Sexplib
 
 let init () =
+  Tls_lwt.rng_init () >>= fun () ->
   read_config >>= fun cfgdata ->
   let config = try Config.load_config cfgdata with _ -> Config.empty in
   read_users >>= fun userdata ->
