@@ -14,15 +14,57 @@ open Xmpp_callbacks
 
 let config_dialog config parent () =
   let open Config in
-  Printf.printf "current jid %s\n" (JID.string_of_jid config.jid) ;
-  Printf.printf "server port %d\n" config.port ;
-  Printf.printf "password %s\n" config.password ;
-  Printf.printf "trust anchor %s\n" config.trust_anchor ;
-  (match config.otr_config with
-   | None -> Printf.printf "no OTR\n"
-   | Some x -> Printf.printf "some OTR\n") ;
-  let dialog = GWindow.dialog ~title:"barf" ~resizable:true ~modal:true ~parent () in
+  let dialog = GWindow.dialog ~title:"Configuration" ~resizable:true ~modal:true ~parent () in
+  let labelled_entry name value =
+    let hbox = GPack.hbox ~packing:dialog#vbox#add () in
+    ignore (GMisc.label ~text:name ~packing:hbox#add ()) ;
+    GEdit.entry ~text:value ~packing:hbox#add ()
+  in
+  let jid = labelled_entry "Jabber ID" (JID.string_of_jid config.jid) in
+  let port = labelled_entry "port" (string_of_int config.port) in
+  let password = labelled_entry "password" config.password in
+  let trust_anchor =
+    let hbox = GPack.hbox ~packing:dialog#vbox#add () in
+    ignore (GMisc.label ~text:"Trust anchor" ~packing:hbox#add ()) ;
+    let anchor = GFile.chooser_button ~action:`OPEN ~packing:hbox#add () in
+    anchor#set_filter (GFile.filter ~patterns:["*.pem"] ()) ;
+    anchor
+  in
+  trust_anchor#set_filename config.trust_anchor ;
+  let otr =
+    let hex x = match Hex.of_string ~pretty:true (Cstruct.to_string x) with `Hex e -> e in
+    let hbox = GPack.hbox ~packing:dialog#vbox#add () in
+    let text cfg = match cfg.otr_config with
+      | None -> "No OTR"
+      | Some cfg -> hex (Otr.Crypto.OtrDsa.priv_fingerprint cfg.Otr.State.dsa)
+    in
+    let fp_label = GMisc.label ~text:"OTR Fingerprint" ~packing:hbox#add () in
+    let fp = GMisc.label ~text:(text config) ~packing:hbox#add () in
+    let gen = GButton.button ~label:"generate" ~packing:hbox#add () in
+    let gen_cb () =
+      let dsa = Nocrypto.Dsa.generate `Fips1024 in
+      fp#set_text (hex (Otr.Crypto.OtrDsa.priv_fingerprint dsa))
+      (* preserve dsa somewhere! *)
+    in
+    ignore (gen#connect#clicked ~callback:gen_cb) ;
+    let policies =
+      let hbox = GPack.hbox ~packing:dialog#vbox#add () in
+      List.map (fun p ->
+          let label = Otr.State.policy_to_string p in
+          GButton.toggle_button ~label ~packing:hbox#add ())
+        Otr.State.policies
+    in
+    let versions =
+      let hbox = GPack.hbox ~packing:dialog#vbox#add () in
+      List.map (fun v ->
+          let label = Otr.State.version_to_string v in
+          GButton.toggle_button ~label ~packing:hbox#add ())
+        Otr.State.versions
+    in
+    ()
+  in
   let ok = GButton.button ~stock:`OK ~packing:dialog#action_area#add () in
+  (* ok callback *)
   dialog#show () ;
   ()
 
