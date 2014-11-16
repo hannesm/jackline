@@ -13,7 +13,7 @@ type t = {
 
 let empty = {
   version = 0 ;
-  jid = JID.of_string "a@b" ;
+  jid = JID.of_string "user@server/resource" ;
   port = 5222 ;
   password = "" ;
   trust_anchor = "" ;
