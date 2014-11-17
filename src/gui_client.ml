@@ -125,7 +125,8 @@ let () = Lwt_main.run (
     Lwt_glib.install ();
 
     (* configuration *)
-    init () >>= fun { config ; users } ->
+    let cfgdir = Glib.get_user_config_dir () in
+    init cfgdir >>= fun { config ; users } ->
     ctx.config <- config ;
     ctx.users <- users ;
 
