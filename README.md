@@ -28,4 +28,4 @@ Trusted code base is at the moment:
 
 Security audits are needed, please contact me if you plan to do some. Transitive dependencies are only partially listed. For a more complete list, use ``opam list --required-by=xmpp_client``.
 
-OPAM is the OCaml package manager, and not directly needed, but very convenient. It lacks package signing!
+OPAM is the OCaml package manager, and not directly needed, but very convenient. [It lacks package signing](https://github.com/ocaml/opam/issues/423)!
