@@ -31,7 +31,7 @@ let config_dialog parent () =
     let hbox = GPack.hbox ~packing:dialog#vbox#add () in
     ignore (GMisc.label ~text:"Trust anchor" ~packing:hbox#add ()) ;
     let anchor = GFile.chooser_button ~action:`OPEN ~packing:hbox#add () in
-    anchor#set_filter (GFile.filter ~patterns:["*.pem"] ()) ;
+    anchor#set_filter (GFile.filter ~patterns:["*.pem" ; "*.crt"] ()) ;
     anchor
   in
   ignore (trust_anchor#set_filename config.trust_anchor) ;
