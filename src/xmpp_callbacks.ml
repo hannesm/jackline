@@ -17,8 +17,8 @@ module Version = XEP_version.Make (XMPPClient)
 module Roster = Roster.Make (XMPPClient)
 
 type data = {
-  config : Config.t ;
-  users : User.t list ;
+  mutable config : Config.t ;
+  mutable users : User.t list ;
 }
 
 type callbacks = {
@@ -39,7 +39,12 @@ let init () =
   let config = try Config.load_config cfgdata with _ -> Config.empty in
   read_users >>= fun userdata ->
   let users = try User.load_users userdata with _ -> [] in
-  Printf.printf "returning from init with:\n - config: %s\n - users:\n   %s\n" (Sexplib.Sexp.to_string_hum (Config.sexp_of_t config)) (String.concat "\n   " (List.map (fun u -> Sexplib.Sexp.to_string_hum (User.sexp_of_t u)) users)) ;
+  Printf.printf "returning from init with:\n - config: %s\n - users:\n   %s\n"
+    (Sexplib.Sexp.to_string_hum (Config.sexp_of_t config))
+    (String.concat "\n   "
+       (List.map
+          (fun u -> Sexplib.Sexp.to_string_hum (User.sexp_of_t u))
+          users)) ;
   return { config ; users }
 
 let message_callback (t : user_data session_data) stanza =

@@ -13,8 +13,11 @@ let add_text (t : buffer) (s : string) =
 
 open Xmpp_callbacks
 
-let config_dialog config parent () =
+let ctx = { config = Config.empty ; users = [] }
+
+let config_dialog parent () =
   let open Config in
+  let config = ctx.config in
   let dialog = GWindow.dialog ~title:"Configuration" ~resizable:true ~modal:true ~parent () in
   let labelled_entry name value =
     let hbox = GPack.hbox ~packing:dialog#vbox#add () in
@@ -31,41 +34,92 @@ let config_dialog config parent () =
     anchor#set_filter (GFile.filter ~patterns:["*.pem"] ()) ;
     anchor
   in
-  trust_anchor#set_filename config.trust_anchor ;
+  ignore (trust_anchor#set_filename config.trust_anchor) ;
   let otr =
-    let hex x = match Hex.of_string ~pretty:true (Cstruct.to_string x) with `Hex e -> e in
+    let open Otr.State in
     let hbox = GPack.hbox ~packing:dialog#vbox#add () in
-    let text cfg = match cfg.otr_config with
-      | None -> "No OTR"
-      | Some cfg -> hex (Otr.Crypto.OtrDsa.priv_fingerprint cfg.Otr.State.dsa)
+    let my_dsa = ref None in
+    let our_pol, our_ver = match config.otr_config with
+      | None -> ([], [])
+      | Some cfg ->
+        my_dsa := Some cfg.dsa ;
+        (cfg.policies, cfg.versions)
     in
-    let fp_label = GMisc.label ~text:"OTR Fingerprint" ~packing:hbox#add () in
-    let fp = GMisc.label ~text:(text config) ~packing:hbox#add () in
+    let fingerprint () =
+      let hex x = match Hex.of_string ~pretty:true (Cstruct.to_string x) with
+          `Hex e -> e
+      in
+      match !my_dsa with
+      | None -> "No OTR"
+      | Some x -> hex (Otr.Crypto.OtrDsa.priv_fingerprint x)
+    in
+    ignore (GMisc.label ~text:"OTR Fingerprint" ~packing:hbox#add ()) ;
+    let fp = GMisc.label ~text:(fingerprint ()) ~packing:hbox#add () in
     let gen = GButton.button ~label:"generate" ~packing:hbox#add () in
     let gen_cb () =
-      let dsa = Nocrypto.Dsa.generate `Fips1024 in
-      fp#set_text (hex (Otr.Crypto.OtrDsa.priv_fingerprint dsa))
-      (* preserve dsa somewhere! *)
+      my_dsa := Some (Nocrypto.Dsa.generate `Fips1024) ;
+      fp#set_text (fingerprint ())
     in
     ignore (gen#connect#clicked ~callback:gen_cb) ;
-    let policies =
+    let ps =
       let hbox = GPack.hbox ~packing:dialog#vbox#add () in
-      List.map (fun p ->
-          let label = Otr.State.policy_to_string p in
-          GButton.toggle_button ~label ~packing:hbox#add ())
-        Otr.State.policies
+      let bs = List.map
+          (fun p ->
+             let label = policy_to_string p in
+             GButton.toggle_button ~label ~packing:hbox#add ())
+          policies
+      in
+      List.combine bs policies
     in
-    let versions =
+    let vs =
       let hbox = GPack.hbox ~packing:dialog#vbox#add () in
-      List.map (fun v ->
-          let label = Otr.State.version_to_string v in
-          GButton.toggle_button ~label ~packing:hbox#add ())
-        Otr.State.versions
+      let bs = List.map
+          (fun v ->
+             let label = version_to_string v in
+             GButton.toggle_button ~label ~packing:hbox#add ())
+          versions
+      in
+      List.combine bs versions
     in
-    ()
+    let toggle lst items =
+      List.iter (fun (b, v) -> if List.mem v items then b#set_active true) lst
+    in
+    toggle ps our_pol ;
+    toggle vs our_ver ;
+    let res () =
+      let dsa = match !my_dsa with Some x -> x | None -> assert false in
+      let toggled lst =
+        List.fold_left (fun acc (x, y) -> if x#active then y :: acc else acc)
+          [] lst
+      in
+      let policies = toggled ps in
+      let versions = toggled vs in
+      Some { policies ; versions ; dsa }
+    in
+    res
   in
   let ok = GButton.button ~stock:`OK ~packing:dialog#action_area#add () in
-  (* ok callback *)
+  let ok_cb () =
+    (* there should be some sort of validation *)
+    let jid = JID.of_string jid#text in
+    let port = int_of_string port#text in
+    let password = password#text in
+    let trust_anchor = match trust_anchor#filename with
+      | None -> assert false
+      | Some x -> x
+    in
+    let otr_config = otr () in
+    let config = { version = 0 ; jid ; port ; password ; trust_anchor ; otr_config } in
+    Printf.printf "returning from config dialog with:\n - config: %s\n%!"
+      (Sexplib.Sexp.to_string_hum (Config.sexp_of_t config)) ;
+    ctx.config <- config ;
+    Printf.printf "ctx.config now: %s\n%!"
+      (Sexplib.Sexp.to_string_hum (Config.sexp_of_t ctx.config)) ;
+    dialog#destroy ()
+  in
+  ignore (ok#connect#clicked ~callback:ok_cb) ;
+  let canc = GButton.button ~stock:`CANCEL ~packing:dialog#action_area#add () in
+  ignore (canc#connect#clicked ~callback:dialog#destroy) ;
   dialog#show () ;
   ()
 
@@ -74,7 +128,9 @@ let () = Lwt_main.run (
     Lwt_glib.install ();
 
     (* configuration *)
-    init () >>= fun data ->
+    init () >>= fun { config ; users } ->
+    ctx.config <- config ;
+    ctx.users <- users ;
 
     (* Thread which is wakeup when the main window is closed. *)
     let waiter, wakener = Lwt.wait () in
@@ -101,15 +157,15 @@ let () = Lwt_main.run (
     } in
     (* Action menu *)
     let factory = new GMenu.factory menu ~accel_group in
-    ignore (factory#add_item "Config" ~callback:(config_dialog data.config window));
-    ignore (factory#add_item "Connect" ~callback:(connect (data, callbacks)));
+    ignore (factory#add_item "Config" ~callback:(config_dialog window));
+    ignore (factory#add_item "Connect" ~callback:(connect (ctx, callbacks)));
     ignore (factory#add_item "Quit" ~key:GdkKeysyms._Q ~callback:(before_exit wakener));
 
     (* Display the windows and enter Gtk+ main loop *)
     window#add_accel_group accel_group;
 
     (* Quit when the window is closed. *)
-    ignore (window#connect#destroy (Lwt.wakeup wakener));
+    ignore (window#connect#destroy (before_exit wakener));
 
     (* Show the window. *)
     window#show ();
