@@ -14,4 +14,4 @@ The features I plan to support:
 - plain text (no HTML!)
 - XEP-0184 (Message Delivery Receipts)
 
-While it is currently GTK2 code, the interface is strongly inspired by mcabber.
+While it is currently GTK2 code, the interface is strongly inspired by mcabber (and might very well be rewritten with a console user interface).
