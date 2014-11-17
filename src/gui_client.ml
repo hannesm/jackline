@@ -38,26 +38,22 @@ let config_dialog parent () =
   let otr =
     let open Otr.State in
     let hbox = GPack.hbox ~packing:dialog#vbox#add () in
-    let my_dsa = ref None in
-    let our_pol, our_ver = match config.otr_config with
-      | None -> ([], [])
-      | Some cfg ->
-        my_dsa := Some cfg.dsa ;
-        (cfg.policies, cfg.versions)
-    in
+    let otr_cfg = config.otr_config in
+    let my_dsa = ref otr_cfg.dsa in
     let fingerprint () =
       let hex x = match Hex.of_string ~pretty:true (Cstruct.to_string x) with
           `Hex e -> e
       in
-      match !my_dsa with
-      | None -> "No OTR"
-      | Some x -> hex (Otr.Crypto.OtrDsa.priv_fingerprint x)
+      if !my_dsa = dsa0 then
+        "No OTR"
+      else
+        hex (Otr.Crypto.OtrDsa.priv_fingerprint !my_dsa)
     in
     ignore (GMisc.label ~text:"OTR Fingerprint" ~packing:hbox#add ()) ;
     let fp = GMisc.label ~text:(fingerprint ()) ~packing:hbox#add () in
     let gen = GButton.button ~label:"generate" ~packing:hbox#add () in
     let gen_cb () =
-      my_dsa := Some (Nocrypto.Dsa.generate `Fips1024) ;
+      my_dsa := Nocrypto.Dsa.generate `Fips1024 ;
       fp#set_text (fingerprint ())
     in
     ignore (gen#connect#clicked ~callback:gen_cb) ;
@@ -84,17 +80,18 @@ let config_dialog parent () =
     let toggle lst items =
       List.iter (fun (b, v) -> if List.mem v items then b#set_active true) lst
     in
-    toggle ps our_pol ;
-    toggle vs our_ver ;
+    toggle ps otr_cfg.policies ;
+    toggle vs otr_cfg.versions ;
     let res () =
-      let dsa = match !my_dsa with Some x -> x | None -> assert false in
+      let dsa = !my_dsa in
+      if dsa = dsa0 then assert false ;
       let toggled lst =
         List.fold_left (fun acc (x, y) -> if x#active then y :: acc else acc)
           [] lst
       in
       let policies = toggled ps in
       let versions = toggled vs in
-      Some { policies ; versions ; dsa }
+      { policies ; versions ; dsa }
     in
     res
   in

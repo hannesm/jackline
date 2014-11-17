@@ -8,7 +8,7 @@ type t = {
   port : int ;
   password : string ;
   trust_anchor : string ;
-  otr_config : Otr.State.config option ;
+  otr_config : Otr.State.config ;
 }
 
 let empty = {
@@ -17,7 +17,7 @@ let empty = {
   port = 5222 ;
   password = "" ;
   trust_anchor = "" ;
-  otr_config = None
+  otr_config = Otr.State.default_config
 }
 
 let t_of_sexp t =
@@ -37,7 +37,7 @@ let t_of_sexp t =
         | Sexp.List [ Sexp.Atom "trust_anchor" ; Sexp.Atom trust_anchor ] ->
           { t with trust_anchor }
         | Sexp.List [ Sexp.Atom "otr_config" ; v ] ->
-          { t with otr_config = option_of_sexp Otr.State.config_of_sexp v }
+          { t with otr_config = Otr.State.config_of_sexp v }
         | _ -> assert false)
         empty l
   | _ -> Printf.printf "unknown t\n" ; empty
@@ -52,7 +52,7 @@ let sexp_of_t t =
     "port" , sexp_of_int t.port ;
     "password" , sexp_of_string t.password ;
     "trust_anchor" , sexp_of_string t.trust_anchor ;
-    "otr_config" , sexp_of_option Otr.State.sexp_of_config t.otr_config ;
+    "otr_config" , Otr.State.sexp_of_config t.otr_config ;
   ]
 
 let load_config bytes =
