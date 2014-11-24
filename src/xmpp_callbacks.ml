@@ -69,10 +69,9 @@ let dump_config dir cfg =
   let cfgdir = xmpp_config dir in
   write cfgdir config (Config.store_config cfg)
 
-let dump_data cfgdir data =
-  dump_config cfgdir data.config >>= fun () ->
+let dump_users cfgdir data =
   let cfg = xmpp_config cfgdir in
-  write cfg users (User.store_users data.users)
+  write cfg users (User.store_users data)
 
 let init cfgdir =
   Tls_lwt.rng_init () >>= fun () ->

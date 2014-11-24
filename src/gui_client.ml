@@ -4,9 +4,6 @@ open Xmpp_callbacks
 
 let before_exit ctx wake () =
   Printf.printf "just about to finish up\n%!" ;
-  (* save config to disk *)
-  let cfgdir = Glib.get_user_config_dir () in
-  Lwt.ignore_result (dump_data cfgdir ctx) ;
   Lwt.wakeup wake ()
 
 open GText
@@ -173,5 +170,9 @@ let () = Lwt_main.run (
     window#show ();
 
     (* Wait for it to be closed. *)
-    waiter
+    waiter >>= fun () ->
+
+    (* save config to disk *)
+    dump_config cfgdir ctx.config >>= fun () ->
+    dump_users cfgdir ctx.users
   )
