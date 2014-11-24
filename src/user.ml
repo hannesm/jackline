@@ -2,6 +2,7 @@
 
 type session = {
   resource : string ;
+  mutable presence : string ;
   mutable priority : int ;
   mutable messages : string list ;
   (*  presence : ?? ; *)
