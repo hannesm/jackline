@@ -27,35 +27,42 @@ type callbacks = {
 
 type user_data = data * callbacks
 
-let config d = Filename.concat d "config.sexp"
-let user d = Filename.concat d "users.sexp"
+let read dir file =
+  Lwt.catch (fun () ->
+      Lwt_unix.access dir [ Unix.F_OK ; Unix.X_OK ] >>= fun () ->
+      let f = Filename.concat dir file in
+      Lwt_unix.access f [ Unix.F_OK ; Unix.R_OK ] >>= fun () ->
+      Lwt_unix.openfile f [Unix.O_RDONLY] 0 >>= fun fd ->
+      Lwt_unix.fstat fd >>= fun stats ->
+      let size = stats.Lwt_unix.st_size in
+      let buf = Bytes.create size in
+      Lwt_unix.read fd buf 0 size >>= fun s ->
+      Lwt_unix.close fd >>= fun () ->
+      assert (s = size) ;
+      return buf)
+    (fun _ -> return "")
 
-let read file =
-  Lwt_unix.access file [ Unix.F_OK ; Unix.R_OK ] >>= fun () ->
-  Lwt_unix.openfile file [Unix.O_RDONLY] 0 >>= fun fd ->
-  Lwt_unix.fstat fd >>= fun stats ->
-  let size = stats.Lwt_unix.st_size in
-  let buf = Bytes.create size in
-  Lwt_unix.read fd buf 0 size >>= fun s ->
-  Lwt_unix.close fd >>= fun () ->
-  assert (s = size) ;
-  return buf
-
-let write filename buf =
-  let file = filename ^ ".tmp" in
+let write dir filename buf =
+  Lwt.catch (fun () -> Lwt_unix.access dir [ Unix.F_OK ; Unix.X_OK ])
+    (fun _ -> Lwt_unix.mkdir dir 0o700) >>= fun () ->
+  let f = Filename.concat dir filename in
+  let file = f ^ ".tmp" in
   Lwt_unix.access file [ Unix.F_OK ; Unix.W_OK ] >>= fun () ->
   Lwt_unix.openfile file [Unix.O_WRONLY] 0o600 >>= fun fd ->
   Lwt_unix.write fd buf 0 (Bytes.length buf) >>= fun s ->
   Lwt_unix.close fd >>= fun () ->
   assert (s = Bytes.length buf) ;
-  Lwt_unix.rename file filename >>= fun () ->
+  Lwt_unix.rename file f >>= fun () ->
   return ()
 
-let read_config dir = read (config dir)
-let read_users dir = read (user dir)
+let config = "config.sexp"
+let users = "users.sexp"
 
-let write_config dir = write (config dir)
-let write_users dir = write (user dir)
+let read_config dir = read dir config
+let read_users dir = read dir users
+
+let write_config dir = write dir config
+let write_users dir = write dir users
 
 open Sexplib
 
@@ -68,7 +75,7 @@ let init cfgdir =
   let config = try Config.load_config cfgdata with _ -> Config.empty in
   read_users cfg >>= fun userdata ->
   let users = try User.load_users userdata with _ -> [] in
-  Printf.printf "returning from init with:\n - config: %s\n - users:\n   %s\n"
+  Printf.printf "returning from init with:\n - config: %s\n - users:\n   %s\n%!"
     (Sexplib.Sexp.to_string_hum (Config.sexp_of_t config))
     (String.concat "\n   "
        (List.map
