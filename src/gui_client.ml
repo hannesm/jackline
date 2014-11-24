@@ -1,8 +1,12 @@
 open Lwt
 
-let before_exit wake () =
+open Xmpp_callbacks
+
+let before_exit ctx wake () =
   Printf.printf "just about to finish up\n%!" ;
   (* save config to disk *)
+  let cfgdir = Glib.get_user_config_dir () in
+  Lwt.ignore_result (dump_data cfgdir ctx) ;
   Lwt.wakeup wake ()
 
 open GText
@@ -10,8 +14,6 @@ open GText
 let add_text (t : buffer) (s : string) =
   let iter = t#get_iter `END in
   t#insert ~iter s
-
-open Xmpp_callbacks
 
 let ctx = { config = Config.empty ; users = [] }
 
@@ -110,6 +112,8 @@ let config_dialog parent () =
     Printf.printf "returning from config dialog with:\n - config: %s\n%!"
       (Sexplib.Sexp.to_string_hum (Config.sexp_of_t config)) ;
     ctx.config <- config ;
+    let cfgdir = Glib.get_user_config_dir () in
+    Lwt.ignore_result (dump_config cfgdir config) ;
     Printf.printf "ctx.config now: %s\n%!"
       (Sexplib.Sexp.to_string_hum (Config.sexp_of_t ctx.config)) ;
     dialog#destroy ()
@@ -157,13 +161,13 @@ let () = Lwt_main.run (
     let factory = new GMenu.factory menu ~accel_group in
     ignore (factory#add_item "Config" ~callback:(config_dialog window));
     ignore (factory#add_item "Connect" ~callback:(connect (ctx, callbacks)));
-    ignore (factory#add_item "Quit" ~key:GdkKeysyms._Q ~callback:(before_exit wakener));
+    ignore (factory#add_item "Quit" ~key:GdkKeysyms._Q ~callback:(before_exit ctx wakener));
 
     (* Display the windows and enter Gtk+ main loop *)
     window#add_accel_group accel_group;
 
     (* Quit when the window is closed. *)
-    ignore (window#connect#destroy (before_exit wakener));
+    ignore (window#connect#destroy (before_exit ctx wakener));
 
     (* Show the window. *)
     window#show ();
