@@ -24,6 +24,7 @@ type fingerprint = {
 type t = {
   name : string ;
   jid : JID.t ;
+  groups : string list ;
   subscription : subscription_t ;
   otr_fingerprints : fingerprint list ;
   active_sessions : session list
@@ -32,6 +33,7 @@ type t = {
 let empty = {
   name = "" ;
   jid = JID.of_string "a@b" ;
+  groups = [] ;
   subscription = SubscriptionNone ;
   otr_fingerprints = [] ;
   active_sessions = []
@@ -54,6 +56,8 @@ let t_of_sexp t =
           let jid = try JID.of_string v with
               _ -> Printf.printf "parse error in jid" ; t.jid in
           { t with jid }
+        | Sexp.List [ Sexp.Atom "groups" ; gps ] ->
+          { t with groups = list_of_sexp string_of_sexp gps }
         | Sexp.List [ Sexp.Atom "subscription" ; s ] ->
           let subscription = subscription_of_sexp s in
           { t with subscription }
@@ -77,6 +81,7 @@ let sexp_of_t t =
   record [
     "name" , sexp_of_string t.name ;
     "jid" , sexp_of_string (JID.string_of_jid t.jid) ;
+    "groups", sexp_of_list sexp_of_string t.groups ;
     "subscription", sexp_of_subscription t.subscription ;
     "otr_fingerprints", sexp_of_list sexp_of_fingerprint t.otr_fingerprints ;
   ]
