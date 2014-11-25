@@ -29,7 +29,7 @@ type subscription =
   | PreApproved
 with sexp
 
-type t = {
+type user = {
   name : string ;
   jid : JID.t ;
   groups : string list ;
@@ -37,6 +37,26 @@ type t = {
   otr_fingerprints : fingerprint list ;
   active_sessions : session list
 }
+
+module User = struct
+ type t = user
+ let compare a b = JID.compare a.jid b.jid
+end
+module Users = Set.Make(User)
+
+let eq_t a b = JID.compare a.jid b.jid = 0
+
+let rec find_or_insert one =
+  function
+  | [] -> [one]
+  | x :: xs when eq_t x one -> one :: xs
+  | x :: xs -> x :: find_or_insert one xs
+
+let rec remove j =
+  function
+  | [] -> []
+  | x :: xs when JID.compare x.jid j = 0 -> xs
+  | x :: xs -> x :: remove j xs
 
 let empty = {
   name = "" ;
@@ -86,12 +106,12 @@ let load_users bytes =
         let version = int_of_sexp ver in
         Printf.printf "parsing user db version %d\n" version ;
         List.fold_left (fun acc s ->
-            try t_of_sexp s :: acc with
+            try Users.add (t_of_sexp s) acc with
               _ -> Printf.printf "parse error in user entry\n" ; acc)
-          [] users
-      | _ -> Printf.printf "parse failed while parsing db\n" ; [])
-  with _ -> []
+          Users.empty users
+      | _ -> Printf.printf "parse failed while parsing db\n" ; Users.empty)
+  with _ -> Users.empty
 
 let store_users users =
-  let users = List.map sexp_of_t users in
+  let users = Users.fold (fun s acc -> (sexp_of_t s) :: acc) users [] in
   Sexp.to_string_mach (Sexp.List [ sexp_of_int 0 ; Sexp.List users ])

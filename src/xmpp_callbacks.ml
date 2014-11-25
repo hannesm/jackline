@@ -18,7 +18,7 @@ module Roster = Roster.Make (XMPPClient)
 
 type user_data = {
   config : Config.t ;
-  mutable users : User.t list ;
+  mutable users : User.Users.t ;
   received : string -> unit ;
 }
 
@@ -74,13 +74,13 @@ let init cfgdir =
   read cfg config >>= fun cfgdata ->
   let config = try Config.load_config cfgdata with _ -> Config.empty in
   read cfg users >>= fun userdata ->
-  let users = try User.load_users userdata with _ -> [] in
+  let users = try User.load_users userdata with _ -> User.Users.empty in
   Printf.printf "returning from init with:\n - config: %s\n - users:\n   %s\n%!"
     (Sexplib.Sexp.to_string_hum (Config.sexp_of_t config))
     (String.concat "\n   "
        (List.map
           (fun u -> Sexplib.Sexp.to_string_hum (User.sexp_of_t u))
-          users)) ;
+          (User.Users.elements users))) ;
   return (config, users)
 
 let message_callback (t : user_data session_data) stanza =
@@ -130,6 +130,8 @@ let session_callback t =
     (parse_presence ~callback:presence_callback ~callback_error:presence_error);
   Roster.get t (fun ?jid_from ?jid_to ?lang ?ver items ->
       let open Roster in
+      (* ask - pending out / approved - pre-approval *)
+      (* <item subscription='both' name='hannesm' jid='hannesm@jabber.ccc.de'/> *)
       Printf.printf "%d items\n" (List.length items) ;
       List.iter (fun x -> Printf.printf "jid %s\n%!" (JID.string_of_jid x.jid)) items;
       return ()) >>= fun () ->
