@@ -1,11 +1,24 @@
 
 
+type presence = [
+  | `Online | `Free | `Away | `DoNotDisturb | `ExtendedAway | `Offline
+]
 type session = {
   resource : string ;
-  mutable presence : string ;
+  mutable presence : presence ;
+  mutable status : string ;
   mutable priority : int ;
   mutable messages : string list ;
   mutable otr : Otr.State.session
+}
+
+let empty_session resource config () = {
+  resource ;
+  presence = `Offline ;
+  status = "" ;
+  priority = 0 ;
+  messages = [] ;
+  otr = Otr.State.new_session config ()
 }
 
 open Sexplib
@@ -16,7 +29,7 @@ open Roster
 type fingerprint = {
   data : string ;
   verified : bool ;
-  resource : string ;
+  resources : string list ;
   session_count : int
 } with sexp
 
@@ -29,41 +42,27 @@ type subscription = [
 
 type props = [
   | `Pending | `PreApproved
-] with sexp
+]
 
 type user = {
   name : string ;
-  jid : JID.t ;
+  jid : string ; (* user@domain, unique key *)
   groups : string list ;
   subscription : subscription ;
-  props : props list ;
+  props : props list ; (* not persistent *)
   otr_fingerprints : fingerprint list ;
-  active_sessions : session list
+  active_sessions : session list (* not persistent *)
 }
 
 module User = struct
  type t = user
- let compare a b = JID.compare a.jid b.jid
+ let compare a b = compare a.jid b.jid
 end
 module Users = Set.Make(User)
 
-let eq_t a b = JID.compare a.jid b.jid = 0
-
-let rec find_or_insert one =
-  function
-  | [] -> [one]
-  | x :: xs when eq_t x one -> one :: xs
-  | x :: xs -> x :: find_or_insert one xs
-
-let rec remove j =
-  function
-  | [] -> []
-  | x :: xs when JID.compare x.jid j = 0 -> xs
-  | x :: xs -> x :: remove j xs
-
 let empty = {
   name = "" ;
-  jid = JID.of_string "a@b" ;
+  jid = "a@b" ;
   groups = [] ;
   subscription = `None ;
   props = [] ;
@@ -71,14 +70,19 @@ let empty = {
   active_sessions = []
 }
 
+let find_or_get j s =
+  let t = { empty with jid = j } in
+  if Users.mem t s then
+    Users.find t s
+  else
+    t
+
 let t_of_sexp t =
   match t with
   | Sexp.List l ->
       List.fold_left (fun t v -> match v with
         | Sexp.List [ Sexp.Atom "name" ; Sexp.Atom name ] -> { t with name }
-        | Sexp.List [ Sexp.Atom "jid" ; Sexp.Atom v ] ->
-          let jid = try JID.of_string v with
-              _ -> Printf.printf "parse error in jid" ; t.jid in
+        | Sexp.List [ Sexp.Atom "jid" ; Sexp.Atom jid ] ->
           { t with jid }
         | Sexp.List [ Sexp.Atom "groups" ; gps ] ->
           { t with groups = list_of_sexp string_of_sexp gps }
@@ -98,7 +102,7 @@ let record kvs =
 let sexp_of_t t =
   record [
     "name" , sexp_of_string t.name ;
-    "jid" , sexp_of_string (JID.string_of_jid t.jid) ;
+    "jid" , sexp_of_string t.jid ;
     "groups", sexp_of_list sexp_of_string t.groups ;
     "subscription", sexp_of_subscription t.subscription ;
     "otr_fingerprints", sexp_of_list sexp_of_fingerprint t.otr_fingerprints ;

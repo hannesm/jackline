@@ -22,6 +22,9 @@ type user_data = {
   received : string -> unit ;
 }
 
+let replace user user_data =
+  user_data.users <- User.Users.(add user (remove user user_data.users))
+
 let read dir file =
   Lwt.catch (fun () ->
       Lwt_unix.access dir [ Unix.F_OK ; Unix.X_OK ] >>= fun () ->
@@ -101,10 +104,45 @@ let message_error t ?id ?jid_from ?jid_to ?lang error =
   return ()
 
 let presence_callback t stanza =
+  let log = t.user_data.received in
+  let user, session = match stanza.jid_from with
+    | None -> assert false
+    | Some { lnode ; ldomain ; lresource } ->
+      let jid = lnode ^ "@" ^ ldomain in
+      let user = User.find_or_get jid t.user_data.users in
+      replace user t.user_data;
+      log (jid ^ " ") ;
+      (user, try List.find
+                   (fun s -> s.User.resource = lresource)
+                   user.active_sessions
+       with Not_found -> User.empty_session lresource t.user_data.config.otr_config ())
+  in
+  (match stanza.content.priority with
+   | None -> ()
+   | Some x -> session.priority <- x) ;
   (match stanza.content.presence_type with
-    | None -> print_endline "available"
-    | Some _ -> print_endline "something"
-  ); return ()
+   | None ->
+     begin
+       match stanza.content.show with
+       | None -> session.presence <- `Online ; log "available"
+       | Some ShowChat -> session.presence <- `Free ; log "free"
+       | Some ShowAway -> session.presence <- `Away ; log "away"
+       | Some ShowDND -> session.presence <- `DoNotDisturb ; log "dnd"
+       | Some ShowXA -> session.presence <- `ExtendedAway ; log "extended away"
+     end
+   | Some Probe -> log "probed"
+   | Some Subscribe -> log "subscription request"
+   | Some Subscribed -> log "successfully subscribed"
+   | Some Unsubscribe -> log "shouldn't see this unsubscribe"
+   | Some Unsubscribed -> log "you're so off my buddy list"
+   | Some Unavailable -> session.presence <- `Offline ; log "offline"
+  );
+  (match stanza.content.status with
+   | None -> session.status <- ""
+   | Some x when x = "" -> session.status <- ""
+   | Some x -> session.status <- x ; log (" - " ^ x));
+  log "\n" ;
+  return ()
 
 let presence_error t ?id ?jid_from ?jid_to ?lang error =
   print_endline ("presence error: " ^ error.err_text);
@@ -136,13 +174,11 @@ let session_callback t =
       let users = t.user_data.users in
       let users = List.fold_left
           (fun s item ->
-             let elt =
-               let t = { User.empty with jid = item.jid } in
-               if User.Users.mem t s then
-                 User.Users.find t s
-               else
-                 t
+             let jid =
+               let { JID.lnode ; JID.ldomain } = item.jid in
+               lnode ^ "@" ^ ldomain
              in
+             let elt = User.find_or_get jid s in
              let subscription =
                match item.subscription with
                | SubscriptionRemove -> assert false
@@ -161,7 +197,7 @@ let session_callback t =
                        groups = item.group ;
                        subscription ; props }
              in
-             User.Users.add t s
+             User.Users.(add t (remove t s))
           ) users items
       in
       Printf.printf "users is now: %s\n%!" (User.store_users users) ;
