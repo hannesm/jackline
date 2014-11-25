@@ -51,7 +51,7 @@ type user = {
   subscription : subscription ;
   props : props list ; (* not persistent *)
   otr_fingerprints : fingerprint list ;
-  active_sessions : session list (* not persistent *)
+  mutable active_sessions : session list (* not persistent *)
 }
 
 module User = struct

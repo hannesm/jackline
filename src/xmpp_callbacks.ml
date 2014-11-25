@@ -22,9 +22,6 @@ type user_data = {
   received : string -> unit ;
 }
 
-let replace user user_data =
-  user_data.users <- User.Users.(add user (remove user user_data.users))
-
 let read dir file =
   Lwt.catch (fun () ->
       Lwt_unix.access dir [ Unix.F_OK ; Unix.X_OK ] >>= fun () ->
@@ -86,18 +83,56 @@ let init cfgdir =
           (User.Users.elements users))) ;
   return (config, users)
 
+let user_session stanza user_data =
+  let log = user_data.received in
+  match stanza.jid_from with
+    | None -> assert false
+    | Some { lnode ; ldomain ; lresource } ->
+      let jid = lnode ^ "@" ^ ldomain in
+      let user = User.find_or_get jid user_data.users in
+      user_data.users <- User.Users.(add user user_data.users) ;
+      let session =
+        try
+          List.find
+            (fun s -> s.User.resource = lresource)
+            user.active_sessions
+        with Not_found ->
+          (let otr = user_data.config.otr_config in
+           let sess = User.empty_session lresource otr () in
+           user.active_sessions <- sess :: user.active_sessions ;
+           sess)
+in
+      log (jid ^ "/" ^ lresource ^ "(" ^ (string_of_int (List.length user.active_sessions)) ^ ") ") ;
+      (user, session)
+
 let message_callback (t : user_data session_data) stanza =
-  let receive = t.user_data.received in
+  let log = t.user_data.received in
+  let user, session = user_session stanza t.user_data in
   match stanza.content.body with
-  | None -> receive "nothing received\n" ; return ()
+  | None -> log "nothing received\n" ; return ()
   | Some v ->
-    receive (v ^ "\n") ;
-    let out = "Nothing to send" in
-    send_message t ?jid_to:stanza.jid_from
-      ?id:stanza.id
-      ?kind:stanza.content.message_type
-      ?lang:stanza.lang
-      ?body:(Some out) ()
+    let ctx, out, warn, received, plain = Otr.Handshake.handle session.otr v in
+    (match plain with
+     | None -> ()
+     | Some p -> log ("plain message: " ^ p ^ "\n")) ;
+    (match warn with
+     | None -> ()
+     | Some w -> log ("warning: " ^ w ^ "\n")) ;
+    (match received with
+     | None -> ()
+     | Some c -> log ("received encrypted: " ^ c ^ "\n")) ;
+    (match plain, warn, received with
+     | None, None, None -> log "nothing...\n"
+     | _ -> ()) ;
+    session.otr <- ctx ;
+    match out with
+    | None -> return ()
+    | Some _ ->
+      send_message t ?jid_to:stanza.jid_from
+        ?id:stanza.id
+        ?kind:stanza.content.message_type
+        ?lang:stanza.lang
+        ?body:out ()
 
 let message_error t ?id ?jid_from ?jid_to ?lang error =
   print_endline ("message error: " ^ error.err_text);
@@ -105,18 +140,7 @@ let message_error t ?id ?jid_from ?jid_to ?lang error =
 
 let presence_callback t stanza =
   let log = t.user_data.received in
-  let user, session = match stanza.jid_from with
-    | None -> assert false
-    | Some { lnode ; ldomain ; lresource } ->
-      let jid = lnode ^ "@" ^ ldomain in
-      let user = User.find_or_get jid t.user_data.users in
-      replace user t.user_data;
-      log (jid ^ "/" ^ lresource ^ " ") ;
-      (user, try List.find
-                   (fun s -> s.User.resource = lresource)
-                   user.active_sessions
-       with Not_found -> User.empty_session lresource t.user_data.config.otr_config ())
-  in
+  let user, session = user_session stanza t.user_data in
   (match stanza.content.priority with
    | None -> ()
    | Some x -> session.priority <- x) ;
