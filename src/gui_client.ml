@@ -150,13 +150,16 @@ let () = Lwt_main.run (
     let button = GButton.button ~label:"Push me!" ~packing:vbox#add () in
     ignore (button#connect#clicked ~callback:(fun () -> Printf.printf "blablabla\n%!"));
 
+    let user_data = ref None in
     let connect_cb () =
-      let user_data = {
+      let ud = {
         config = !cfg ;
         users = users ;
         received = add_text textbuf ;
-      } in
-      connect user_data ()
+      }
+      in
+      user_data := Some ud ;
+      connect ud ()
     in
     (* Action menu *)
     let factory = new GMenu.factory menu ~accel_group in
@@ -178,5 +181,7 @@ let () = Lwt_main.run (
 
     (* save config to disk *)
     dump_config cfgdir !cfg >>= fun () ->
-    dump_users cfgdir users
+    match !user_data with
+    | None -> return ()
+    | Some x -> dump_users cfgdir x.users
   )

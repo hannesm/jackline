@@ -133,7 +133,39 @@ let session_callback t =
       (* ask - pending out / approved - pre-approval *)
       (* <item subscription='both' name='hannesm' jid='hannesm@jabber.ccc.de'/> *)
       Printf.printf "%d items\n" (List.length items) ;
-      List.iter (fun x -> Printf.printf "jid %s\n%!" (JID.string_of_jid x.jid)) items;
+      let users = t.user_data.users in
+      let users = List.fold_left
+          (fun s item ->
+             let elt =
+               let t = { User.empty with jid = item.jid } in
+               if User.Users.mem t s then
+                 User.Users.find t s
+               else
+                 t
+             in
+             let subscription =
+               match item.subscription with
+               | SubscriptionRemove -> assert false
+               | SubscriptionBoth -> `Both
+               | SubscriptionNone -> `None
+               | SubscriptionFrom -> `From
+               | SubscriptionTo -> `To
+             in
+             let props =
+               let app = if item.approved then [`PreApproved ] else [] in
+               let ask = match item.ask with | Some _ -> [ `Pending ] | None -> [] in
+               app @ ask
+             in
+             let t = { elt with
+                       name = item.name ;
+                       groups = item.group ;
+                       subscription ; props }
+             in
+             User.Users.add t s
+          ) users items
+      in
+      Printf.printf "users is now: %s\n%!" (User.store_users users) ;
+      t.user_data.users <- users ;
       return ()) >>= fun () ->
   print_endline "sending presence" ;
   send_presence t () >>= fun () ->

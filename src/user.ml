@@ -20,20 +20,23 @@ type fingerprint = {
   session_count : int
 } with sexp
 
-type subscription =
-  | No
-  | From
-  | To
-  | Both
-  | Pending
-  | PreApproved
-with sexp
+type subscription = [
+  | `None
+  | `From
+  | `To
+  | `Both
+] with sexp
+
+type props = [
+  | `Pending | `PreApproved
+] with sexp
 
 type user = {
   name : string ;
   jid : JID.t ;
   groups : string list ;
   subscription : subscription ;
+  props : props list ;
   otr_fingerprints : fingerprint list ;
   active_sessions : session list
 }
@@ -62,7 +65,8 @@ let empty = {
   name = "" ;
   jid = JID.of_string "a@b" ;
   groups = [] ;
-  subscription = No ;
+  subscription = `None ;
+  props = [] ;
   otr_fingerprints = [] ;
   active_sessions = []
 }
