@@ -5,7 +5,6 @@ type session = {
   mutable presence : string ;
   mutable priority : int ;
   mutable messages : string list ;
-  (*  presence : ?? ; *)
   mutable otr : Otr.State.session
 }
 
@@ -21,11 +20,20 @@ type fingerprint = {
   session_count : int
 } with sexp
 
+type subscription =
+  | No
+  | From
+  | To
+  | Both
+  | Pending
+  | PreApproved
+with sexp
+
 type t = {
   name : string ;
   jid : JID.t ;
   groups : string list ;
-  subscription : subscription_t ;
+  subscription : subscription ;
   otr_fingerprints : fingerprint list ;
   active_sessions : session list
 }
@@ -34,18 +42,10 @@ let empty = {
   name = "" ;
   jid = JID.of_string "a@b" ;
   groups = [] ;
-  subscription = SubscriptionNone ;
+  subscription = No ;
   otr_fingerprints = [] ;
   active_sessions = []
 }
-
-let subscription_of_sexp = function
-  | Sexp.Atom "SubscriptionNone"   -> SubscriptionNone
-  | Sexp.Atom "SubscriptionBoth"   -> SubscriptionBoth
-  | Sexp.Atom "SubscriptionFrom"   -> SubscriptionFrom
-  | Sexp.Atom "SubscriptionRemove" -> SubscriptionRemove
-  | Sexp.Atom "SubscriptionTo"     -> SubscriptionTo
-  | _ -> assert false
 
 let t_of_sexp t =
   match t with
@@ -67,12 +67,6 @@ let t_of_sexp t =
         empty l
   | _ -> Printf.printf "unknown t\n" ; empty
 
-let sexp_of_subscription = function
-  | SubscriptionNone   -> Sexp.Atom "SubscriptionNone"
-  | SubscriptionBoth   -> Sexp.Atom "SubscriptionBoth"
-  | SubscriptionFrom   -> Sexp.Atom "SubscriptionFrom"
-  | SubscriptionRemove -> Sexp.Atom "SubscriptionRemove"
-  | SubscriptionTo     -> Sexp.Atom "SubscriptionTo"
 
 let record kvs =
   Sexp.List List.(map (fun (k, v) -> (Sexp.List [Sexp.Atom k; v])) kvs)
