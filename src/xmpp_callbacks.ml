@@ -111,7 +111,7 @@ let presence_callback t stanza =
       let jid = lnode ^ "@" ^ ldomain in
       let user = User.find_or_get jid t.user_data.users in
       replace user t.user_data;
-      log (jid ^ " ") ;
+      log (jid ^ "/" ^ lresource ^ " ") ;
       (user, try List.find
                    (fun s -> s.User.resource = lresource)
                    user.active_sessions
