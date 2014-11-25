@@ -2,7 +2,7 @@ open Lwt
 
 open Xmpp_callbacks
 
-let before_exit ctx wake () =
+let before_exit wake () =
   Printf.printf "just about to finish up\n%!" ;
   Lwt.wakeup wake ()
 
@@ -12,11 +12,11 @@ let add_text (t : buffer) (s : string) =
   let iter = t#get_iter `END in
   t#insert ~iter s
 
-let ctx = { config = Config.empty ; users = [] }
+let cfg = ref Config.empty
 
 let config_dialog parent () =
   let open Config in
-  let config = ctx.config in
+  let config = !cfg in
   let dialog = GWindow.dialog ~title:"Configuration" ~resizable:true ~modal:true ~parent () in
   let labelled_entry name value =
     let hbox = GPack.hbox ~packing:dialog#vbox#add () in
@@ -108,11 +108,11 @@ let config_dialog parent () =
     let config = { version = 0 ; jid ; port ; password ; trust_anchor ; otr_config } in
     Printf.printf "returning from config dialog with:\n - config: %s\n%!"
       (Sexplib.Sexp.to_string_hum (Config.sexp_of_t config)) ;
-    ctx.config <- config ;
+    cfg := config ;
     let cfgdir = Glib.get_user_config_dir () in
     Lwt.ignore_result (dump_config cfgdir config) ;
-    Printf.printf "ctx.config now: %s\n%!"
-      (Sexplib.Sexp.to_string_hum (Config.sexp_of_t ctx.config)) ;
+    Printf.printf "!cfg now: %s\n%!"
+      (Sexplib.Sexp.to_string_hum (Config.sexp_of_t !cfg)) ;
     dialog#destroy ()
   in
   ignore (ok#connect#clicked ~callback:ok_cb) ;
@@ -127,9 +127,8 @@ let () = Lwt_main.run (
 
     (* configuration *)
     let cfgdir = Glib.get_user_config_dir () in
-    init cfgdir >>= fun { config ; users } ->
-    ctx.config <- config ;
-    ctx.users <- users ;
+    init cfgdir >>= fun (config, users) ->
+    cfg := config ;
 
     (* Thread which is wakeup when the main window is closed. *)
     let waiter, wakener = Lwt.wait () in
@@ -151,20 +150,25 @@ let () = Lwt_main.run (
     let button = GButton.button ~label:"Push me!" ~packing:vbox#add () in
     ignore (button#connect#clicked ~callback:(fun () -> Printf.printf "blablabla\n%!"));
 
-    let callbacks = {
-      received = add_text textbuf
-    } in
+    let connect_cb () =
+      let user_data = {
+        config = !cfg ;
+        users = users ;
+        received = add_text textbuf ;
+      } in
+      connect user_data ()
+    in
     (* Action menu *)
     let factory = new GMenu.factory menu ~accel_group in
     ignore (factory#add_item "Config" ~callback:(config_dialog window));
-    ignore (factory#add_item "Connect" ~callback:(connect (ctx, callbacks)));
-    ignore (factory#add_item "Quit" ~key:GdkKeysyms._Q ~callback:(before_exit ctx wakener));
+    ignore (factory#add_item "Connect" ~callback:connect_cb);
+    ignore (factory#add_item "Quit" ~key:GdkKeysyms._Q ~callback:(before_exit wakener));
 
     (* Display the windows and enter Gtk+ main loop *)
     window#add_accel_group accel_group;
 
     (* Quit when the window is closed. *)
-    ignore (window#connect#destroy (before_exit ctx wakener));
+    ignore (window#connect#destroy (before_exit wakener));
 
     (* Show the window. *)
     window#show ();
@@ -173,6 +177,6 @@ let () = Lwt_main.run (
     waiter >>= fun () ->
 
     (* save config to disk *)
-    dump_config cfgdir ctx.config >>= fun () ->
-    dump_users cfgdir ctx.users
+    dump_config cfgdir !cfg >>= fun () ->
+    dump_users cfgdir users
   )

@@ -16,16 +16,11 @@ open XMPPClient
 module Version = XEP_version.Make (XMPPClient)
 module Roster = Roster.Make (XMPPClient)
 
-type data = {
-  mutable config : Config.t ;
+type user_data = {
+  config : Config.t ;
   mutable users : User.t list ;
+  received : string -> unit ;
 }
-
-type callbacks = {
-  received : string -> unit
-}
-
-type user_data = data * callbacks
 
 let read dir file =
   Lwt.catch (fun () ->
@@ -86,14 +81,14 @@ let init cfgdir =
        (List.map
           (fun u -> Sexplib.Sexp.to_string_hum (User.sexp_of_t u))
           users)) ;
-  return { config ; users }
+  return (config, users)
 
 let message_callback (t : user_data session_data) stanza =
-  let data, callbacks = t.user_data in
+  let receive = t.user_data.received in
   match stanza.content.body with
-  | None -> callbacks.received "nothing received\n" ; return ()
+  | None -> receive "nothing received\n" ; return ()
   | Some v ->
-    callbacks.received (v ^ "\n") ;
+    receive (v ^ "\n") ;
     let out = "Nothing to send" in
     send_message t ?jid_to:stanza.jid_from
       ?id:stanza.id
@@ -143,10 +138,10 @@ let session_callback t =
   print_endline "returning" ;
   return ()
 
-let connect (data, callbacks) _ =
+let connect user_data _ =
   Printf.printf "connecting\n%!" ;
   let open Config in
-  let config = data.config in
+  let config = user_data.config in
   let server = JID.to_idn config.jid
   and port = config.port
   in
@@ -173,7 +168,7 @@ let connect (data, callbacks) _ =
     in
     print_endline "setting up" ;
     XMPPClient.setup_session
-      ~user_data:(data, callbacks)
+      ~user_data
       ~myjid:config.jid
       ~plain_socket:(module Socket_module : XMPPClient.Socket)
       ~tls_socket:make_tls
