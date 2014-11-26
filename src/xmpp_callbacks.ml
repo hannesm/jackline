@@ -87,7 +87,7 @@ let user_session stanza user_data =
   let log = user_data.received in
   match stanza.jid_from with
     | None -> assert false
-    | Some { lnode ; ldomain ; lresource } ->
+    | Some { JID.lnode ; JID.ldomain ; JID.lresource } ->
       let jid = lnode ^ "@" ^ ldomain in
       let user = User.find_or_get jid user_data.users in
       user_data.users <- User.Users.(add user user_data.users) ;
@@ -95,14 +95,14 @@ let user_session stanza user_data =
         try
           List.find
             (fun s -> s.User.resource = lresource)
-            user.active_sessions
+            user.User.active_sessions
         with Not_found ->
-          (let otr = user_data.config.otr_config in
+          (let otr = user_data.config.Config.otr_config in
            let sess = User.empty_session lresource otr () in
-           user.active_sessions <- sess :: user.active_sessions ;
+           user.User.active_sessions <- sess :: user.User.active_sessions ;
            sess)
 in
-      log (jid ^ "/" ^ lresource ^ "(" ^ (string_of_int (List.length user.active_sessions)) ^ ") ") ;
+      log (jid ^ "/" ^ lresource ^ " (" ^ (string_of_int (List.length user.User.active_sessions)) ^ ") ") ;
       (user, session)
 
 let message_callback (t : user_data session_data) stanza =
@@ -111,7 +111,7 @@ let message_callback (t : user_data session_data) stanza =
   match stanza.content.body with
   | None -> log "nothing received\n" ; return ()
   | Some v ->
-    let ctx, out, warn, received, plain = Otr.Handshake.handle session.otr v in
+    let ctx, out, warn, received, plain = Otr.Handshake.handle session.User.otr v in
     (match plain with
      | None -> ()
      | Some p -> log ("plain message: " ^ p ^ "\n")) ;
@@ -124,7 +124,7 @@ let message_callback (t : user_data session_data) stanza =
     (match plain, warn, received with
      | None, None, None -> log "nothing...\n"
      | _ -> ()) ;
-    session.otr <- ctx ;
+    session.User.otr <- ctx ;
     match out with
     | None -> return ()
     | Some _ ->
@@ -143,7 +143,8 @@ let presence_callback t stanza =
   let user, session = user_session stanza t.user_data in
   (match stanza.content.priority with
    | None -> ()
-   | Some x -> session.priority <- x) ;
+   | Some x -> session.User.priority <- x) ;
+  let open User in
   (match stanza.content.presence_type with
    | None ->
      begin
@@ -191,34 +192,30 @@ let session_callback t =
   register_stanza_handler t (ns_client, "presence")
     (parse_presence ~callback:presence_callback ~callback_error:presence_error);
   Roster.get t (fun ?jid_from ?jid_to ?lang ?ver items ->
-      let open Roster in
-      (* ask - pending out / approved - pre-approval *)
-      (* <item subscription='both' name='hannesm' jid='hannesm@jabber.ccc.de'/> *)
-      Printf.printf "%d items\n" (List.length items) ;
       let users = t.user_data.users in
       let users = List.fold_left
           (fun s item ->
              let jid =
-               let { JID.lnode ; JID.ldomain } = item.jid in
+               let { JID.lnode ; JID.ldomain } = item.Roster.jid in
                lnode ^ "@" ^ ldomain
              in
              let elt = User.find_or_get jid s in
              let subscription =
-               match item.subscription with
-               | SubscriptionRemove -> assert false
-               | SubscriptionBoth -> `Both
-               | SubscriptionNone -> `None
-               | SubscriptionFrom -> `From
-               | SubscriptionTo -> `To
+               match item.Roster.subscription with
+               | Roster.SubscriptionRemove -> assert false
+               | Roster.SubscriptionBoth -> `Both
+               | Roster.SubscriptionNone -> `None
+               | Roster.SubscriptionFrom -> `From
+               | Roster.SubscriptionTo -> `To
              in
              let props =
-               let app = if item.approved then [`PreApproved ] else [] in
-               let ask = match item.ask with | Some _ -> [ `Pending ] | None -> [] in
+               let app = if item.Roster.approved then [`PreApproved ] else [] in
+               let ask = match item.Roster.ask with | Some _ -> [ `Pending ] | None -> [] in
                app @ ask
              in
              let t = { elt with
-                       name = item.name ;
-                       groups = item.group ;
+                       User.name = item.Roster.name ;
+                       User.groups = item.Roster.group ;
                        subscription ; props }
              in
              User.Users.(add t (remove t s))
