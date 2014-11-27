@@ -1,8 +1,8 @@
 # OASIS_START
-# DO NOT EDIT (digest: d19b70db464efdd8e7abf314b87f35c3)
+# DO NOT EDIT (digest: eeae282d124f3821f69a90f7c2288428)
 version = "0.1.0"
 description = "XMPP Client"
-requires = "erm_xmpp otr tls tls.lwt lwt sexplib sexplib.syntax hex"
+requires = "erm_xmpp otr tls tls.lwt lwt sexplib sexplib.syntax hex nocrypto"
 archive(byte) = "xmpp_client.cma"
 archive(byte, plugin) = "xmpp_client.cma"
 archive(native) = "xmpp_client.cmxa"
