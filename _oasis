@@ -11,13 +11,25 @@ BuildTools:  ocamlbuild
 Description:
   Graphical XMPP client with OTR
 
+Flag "gui"
+  Description : GUI interface (GTK2)
+  Default     : false
+
 Library "xmpp_client"
   Path            : src/
   Modules         : Config, Xmpp_connection, Xmpp_callbacks, User
   Pack            : true
   BuildDepends    : erm_xmpp, otr, tls, tls.lwt, lwt, sexplib, sexplib.syntax, hex, nocrypto
 
+Executable "cli_client"
+  Path            : src/
+  Install         : false
+  CompiledObject  : native
+  MainIs          : cli_client.ml
+  BuildDepends    : lambda-term, lwt.syntax, xmpp_client
+
 Executable "gui_client"
+  Build          $: flag(gui)
   Path            : src/
   Install         : false
   CompiledObject  : native
