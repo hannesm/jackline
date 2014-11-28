@@ -35,15 +35,40 @@ let make_prompt size time state =
   let tm = Unix.localtime time in
   (*  Printf.printf "\n\nblabla r%dc%d\n\n%!" size.rows size.cols ; *)
   let logs = String.concat "\n" (take_rev_fill 6 state.log []) in
+
   let session = state.session in
   let status = User.presence_to_string session.User.presence in
   let jid = state.user.User.jid ^ "/" ^ session.User.resource in
 
+  let buddies =
+    User.Users.fold (fun k u acc ->
+        let s = match User.good_session u with
+          | None -> `Offline
+          | Some s -> s.User.presence
+        in
+        let f, t =
+          if u = state.user then
+            ("{", "}")
+          else
+            User.subscription_to_chars u.User.subscription
+        in
+        (Printf.sprintf " %s%s%s %s" f (User.presence_to_char s) t k) :: acc)
+      state.users []
+  in
+  let buddylist = String.concat "\n" buddies in
+
   eval [
     S "bla\n" ;
+
+    S buddylist ; S "\n" ;
+
     S(Zed_utf8.make
-        (size.rows - 6 (* log *) - 3 (* status + readline + ^ 'bla' *))
+        (size.rows - 6 (* log *) - 4 (* status + readline + ^ 'bla' *) - (List.length buddies))
         (UChar.of_int 0x0a));
+
+    B_fg lcyan;
+    S (Zed_utf8.make (size.cols) (UChar.of_int 0x2500));
+    E_fg;
 
     S logs ;
     S "\n" ;

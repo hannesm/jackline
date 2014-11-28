@@ -12,6 +12,14 @@ let presence_to_string = function
   | `ExtendedAway -> "extended away"
   | `Offline -> "offline"
 
+let presence_to_char = function
+  | `Online -> "o"
+  | `Free -> "f"
+  | `Away -> "a"
+  | `DoNotDisturb -> "d"
+  | `ExtendedAway -> "x"
+  | `Offline -> "_"
+
 type session = {
   resource : string ;
   mutable presence : presence ;
@@ -46,6 +54,12 @@ type subscription = [
   | `To
   | `Both
 ] with sexp
+
+let subscription_to_chars = function
+  | `Both -> ("[", "]")
+  | `From -> ("[", "?")
+  | `To   -> ("?", "]")
+  | `None -> ("?", "?")
 
 type props = [
   | `Pending | `PreApproved
@@ -98,6 +112,16 @@ let ensure_session jid otr_cfg user =
      let sess = empty_session lresource otr_cfg () in
      user.active_sessions <- (sess :: user.active_sessions ) );
   List.find (fun s -> s.resource = lresource) user.active_sessions
+
+let good_session user =
+  if List.length user.active_sessions = 0 then
+    None
+  else
+    let s = List.filter (fun x -> x.presence <> `Offline) user.active_sessions in
+    if List.length s = 0 then
+      Some (List.hd user.active_sessions)
+    else
+      Some (List.hd (List.sort (fun a b -> compare b.priority a.priority) s))
 
 let t_of_sexp t =
   match t with
