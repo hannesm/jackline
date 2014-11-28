@@ -64,7 +64,6 @@ let make_prompt size time state =
 
     S (String.concat "\n" buddylist) ; S "\n" ;
 
-
     B_fg lcyan;
     S (Zed_utf8.make (size.cols) (UChar.of_int 0x2500));
     E_fg;
@@ -98,7 +97,7 @@ let make_prompt size time state =
   ]
 
 let commands =
-  [ "connect" ; "connect foo" ; "add" ; "status" ]
+  [ "/connect" ; "/add" ; "/status" ]
 
 let time =
   let time, set_time = S.create (Unix.time ()) in
@@ -129,10 +128,12 @@ let rec loop term history state =
        return (Some command)
      with Sys.Break -> return None
    with
-     | Some command ->
-        Printf.printf "executing %s\n%!" command ;
-        LTerm_history.add history command;
-        return (command, history)
+     | Some command when (String.length command > 0) && String.get command 0 = '/' ->
+       LTerm_history.add history command;
+       return (command, history)
+     | Some message ->
+       LTerm_history.add history message;
+       return (message, history)
      | None -> return ("", history)
   ) >>= fun (li, history) ->
   loop term history { state with log = (li::state.log) }
