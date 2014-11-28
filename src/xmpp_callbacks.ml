@@ -16,6 +16,8 @@ open XMPPClient
 module Version = XEP_version.Make (XMPPClient)
 module Roster = Roster.Make (XMPPClient)
 
+open Lwt
+
 type user_data = {
   config : Config.t ;
   mutable users : User.users ;
