@@ -91,23 +91,13 @@ let find_or_get bare_jid s =
 
 let ensure_session jid otr_cfg user =
   let { JID.lresource } = jid in
-  if not (List.exists
-            (fun s -> s.resource = lresource)
-            user.active_sessions)
-  then
-    let sess = empty_session lresource otr_cfg () in
-    user.active_sessions <- (sess :: user.active_sessions )
-
-let find_session jid otr_cfg s =
-  let { JID.lnode ; JID.ldomain ; JID.lresource } = jid in
-  let user = find_or_get (lnode ^ "@" ^ ldomain) s in
   (if not (List.exists
              (fun s -> s.resource = lresource)
              user.active_sessions)
    then
      let sess = empty_session lresource otr_cfg () in
-     user.active_sessions <- (sess :: user.active_sessions )) ;
-  (user, List.find (fun s -> s.resource = lresource) user.active_sessions)
+     user.active_sessions <- (sess :: user.active_sessions ) );
+  List.find (fun s -> s.resource = lresource) user.active_sessions
 
 let t_of_sexp t =
   match t with

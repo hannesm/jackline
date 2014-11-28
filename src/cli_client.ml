@@ -15,14 +15,16 @@ let rec take_rev_fill x l acc =
 
 type ui_state = {
   user : User.user ; (* set initially *)
+  session : User.session ; (* set initially *)
   log : string list ; (* set by xmpp callbacks -- should be time * string list *)
   active_chat : User.user option (* not entirely true - might also be group or status -- focus! *) ;
   users : User.users ; (* extended by xmpp callbacks *)
   notifications : User.user list ; (* or a set? adjusted once messages drop in, reset when chat becomes active *)
 }
 
-let empty_ui_state user users = {
+let empty_ui_state user session users = {
   user ;
+  session ;
   log = [] ;
   active_chat = None ;
   users ;
@@ -31,19 +33,11 @@ let empty_ui_state user users = {
 
 let make_prompt size time state =
   let tm = Unix.localtime time in
-(*  Printf.printf "\n\nblabla r%dc%d r%dc%d\n\n%!" size.rows size.cols tsize.rows tsize.cols ;
-  let matrix = LTerm_draw.make_matrix size in
-  let ctx = LTerm_draw.context matrix size in
-  LTerm_draw.clear ctx;
-    LTerm_draw.draw_frame ctx { row1 = 0; col1 = 0; row2 = size.rows; col2 = size.cols } LTerm_draw.Light; *)
+  (*  Printf.printf "\n\nblabla r%dc%d\n\n%!" size.rows size.cols ; *)
   let logs = String.concat "\n" (take_rev_fill 6 state.log []) in
-  let session =
-    let sessions = state.user.User.active_sessions in
-    assert (List.length sessions = 1) ;
-    List.hd sessions
-  in
+  let session = state.session in
   let status = User.presence_to_string session.User.presence in
-  let jid = state.user.jid ^ "/" ^ session.User.resource in
+  let jid = state.user.User.jid ^ "/" ^ session.User.resource in
 
   eval [
     S "bla\n" ;
@@ -133,8 +127,8 @@ let () =
     Printf.printf "your config %s\n%!" (Config.store_config config) ;
     let history = LTerm_history.create [] in
     let user, users = User.find_or_add config.Config.jid users in
-    User.ensure_session config.Config.jid config.Config.otr_config user ;
-    let state = empty_ui_state user users in
+    let session = User.ensure_session config.Config.jid config.Config.otr_config user in
+    let state = empty_ui_state user session users in
     Lazy.force LTerm.stdout >>= fun term ->
     try_lwt
       loop term history state
