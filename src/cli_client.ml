@@ -115,30 +115,35 @@ class read_line ~term ~history ~state ~completions = object(self)
     self#set_prompt (S.l2 (fun size time -> make_prompt size time state) self#size time)
 end
 
-let rec loop term history state =
+let rec loop term hist state =
   let completions = commands in
-  (match_lwt
-     try_lwt
-       lwt command = (new read_line ~term ~history:(LTerm_history.contents history) ~completions ~state)#run in
-       return (Some command)
-     with Sys.Break -> return None
-   with
-     | Some command when (String.length command > 0) && String.get command 0 = '/' ->
-       LTerm_history.add history command;
+  let history = LTerm_history.contents hist in
+  match_lwt
+    try_lwt
+      lwt command = (new read_line ~term ~history ~completions ~state)#run in
+      return (Some command)
+    with
+      | Sys.Break -> return None
+      | LTerm_read_line.Interrupt -> return (Some "/quit")
+  with
+   | Some command when (String.length command > 0) && String.get command 0 = '/' ->
+       LTerm_history.add hist command;
        let cmd =
          let ws = try String.index command ' ' with Not_found -> String.length command in
          String.sub command 1 (pred ws)
        in
-       ( match String.trim cmd with
-        | "quit" -> raise LTerm_read_line.Interrupt
-        | _ -> Printf.printf "NYI" ) ;
-       return (command, history)
-     | Some message ->
-       LTerm_history.add history message;
-       return (message, history)
-     | None -> return ("", history)
-  ) >>= fun (li, history) ->
-  loop term history { state with log = (li::state.log) }
+       let cont = match String.trim cmd with
+         | "quit" -> false
+         | _ -> Printf.printf "NYI" ; true
+       in
+       if cont then
+         loop term hist { state with log = (command::state.log) }
+       else
+         return state
+   | Some message ->
+       LTerm_history.add hist message;
+       loop term hist { state with log = (message::state.log) }
+   | None -> loop term hist state
 
 let () =
   Lwt_main.run (
@@ -156,11 +161,9 @@ let () =
     let session = User.ensure_session config.Config.jid config.Config.otr_config user in
     let state = empty_ui_state user session users in
     Lazy.force LTerm.stdout >>= fun term ->
-    try_lwt
-      loop term history state
-    with
-      LTerm_read_line.Interrupt ->
-        ( Printf.printf "have a nice day\n%!" ;
-          (* dump_users cfgdir x.users *)
-          return ())
+    loop term history state >>= fun state ->
+    Printf.printf "now dumping state %d\n%!" (User.Users.cardinal state.users) ;
+    print_newline () ;
+    (* dump_users cfgdir x.users *)
+    return ()
   )
