@@ -88,16 +88,11 @@ let make_prompt size time state =
     E_fg;
     S"\n";
 
-(*    B_fg lred; S "user"; E_fg;
-    B_fg lgreen; S"@"; E_fg;
-      B_fg lblue; S "domain"; E_fg;
-      B_fg lgreen; S" $ "; E_fg; *)
-
     E_bold;
   ]
 
 let commands =
-  [ "/connect" ; "/add" ; "/status" ]
+  [ "/connect" ; "/add" ; "/status" ; "/quit" ]
 
 let time =
   let time, set_time = S.create (Unix.time ()) in
@@ -130,6 +125,13 @@ let rec loop term history state =
    with
      | Some command when (String.length command > 0) && String.get command 0 = '/' ->
        LTerm_history.add history command;
+       let cmd =
+         let ws = try String.index command ' ' with Not_found -> String.length command in
+         String.sub command 1 (pred ws)
+       in
+       ( match String.trim cmd with
+        | "quit" -> raise LTerm_read_line.Interrupt
+        | _ -> Printf.printf "NYI" ) ;
        return (command, history)
      | Some message ->
        LTerm_history.add history message;
@@ -158,10 +160,7 @@ let () =
       loop term history state
     with
       LTerm_read_line.Interrupt ->
-        (
-          (* dump_config cfgdir !cfg >>= fun () ->
-             match !user_data with
-             | None -> return ()
-             | Some x -> dump_users cfgdir x.users *)
+        ( Printf.printf "have a nice day\n%!" ;
+          (* dump_users cfgdir x.users *)
           return ())
   )
