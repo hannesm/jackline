@@ -18,7 +18,7 @@ module Roster = Roster.Make (XMPPClient)
 
 type user_data = {
   config : Config.t ;
-  mutable users : User.Users.t ;
+  mutable users : User.users ;
   received : string -> unit ;
 }
 
@@ -75,12 +75,12 @@ let init cfgdir =
   let config = try Config.load_config cfgdata with _ -> Config.empty in
   read cfg users >>= fun userdata ->
   let users = try User.load_users userdata with _ -> User.Users.empty in
-  Printf.printf "returning from init with:\n - config: %s\n - users:\n   %s\n%!"
-    (Sexplib.Sexp.to_string_hum (Config.sexp_of_t config))
-    (String.concat "\n   "
-       (List.map
-          (fun u -> Sexplib.Sexp.to_string_hum (User.sexp_of_t u))
-          (User.Users.elements users))) ;
+  Printf.printf "returning from init with:\n - config: %s\n - users:\n%!"
+    (Sexplib.Sexp.to_string_hum (Config.sexp_of_t config)) ;
+  User.Users.iter
+    (fun k u ->
+       Printf.printf "  - %s -> %s\n%!" k (Sexplib.Sexp.to_string_hum (User.sexp_of_t u)))
+    users;
   return (config, users)
 
 let user_session stanza user_data =
@@ -90,7 +90,7 @@ let user_session stanza user_data =
     | Some { JID.lnode ; JID.ldomain ; JID.lresource } ->
       let jid = lnode ^ "@" ^ ldomain in
       let user = User.find_or_get jid user_data.users in
-      user_data.users <- User.Users.(add user user_data.users) ;
+      user_data.users <- User.Users.(add jid user user_data.users) ;
       let session =
         try
           List.find
@@ -218,7 +218,7 @@ let session_callback t =
                        User.groups = item.Roster.group ;
                        subscription ; props }
              in
-             User.Users.(add t (remove t s))
+             User.Users.add jid t s
           ) users items
       in
       Printf.printf "users is now: %s\n%!" (User.store_users users) ;

@@ -3,10 +3,19 @@
 type presence = [
   | `Online | `Free | `Away | `DoNotDisturb | `ExtendedAway | `Offline
 ]
+
+let presence_to_string = function
+  | `Online -> "online"
+  | `Free -> "free"
+  | `Away -> "away"
+  | `DoNotDisturb -> "do not disturb"
+  | `ExtendedAway -> "extended away"
+  | `Offline -> "offline"
+
 type session = {
   resource : string ;
   mutable presence : presence ;
-  mutable status : string ;
+  mutable status : string (* XXX: option *);
   mutable priority : int ;
   mutable messages : string list ;
   mutable otr : Otr.State.session
@@ -23,8 +32,6 @@ let empty_session resource config () = {
 
 open Sexplib
 open Sexplib.Conv
-
-open Roster
 
 type fingerprint = {
   data : string ;
@@ -54,11 +61,8 @@ type user = {
   mutable active_sessions : session list (* not persistent *)
 }
 
-module User = struct
- type t = user
- let compare a b = compare a.jid b.jid
-end
-module Users = Set.Make(User)
+module Users = Map.Make(String)
+type users = user Users.t
 
 let empty = {
   name = "" ;
@@ -70,12 +74,11 @@ let empty = {
   active_sessions = []
 }
 
-let find_or_get j s =
-  let t = { empty with jid = j } in
-  if Users.mem t s then
-    Users.find t s
+let find_or_get jid s =
+  if Users.mem jid s then
+    Users.find jid s
   else
-    t
+    { empty with jid }
 
 let t_of_sexp t =
   match t with
@@ -112,14 +115,14 @@ let load_users bytes =
   try (match Sexp.of_string bytes with
       | Sexp.List [ ver ; Sexp.List users ] ->
         let version = int_of_sexp ver in
-        Printf.printf "parsing user db version %d\n" version ;
         List.fold_left (fun acc s ->
-            try Users.add (t_of_sexp s) acc with
-              _ -> Printf.printf "parse error in user entry\n" ; acc)
+            match try Some (t_of_sexp s) with _ -> None with
+              | None -> Printf.printf "parse failure %s\n%!" (Sexp.to_string_hum s); acc
+              | Some u -> Users.add u.jid u acc)
           Users.empty users
       | _ -> Printf.printf "parse failed while parsing db\n" ; Users.empty)
   with _ -> Users.empty
 
 let store_users users =
-  let users = Users.fold (fun s acc -> (sexp_of_t s) :: acc) users [] in
+  let users = Users.fold (fun _ s acc -> (sexp_of_t s) :: acc) users [] in
   Sexp.to_string_mach (Sexp.List [ sexp_of_int 0 ; Sexp.List users ])

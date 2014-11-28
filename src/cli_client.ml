@@ -13,14 +13,35 @@ let rec take_rev_fill x l acc =
   | n, x::xs -> take_rev_fill (pred n) xs (x::acc)
   | n, []    -> take_rev_fill (pred n) [] ("no"::acc)
 
-let make_prompt size time log user status =
+type ui_state = {
+  username : string ;
+  status : User.presence ;
+  status_message : string option ;
+  log : string list ;
+  active_chat : User.user option (* not entirely true - might be group or status *) ;
+  users : User.users ;
+  notifications : User.user list ;
+}
+
+let empty_ui_state username users = {
+  username ;
+  status = `Offline ;
+  status_message = None ;
+  log = [] ;
+  active_chat = None ;
+  users = User.Users.empty ;
+  notifications = []
+}
+
+let make_prompt size time state =
   let tm = Unix.localtime time in
 (*  Printf.printf "\n\nblabla r%dc%d r%dc%d\n\n%!" size.rows size.cols tsize.rows tsize.cols ;
   let matrix = LTerm_draw.make_matrix size in
   let ctx = LTerm_draw.context matrix size in
   LTerm_draw.clear ctx;
     LTerm_draw.draw_frame ctx { row1 = 0; col1 = 0; row2 = size.rows; col2 = size.cols } LTerm_draw.Light; *)
-  let logs = String.concat "\n" (take_rev_fill 6 log []) in
+  let logs = String.concat "\n" (take_rev_fill 6 state.log []) in
+  let status = User.presence_to_string state.status in
 
   eval [
     S "bla\n" ;
@@ -37,10 +58,10 @@ let make_prompt size time log user status =
     S"─( ";
     B_fg lmagenta; S(Printf.sprintf "%02d:%02d" tm.Unix.tm_hour tm.Unix.tm_min); E_fg;
     S" )─< ";
-    B_fg lblue; S user; E_fg;
+    B_fg lblue; S (state.username); E_fg;
     S" >─";
     S(Zed_utf8.make
-        (size.cols - 22 - String.length user - String.length status)
+        (size.cols - 22 - String.length (state.username) - String.length status)
         (UChar.of_int 0x2500));
     S"[ ";
     B_fg lred; S status; E_fg;
@@ -57,7 +78,7 @@ let make_prompt size time log user status =
   ]
 
 let commands =
-  [ "connect" ; "add" ; "status" ]
+  [ "connect" ; "connect foo" ; "add" ; "status" ]
 
 let time =
   let time, set_time = S.create (Unix.time ()) in
@@ -65,7 +86,7 @@ let time =
   ignore (Lwt_engine.on_timer 60.0 true (fun _ -> set_time (Unix.time ())));
   time
 
-class read_line ~log ~term ~history ~user ~completions = object(self)
+class read_line ~term ~history ~state ~completions = object(self)
   inherit LTerm_read_line.read_line ~history ()
   inherit [Zed_utf8.t] LTerm_read_line.term term
 
@@ -77,15 +98,14 @@ class read_line ~log ~term ~history ~user ~completions = object(self)
   method show_box = false
 
   initializer
-    self#set_prompt (S.l2 (fun size time -> make_prompt size time log user "offline") self#size time)
+    self#set_prompt (S.l2 (fun size time -> make_prompt size time state) self#size time)
 end
 
-let rec loop term log history config users =
+let rec loop term history state =
   let completions = commands in
-  let user = JID.string_of_jid config.Config.jid in
   (match_lwt
      try_lwt
-       lwt command = (new read_line ~log ~term ~history:(LTerm_history.contents history) ~user ~completions)#run in
+       lwt command = (new read_line ~term ~history:(LTerm_history.contents history) ~completions ~state)#run in
        return (Some command)
      with Sys.Break -> return None
    with
@@ -95,7 +115,7 @@ let rec loop term log history config users =
         return (command, history)
      | None -> return ("", history)
   ) >>= fun (li, history) ->
-  loop term (li::log) history config users
+  loop term history { state with log = (li::state.log) }
 
 let () =
   Lwt_main.run (
@@ -110,9 +130,10 @@ let () =
     Xmpp_callbacks.init cfgdir >>= fun (config, users) ->
     Printf.printf "your config %s\n%!" (Config.store_config config) ;
     let history = LTerm_history.create [] in
+    let state = empty_ui_state (JID.string_of_jid config.Config.jid) users in
     Lazy.force LTerm.stdout >>= fun term ->
     try_lwt
-      loop term [] history config users
+      loop term history state
     with
       LTerm_read_line.Interrupt ->
         (
