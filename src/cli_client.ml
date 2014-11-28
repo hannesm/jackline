@@ -14,22 +14,18 @@ let rec take_rev_fill x l acc =
   | n, []    -> take_rev_fill (pred n) [] ("no"::acc)
 
 type ui_state = {
-  username : string ;
-  status : User.presence ;
-  status_message : string option ;
-  log : string list ;
-  active_chat : User.user option (* not entirely true - might be group or status *) ;
-  users : User.users ;
-  notifications : User.user list ;
+  user : User.user ; (* set initially *)
+  log : string list ; (* set by xmpp callbacks -- should be time * string list *)
+  active_chat : User.user option (* not entirely true - might also be group or status -- focus! *) ;
+  users : User.users ; (* extended by xmpp callbacks *)
+  notifications : User.user list ; (* or a set? adjusted once messages drop in, reset when chat becomes active *)
 }
 
-let empty_ui_state username users = {
-  username ;
-  status = `Offline ;
-  status_message = None ;
+let empty_ui_state user users = {
+  user ;
   log = [] ;
   active_chat = None ;
-  users = User.Users.empty ;
+  users ;
   notifications = []
 }
 
@@ -41,7 +37,13 @@ let make_prompt size time state =
   LTerm_draw.clear ctx;
     LTerm_draw.draw_frame ctx { row1 = 0; col1 = 0; row2 = size.rows; col2 = size.cols } LTerm_draw.Light; *)
   let logs = String.concat "\n" (take_rev_fill 6 state.log []) in
-  let status = User.presence_to_string state.status in
+  let session =
+    let sessions = state.user.User.active_sessions in
+    assert (List.length sessions = 1) ;
+    List.hd sessions
+  in
+  let status = User.presence_to_string session.User.presence in
+  let jid = state.user.jid ^ "/" ^ session.User.resource in
 
   eval [
     S "bla\n" ;
@@ -58,10 +60,10 @@ let make_prompt size time state =
     S"─( ";
     B_fg lmagenta; S(Printf.sprintf "%02d:%02d" tm.Unix.tm_hour tm.Unix.tm_min); E_fg;
     S" )─< ";
-    B_fg lblue; S (state.username); E_fg;
+    B_fg lblue; S jid; E_fg;
     S" >─";
     S(Zed_utf8.make
-        (size.cols - 22 - String.length (state.username) - String.length status)
+        (size.cols - 22 - String.length jid - String.length status)
         (UChar.of_int 0x2500));
     S"[ ";
     B_fg lred; S status; E_fg;
@@ -130,7 +132,9 @@ let () =
     Xmpp_callbacks.init cfgdir >>= fun (config, users) ->
     Printf.printf "your config %s\n%!" (Config.store_config config) ;
     let history = LTerm_history.create [] in
-    let state = empty_ui_state (JID.string_of_jid config.Config.jid) users in
+    let user, users = User.find_or_add config.Config.jid users in
+    User.ensure_session config.Config.jid config.Config.otr_config user ;
+    let state = empty_ui_state user users in
     Lazy.force LTerm.stdout >>= fun term ->
     try_lwt
       loop term history state

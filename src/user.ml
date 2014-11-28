@@ -15,7 +15,7 @@ let presence_to_string = function
 type session = {
   resource : string ;
   mutable presence : presence ;
-  mutable status : string (* XXX: option *);
+  mutable status : string option ;
   mutable priority : int ;
   mutable messages : string list ;
   mutable otr : Otr.State.session
@@ -24,7 +24,7 @@ type session = {
 let empty_session resource config () = {
   resource ;
   presence = `Offline ;
-  status = "" ;
+  status = None ;
   priority = 0 ;
   messages = [] ;
   otr = Otr.State.new_session config ()
@@ -52,7 +52,7 @@ type props = [
 ]
 
 type user = {
-  name : string ;
+  name : string ; (* TODO: option *)
   jid : string ; (* user@domain, unique key *)
   groups : string list ;
   subscription : subscription ;
@@ -74,11 +74,40 @@ let empty = {
   active_sessions = []
 }
 
-let find_or_get jid s =
-  if Users.mem jid s then
-    Users.find jid s
+let find_or_add jid users =
+  let { JID.lnode ; JID.ldomain } = jid in
+  let id = lnode ^ "@" ^ ldomain in
+  if Users.mem id users then
+    (Users.find id users, users)
   else
-    { empty with jid }
+    let t = { empty with jid = id } in
+    (t, Users.add id t users)
+
+let find_or_get bare_jid s =
+  if Users.mem bare_jid s then
+    Users.find bare_jid s
+  else
+    { empty with jid = bare_jid }
+
+let ensure_session jid otr_cfg user =
+  let { JID.lresource } = jid in
+  if not (List.exists
+            (fun s -> s.resource = lresource)
+            user.active_sessions)
+  then
+    let sess = empty_session lresource otr_cfg () in
+    user.active_sessions <- (sess :: user.active_sessions )
+
+let find_session jid otr_cfg s =
+  let { JID.lnode ; JID.ldomain ; JID.lresource } = jid in
+  let user = find_or_get (lnode ^ "@" ^ ldomain) s in
+  (if not (List.exists
+             (fun s -> s.resource = lresource)
+             user.active_sessions)
+   then
+     let sess = empty_session lresource otr_cfg () in
+     user.active_sessions <- (sess :: user.active_sessions )) ;
+  (user, List.find (fun s -> s.resource = lresource) user.active_sessions)
 
 let t_of_sexp t =
   match t with

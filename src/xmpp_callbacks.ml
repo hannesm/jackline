@@ -163,9 +163,9 @@ let presence_callback t stanza =
    | Some Unavailable -> session.presence <- `Offline ; log "offline"
   );
   (match stanza.content.status with
-   | None -> session.status <- ""
-   | Some x when x = "" -> session.status <- ""
-   | Some x -> session.status <- x ; log (" - " ^ x));
+   | None -> session.status <- None
+   | Some x when x = "" -> session.status <- None
+   | Some x -> session.status <- Some x ; log (" - " ^ x));
   log "\n" ;
   return ()
 
