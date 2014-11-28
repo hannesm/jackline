@@ -148,7 +148,6 @@ let () =
       Filename.concat home ".config"
     in
     Xmpp_callbacks.init cfgdir >>= fun (config, users) ->
-    Printf.printf "your config %s\n%!" (Config.store_config config) ;
     let history = LTerm_history.create [] in
     let user, users = User.find_or_add config.Config.jid users in
     let session = User.ensure_session config.Config.jid config.Config.otr_config user in

@@ -73,15 +73,9 @@ let init cfgdir =
   let cfg = xmpp_config cfgdir in
   read cfg config >>= fun cfgdata ->
   let config = try Config.load_config cfgdata with _ -> Config.empty in
-  read cfg users >>= fun userdata ->
+  read cfg users >|= fun userdata ->
   let users = try User.load_users userdata with _ -> User.Users.empty in
-  Printf.printf "returning from init with:\n - config: %s\n - users:\n%!"
-    (Sexplib.Sexp.to_string_hum (Config.sexp_of_t config)) ;
-  User.Users.iter
-    (fun k u ->
-       Printf.printf "  - %s -> %s\n%!" k (Sexplib.Sexp.to_string_hum (User.sexp_of_t u)))
-    users;
-  return (config, users)
+  (config, users)
 
 let user_session stanza user_data =
   let log = user_data.received in
