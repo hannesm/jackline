@@ -7,11 +7,11 @@ open LTerm_geom
 open CamomileLibraryDyn.Camomile
 open React
 
-let rec take_rev_fill x l acc =
+let rec take_fill x l acc =
   match x, l with
-  | 0, _     -> acc
-  | n, x::xs -> take_rev_fill (pred n) xs (x::acc)
-  | n, []    -> take_rev_fill (pred n) [] ("no"::acc)
+  | 0, _     -> List.rev acc
+  | n, x::xs -> take_fill (pred n) xs (x::acc)
+  | n, []    -> take_fill (pred n) [] (""::acc)
 
 type ui_state = {
   user : User.user ; (* set initially *)
@@ -34,7 +34,7 @@ let empty_ui_state user session users = {
 let make_prompt size time state =
   let tm = Unix.localtime time in
   (*  Printf.printf "\n\nblabla r%dc%d\n\n%!" size.rows size.cols ; *)
-  let logs = String.concat "\n" (take_rev_fill 6 state.log []) in
+  let logs = String.concat "\n" (List.rev (take_fill 6 state.log [])) in
 
   let session = state.session in
   let status = User.presence_to_string session.User.presence in
@@ -55,16 +55,15 @@ let make_prompt size time state =
         (Printf.sprintf " %s%s%s %s" f (User.presence_to_char s) t k) :: acc)
       state.users []
   in
-  let buddylist = String.concat "\n" buddies in
+  (* handle overflowings: text might be too long for one row *)
+  let main_size = size.rows - 6 (* log *) - 2 (* status + readline *) in
+  assert (main_size > 0) ;
+  let buddylist = take_fill main_size buddies [] in
 
   eval [
-    S "bla\n" ;
 
-    S buddylist ; S "\n" ;
+    S (String.concat "\n" buddylist) ; S "\n" ;
 
-    S(Zed_utf8.make
-        (size.rows - 6 (* log *) - 4 (* status + readline + ^ 'bla' *) - (List.length buddies))
-        (UChar.of_int 0x0a));
 
     B_fg lcyan;
     S (Zed_utf8.make (size.cols) (UChar.of_int 0x2500));
