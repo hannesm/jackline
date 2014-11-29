@@ -103,7 +103,7 @@ let make_prompt size time state =
         (size.cols - 22 - String.length jid - String.length status)
         (UChar.of_int 0x2500));
     S"[ ";
-    B_fg lred; S status; E_fg;
+    B_fg (if session.User.presence = `Offline then lred else lgreen); S status; E_fg;
     S" ]─";
     E_fg;
     S"\n";
