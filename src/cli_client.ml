@@ -7,11 +7,17 @@ open LTerm_geom
 open CamomileLibraryDyn.Camomile
 open React
 
-let rec take_fill x l acc =
+let rec take_fill ?(neutral = "") x l acc =
   match x, l with
   | 0, _     -> List.rev acc
-  | n, x::xs -> take_fill (pred n) xs (x::acc)
-  | n, []    -> take_fill (pred n) [] (""::acc)
+  | n, x::xs -> take_fill ~neutral (pred n) xs (x::acc)
+  | n, []    -> take_fill ~neutral (pred n) [] (neutral::acc)
+
+let pad x s =
+  match x - (String.length s) with
+  | 0 -> s
+  | d when d > 0 -> s ^ (String.make d ' ')
+  | d (* when d < 0 *) -> String.sub s 0 x
 
 type ui_state = {
   user : User.user ; (* set initially *)
@@ -40,6 +46,11 @@ let make_prompt size time state =
   let status = User.presence_to_string session.User.presence in
   let jid = state.user.User.jid ^ "/" ^ session.User.resource in
 
+  let main_size = size.rows - 6 (* log *) - 3 (* status + readline *) in
+  assert (main_size > 0) ;
+
+  let buddy_width = 24 in
+
   let buddies =
     User.Users.fold (fun k u acc ->
         let s = match User.good_session u with
@@ -52,20 +63,28 @@ let make_prompt size time state =
           else
             User.subscription_to_chars u.User.subscription
         in
-        (Printf.sprintf " %s%s%s %s" f (User.presence_to_char s) t k) :: acc)
+        let item = Printf.sprintf " %s%s%s %s" f (User.presence_to_char s) t k in
+        (pad buddy_width item) :: acc)
       state.users []
   in
   (* handle overflowings: text might be too long for one row *)
-  let main_size = size.rows - 6 (* log *) - 3 (* status + readline *) in
-  assert (main_size > 0) ;
-  let buddylist = take_fill main_size buddies [] in
+
+  let buddylist =
+    let lst = take_fill ~neutral:(pad buddy_width "") main_size buddies [] in
+    List.map (fun x -> x ^ (Zed_utf8.singleton (UChar.of_int 0x2502))) lst
+  in
+  let hline =
+    (Zed_utf8.make buddy_width (UChar.of_int 0x2500)) ^
+    (Zed_utf8.singleton (UChar.of_int 0x2534)) ^
+    (Zed_utf8.make (size.cols - (succ buddy_width)) (UChar.of_int 0x2500))
+  in
 
   eval [
 
     S (String.concat "\n" buddylist) ; S "\n" ;
 
     B_fg lcyan;
-    S (Zed_utf8.make (size.cols) (UChar.of_int 0x2500));
+    S hline ;
     E_fg;
     S "\n" ;
 
