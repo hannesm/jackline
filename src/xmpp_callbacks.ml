@@ -19,7 +19,7 @@ module Roster = Roster.Make (XMPPClient)
 open Lwt
 
 type user_data = {
-  config : Config.t ;
+  otr_config : Otr.State.config ;
   users : User.users ;
   received : string -> unit ;
 }
@@ -80,32 +80,32 @@ let init cfgdir =
   (config, users)
 
 let user_session stanza user_data =
-  let log = user_data.received in
   match stanza.jid_from with
     | None -> assert false
     | Some jid ->
       let user = User.find_or_add jid user_data.users in
-      let session = User.ensure_session jid user_data.config.Config.otr_config user in
+      let session = User.ensure_session jid user_data.otr_config user in
       (user, session)
 
 let message_callback (t : user_data session_data) stanza =
   let log = t.user_data.received in
   let user, session = user_session stanza t.user_data in
+  let userid = User.userid user session in
   match stanza.content.body with
-  | None -> log "nothing received\n" ; return ()
+  | None -> log (userid ^ "nothing received") ; return ()
   | Some v ->
     let ctx, out, warn, received, plain = Otr.Handshake.handle session.User.otr v in
     (match plain with
      | None -> ()
-     | Some p -> log ("plain message: " ^ p ^ "\n")) ;
+     | Some p -> log (userid ^ "plain message: " ^ p)) ;
     (match warn with
      | None -> ()
-     | Some w -> log ("warning: " ^ w ^ "\n")) ;
+     | Some w -> log (userid ^ "warning: " ^ w)) ;
     (match received with
      | None -> ()
-     | Some c -> log ("received encrypted: " ^ c ^ "\n")) ;
+     | Some c -> log (userid ^ "received encrypted: " ^ c)) ;
     (match plain, warn, received with
-     | None, None, None -> log "nothing...\n"
+     | None, None, None -> log (userid ^ "nothing usable received...")
      | _ -> ()) ;
     session.User.otr <- ctx ;
     match out with
@@ -124,32 +124,33 @@ let message_error t ?id ?jid_from ?jid_to ?lang error =
 let presence_callback t stanza =
   let log = t.user_data.received in
   let user, session = user_session stanza t.user_data in
+  let id = User.userid user session in
   (match stanza.content.priority with
    | None -> ()
    | Some x -> session.User.priority <- x) ;
   let open User in
+  let stat = match stanza.content.status with
+    | None -> session.status <- None ; ""
+    | Some x when x = "" -> session.status <- None ; ""
+    | Some x -> session.status <- Some x ; (" - " ^ x)
+  in
   (match stanza.content.presence_type with
    | None ->
      begin
        match stanza.content.show with
-       | None -> session.presence <- `Online ; log "available"
-       | Some ShowChat -> session.presence <- `Free ; log "free"
-       | Some ShowAway -> session.presence <- `Away ; log "away"
-       | Some ShowDND -> session.presence <- `DoNotDisturb ; log "dnd"
-       | Some ShowXA -> session.presence <- `ExtendedAway ; log "extended away"
+       | None -> session.presence <- `Online ; log (id ^ "available" ^ stat)
+       | Some ShowChat -> session.presence <- `Free ; log (id ^ "free" ^ stat)
+       | Some ShowAway -> session.presence <- `Away ; log (id ^ "away" ^ stat)
+       | Some ShowDND -> session.presence <- `DoNotDisturb ; log (id ^ "dnd" ^ stat)
+       | Some ShowXA -> session.presence <- `ExtendedAway ; log (id ^ "extended away" ^ stat)
      end
-   | Some Probe -> log "probed"
-   | Some Subscribe -> log "subscription request"
-   | Some Subscribed -> log "successfully subscribed"
-   | Some Unsubscribe -> log "shouldn't see this unsubscribe"
-   | Some Unsubscribed -> log "you're so off my buddy list"
-   | Some Unavailable -> session.presence <- `Offline ; log "offline"
+   | Some Probe -> log (id ^ "probed" ^ stat)
+   | Some Subscribe -> log (id ^ "subscription request" ^ stat)
+   | Some Subscribed -> log (id ^ "successfully subscribed" ^ stat)
+   | Some Unsubscribe -> log (id ^ "shouldn't see this unsubscribe" ^ stat)
+   | Some Unsubscribed -> log (id ^ "you're so off my buddy list" ^ stat)
+   | Some Unavailable -> session.presence <- `Offline ; log (id ^ "offline" ^ stat)
   );
-  (match stanza.content.status with
-   | None -> session.status <- None
-   | Some x when x = "" -> session.status <- None
-   | Some x -> session.status <- Some x ; log (" - " ^ x));
-  log "\n" ;
   return ()
 
 let presence_error t ?id ?jid_from ?jid_to ?lang error =
@@ -208,10 +209,9 @@ let session_callback t =
   print_endline "returning" ;
   return ()
 
-let connect user_data _ =
+let connect config user_data _ =
   Printf.printf "connecting\n%!" ;
   let open Config in
-  let config = user_data.config in
   let server = JID.to_idn config.jid
   and port = config.port
   in

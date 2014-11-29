@@ -75,6 +75,8 @@ type user = {
   mutable active_sessions : session list (* not persistent *)
 }
 
+let userid u s = u.jid ^ "/" ^ s.resource
+
 let empty = {
   name = "" ;
   jid = "a@b" ;

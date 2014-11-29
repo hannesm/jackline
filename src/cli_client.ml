@@ -16,7 +16,7 @@ let rec take_fill x l acc =
 type ui_state = {
   user : User.user ; (* set initially *)
   session : User.session ; (* set initially *)
-  log : string list ; (* set by xmpp callbacks -- should be time * string list *)
+  mutable log : string list ; (* set by xmpp callbacks -- should be time * string list *)
   active_chat : User.user option ; (* modified by user (scrolling through buddies) *)
   users : User.users ; (* extended by xmpp callbacks *)
   notifications : User.user list ; (* or a set? adjusted once messages drop in, reset when chat becomes active *)
@@ -56,7 +56,7 @@ let make_prompt size time state =
       state.users []
   in
   (* handle overflowings: text might be too long for one row *)
-  let main_size = size.rows - 6 (* log *) - 2 (* status + readline *) in
+  let main_size = size.rows - 6 (* log *) - 3 (* status + readline *) in
   assert (main_size > 0) ;
   let buddylist = take_fill main_size buddies [] in
 
@@ -67,6 +67,7 @@ let make_prompt size time state =
     B_fg lcyan;
     S (Zed_utf8.make (size.cols) (UChar.of_int 0x2500));
     E_fg;
+    S "\n" ;
 
     S logs ;
     S "\n" ;
@@ -115,7 +116,7 @@ class read_line ~term ~history ~state ~completions = object(self)
     self#set_prompt (S.l2 (fun size time -> make_prompt size time state) self#size time)
 end
 
-let rec loop term hist state =
+let rec loop (config : Config.t) term hist state =
   let completions = commands in
   let history = LTerm_history.contents hist in
   match_lwt
@@ -134,16 +135,26 @@ let rec loop term hist state =
        in
        let cont = match String.trim cmd with
          | "quit" -> false
+         | "connect" ->
+           let received x = state.log <- (x :: state.log) in
+           let otr_config = config.Config.otr_config in
+           let (user_data : Xmpp_callbacks.user_data) = Xmpp_callbacks.({
+             otr_config ;
+             users = state.users ;
+             received
+           }) in
+           Xmpp_callbacks.connect config user_data () ;
+           true
          | _ -> Printf.printf "NYI" ; true
        in
        if cont then
-         loop term hist { state with log = (command::state.log) }
+         loop config term hist state
        else
          return state
    | Some message ->
        LTerm_history.add hist message;
-       loop term hist { state with log = (message::state.log) }
-   | None -> loop term hist state
+       loop config term hist state
+   | None -> loop config term hist state
 
 let () =
   Lwt_main.run (
@@ -161,7 +172,7 @@ let () =
     let session = User.ensure_session config.Config.jid config.Config.otr_config user in
     let state = empty_ui_state user session users in
     Lazy.force LTerm.stdout >>= fun term ->
-    loop term history state >>= fun state ->
+    loop config term history state >>= fun state ->
     Printf.printf "now dumping state %d\n%!" (User.Users.length state.users) ;
     print_newline () ;
     (* dump_users cfgdir x.users *)
