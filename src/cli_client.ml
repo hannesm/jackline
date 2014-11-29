@@ -17,7 +17,7 @@ type ui_state = {
   user : User.user ; (* set initially *)
   session : User.session ; (* set initially *)
   log : string list ; (* set by xmpp callbacks -- should be time * string list *)
-  active_chat : User.user option (* not entirely true - might also be group or status -- focus! *) ;
+  active_chat : User.user option ; (* modified by user (scrolling through buddies) *)
   users : User.users ; (* extended by xmpp callbacks *)
   notifications : User.user list ; (* or a set? adjusted once messages drop in, reset when chat becomes active *)
 }
@@ -157,12 +157,12 @@ let () =
     in
     Xmpp_callbacks.init cfgdir >>= fun (config, users) ->
     let history = LTerm_history.create [] in
-    let user, users = User.find_or_add config.Config.jid users in
+    let user = User.find_or_add config.Config.jid users in
     let session = User.ensure_session config.Config.jid config.Config.otr_config user in
     let state = empty_ui_state user session users in
     Lazy.force LTerm.stdout >>= fun term ->
     loop term history state >>= fun state ->
-    Printf.printf "now dumping state %d\n%!" (User.Users.cardinal state.users) ;
+    Printf.printf "now dumping state %d\n%!" (User.Users.length state.users) ;
     print_newline () ;
     (* dump_users cfgdir x.users *)
     return ()

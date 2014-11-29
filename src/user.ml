@@ -75,9 +75,6 @@ type user = {
   mutable active_sessions : session list (* not persistent *)
 }
 
-module Users = Map.Make(String)
-type users = user Users.t
-
 let empty = {
   name = "" ;
   jid = "a@b" ;
@@ -88,20 +85,31 @@ let empty = {
   active_sessions = []
 }
 
+module StringHash =
+  struct
+    type t = string
+    let equal a b = a = b
+    let hash = Hashtbl.hash
+  end
+
+module Users = Hashtbl.Make(StringHash)
+type users = user Users.t
+
+let keys users =
+  Users.fold (fun k _ acc -> k :: acc) users []
+
+let bare_jid jid =
+  let { JID.lnode ; JID.ldomain ; JID.lresource } = jid in
+  (lnode ^ "@" ^ ldomain, lresource)
+
 let find_or_add jid users =
-  let { JID.lnode ; JID.ldomain } = jid in
-  let id = lnode ^ "@" ^ ldomain in
-  if Users.mem id users then
-    (Users.find id users, users)
+  let id, _ = bare_jid jid in
+  if Users.mem users id then
+    Users.find users id
   else
     let t = { empty with jid = id } in
-    (t, Users.add id t users)
-
-let find_or_get bare_jid s =
-  if Users.mem bare_jid s then
-    Users.find bare_jid s
-  else
-    { empty with jid = bare_jid }
+    Users.add users id t ;
+    t
 
 let ensure_session jid otr_cfg user =
   let { JID.lresource } = jid in
@@ -155,16 +163,23 @@ let sexp_of_t t =
   ]
 
 let load_users bytes =
-  try (match Sexp.of_string bytes with
-      | Sexp.List [ ver ; Sexp.List users ] ->
-        let version = int_of_sexp ver in
-        List.fold_left (fun acc s ->
-            match try Some (t_of_sexp s) with _ -> None with
-              | None -> Printf.printf "parse failure %s\n%!" (Sexp.to_string_hum s); acc
-              | Some u -> Users.add u.jid u acc)
-          Users.empty users
-      | _ -> Printf.printf "parse failed while parsing db\n" ; Users.empty)
-  with _ -> Users.empty
+  let table = Users.create 100 in
+  ( try (match Sexp.of_string bytes with
+       | Sexp.List [ ver ; Sexp.List users ] ->
+         let version = int_of_sexp ver in
+         List.iter (fun s ->
+             match try Some (t_of_sexp s) with _ -> None with
+               | None -> Printf.printf "parse failure %s\n%!" (Sexp.to_string_hum s)
+               | Some u ->
+                 let id = u.jid in
+                 if Users.mem table id then
+                   Printf.printf "key %s already present in table, ignoring\n%!" id
+                 else
+                   Users.add table id u)
+           users
+       | _ -> Printf.printf "parse failed while parsing db\n")
+    with _ -> () ) ;
+  table
 
 let store_users users =
   let users = Users.fold (fun _ s acc -> (sexp_of_t s) :: acc) users [] in

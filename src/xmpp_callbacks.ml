@@ -20,7 +20,7 @@ open Lwt
 
 type user_data = {
   config : Config.t ;
-  mutable users : User.users ;
+  users : User.users ;
   received : string -> unit ;
 }
 
@@ -76,29 +76,16 @@ let init cfgdir =
   read cfg config >>= fun cfgdata ->
   let config = try Config.load_config cfgdata with _ -> Config.empty in
   read cfg users >|= fun userdata ->
-  let users = try User.load_users userdata with _ -> User.Users.empty in
+  let users = try User.load_users userdata with _ -> User.Users.create 100 in
   (config, users)
 
 let user_session stanza user_data =
   let log = user_data.received in
   match stanza.jid_from with
     | None -> assert false
-    | Some { JID.lnode ; JID.ldomain ; JID.lresource } ->
-      let jid = lnode ^ "@" ^ ldomain in
-      let user = User.find_or_get jid user_data.users in
-      user_data.users <- User.Users.(add jid user user_data.users) ;
-      let session =
-        try
-          List.find
-            (fun s -> s.User.resource = lresource)
-            user.User.active_sessions
-        with Not_found ->
-          (let otr = user_data.config.Config.otr_config in
-           let sess = User.empty_session lresource otr () in
-           user.User.active_sessions <- sess :: user.User.active_sessions ;
-           sess)
-in
-      log (jid ^ "/" ^ lresource ^ " (" ^ (string_of_int (List.length user.User.active_sessions)) ^ ") ") ;
+    | Some jid ->
+      let user = User.find_or_add jid user_data.users in
+      let session = User.ensure_session jid user_data.config.Config.otr_config user in
       (user, session)
 
 let message_callback (t : user_data session_data) stanza =
@@ -191,36 +178,30 @@ let session_callback t =
     (parse_presence ~callback:presence_callback ~callback_error:presence_error);
   Roster.get t (fun ?jid_from ?jid_to ?lang ?ver items ->
       let users = t.user_data.users in
-      let users = List.fold_left
-          (fun s item ->
-             let jid =
-               let { JID.lnode ; JID.ldomain } = item.Roster.jid in
-               lnode ^ "@" ^ ldomain
-             in
-             let elt = User.find_or_get jid s in
-             let subscription =
-               match item.Roster.subscription with
-               | Roster.SubscriptionRemove -> assert false
-               | Roster.SubscriptionBoth -> `Both
-               | Roster.SubscriptionNone -> `None
-               | Roster.SubscriptionFrom -> `From
-               | Roster.SubscriptionTo -> `To
-             in
-             let props =
-               let app = if item.Roster.approved then [`PreApproved ] else [] in
-               let ask = match item.Roster.ask with | Some _ -> [ `Pending ] | None -> [] in
-               app @ ask
-             in
-             let t = { elt with
-                       User.name = item.Roster.name ;
-                       User.groups = item.Roster.group ;
-                       subscription ; props }
-             in
-             User.Users.add jid t s
-          ) users items
-      in
+      (List.iter
+         (fun item ->
+            let user = User.find_or_add item.Roster.jid users in
+            let subscription =
+              match item.Roster.subscription with
+              | Roster.SubscriptionRemove -> assert false
+              | Roster.SubscriptionBoth -> `Both
+              | Roster.SubscriptionNone -> `None
+              | Roster.SubscriptionFrom -> `From
+              | Roster.SubscriptionTo -> `To
+            in
+            let props =
+              let app = if item.Roster.approved then [`PreApproved ] else [] in
+              let ask = match item.Roster.ask with | Some _ -> [ `Pending ] | None -> [] in
+              app @ ask
+            in
+            let t = { user with
+                      User.name = item.Roster.name ;
+                      User.groups = item.Roster.group ;
+                      subscription ; props }
+            in
+            User.Users.replace users t.jid t
+         ) items );
       Printf.printf "users is now: %s\n%!" (User.store_users users) ;
-      t.user_data.users <- users ;
       return ()) >>= fun () ->
   print_endline "sending presence" ;
   send_presence t () >>= fun () ->
