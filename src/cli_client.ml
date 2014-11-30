@@ -7,11 +7,23 @@ open LTerm_geom
 open CamomileLibraryDyn.Camomile
 open React
 
+let rec take_rev x l acc =
+  match x, l with
+  | 0, _ -> acc
+  | n, [] -> acc
+  | n, x :: xs -> take_rev (pred n) xs (x :: acc)
+
 let rec take_fill ?(neutral = "") x l acc =
   match x, l with
   | 0, _     -> List.rev acc
   | n, x::xs -> take_fill ~neutral (pred n) xs (x::acc)
   | n, []    -> take_fill ~neutral (pred n) [] (neutral::acc)
+
+let rec pad_l x l =
+  match x - (List.length l) with
+  | 0 -> l
+  | d when d > 0 ->  pad_l x ("" :: l)
+  | d -> assert false
 
 let pad x s =
   match x - (String.length s) with
@@ -22,10 +34,11 @@ let pad x s =
 type ui_state = {
   user : User.user ; (* set initially *)
   session : User.session ; (* set initially *)
-  mutable log : string list ; (* set by xmpp callbacks -- should be time * string list *)
+  mutable log : (Unix.tm * string * string) list ; (* set by xmpp callbacks -- should be time * string list *)
   active_chat : User.user option ; (* modified by user (scrolling through buddies) *)
   users : User.users ; (* extended by xmpp callbacks *)
   notifications : User.user list ; (* or a set? adjusted once messages drop in, reset when chat becomes active *)
+  (* events : ?? list ; (* primarily subscription requests - anything else? *) *)
 }
 
 let empty_ui_state user session users = {
@@ -39,9 +52,20 @@ let empty_ui_state user session users = {
 
 let make_prompt size time network state =
   let tm = Unix.localtime time in
-  (*  Printf.printf "\n\nblabla r%dc%d\n\n%!" size.rows size.cols ; *)
-  state.log <- (network :: state.log);
-  let logs = String.concat "\n" (List.rev (take_fill 6 state.log [])) in
+
+  (if List.length state.log = 0 || List.hd state.log <> network then
+     state.log <- (network :: state.log)) ;
+
+  let print (lt, from, msg) =
+    let time = Printf.sprintf "[%02d:%02d:%02d] " lt.Unix.tm_hour lt.Unix.tm_min lt.Unix.tm_sec in
+    time ^ from ^ ": " ^ msg
+  in
+  let logs =
+    let entries = take_rev 6 state.log [] in
+    let ent = List.map print entries in
+    let msgs = pad_l 6 ent in
+    String.concat "\n" msgs
+  in
 
   let session = state.session in
   let status = User.presence_to_string session.User.presence in
@@ -158,10 +182,14 @@ let rec loop (config : Config.t) term hist state network s_n =
          | "quit" -> false
          | "connect" ->
            let otr_config = config.Config.otr_config in
+           let cb jid msg =
+               let now = Unix.localtime (Unix.time ()) in
+               s_n (now, jid, msg)
+           in
            let (user_data : Xmpp_callbacks.user_data) = Xmpp_callbacks.({
              otr_config ;
              users = state.users ;
-             received = s_n
+             received = cb
            }) in
            Xmpp_callbacks.connect config user_data () ;
            true
@@ -191,7 +219,7 @@ let () =
     let user = User.find_or_add config.Config.jid users in
     let session = User.ensure_session config.Config.jid config.Config.otr_config user in
     let state = empty_ui_state user session users in
-    let n, s_n = S.create "nothing" in
+    let n, s_n = S.create (Unix.localtime (Unix.time ()), "nobody", "nothing") in
     Lazy.force LTerm.stdout >>= fun term ->
     loop config term history state n s_n >>= fun state ->
     Printf.printf "now dumping state %d\n%!" (User.Users.length state.users) ;

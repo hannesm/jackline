@@ -21,7 +21,7 @@ open Lwt
 type user_data = {
   otr_config : Otr.State.config ;
   users : User.users ;
-  received : string -> unit ;
+  received : string -> string -> unit ;
 }
 
 let read dir file =
@@ -92,20 +92,20 @@ let message_callback (t : user_data session_data) stanza =
   let user, session = user_session stanza t.user_data in
   let userid = User.userid user session in
   match stanza.content.body with
-  | None -> log (userid ^ "nothing received") ; return ()
+  | None -> log userid "nothing received" ; return ()
   | Some v ->
     let ctx, out, warn, received, plain = Otr.Handshake.handle session.User.otr v in
     (match plain with
      | None -> ()
-     | Some p -> log (userid ^ "plain message: " ^ p)) ;
+     | Some p -> log userid ("plain message: " ^ p)) ;
     (match warn with
      | None -> ()
-     | Some w -> log (userid ^ "warning: " ^ w)) ;
+     | Some w -> log userid ("warning: " ^ w)) ;
     (match received with
      | None -> ()
-     | Some c -> log (userid ^ "received encrypted: " ^ c)) ;
+     | Some c -> log userid ("received encrypted: " ^ c)) ;
     (match plain, warn, received with
-     | None, None, None -> log (userid ^ "nothing usable received...")
+     | None, None, None -> log userid ("nothing usable received...")
      | _ -> ()) ;
     session.User.otr <- ctx ;
     match out with
@@ -138,18 +138,18 @@ let presence_callback t stanza =
    | None ->
      begin
        match stanza.content.show with
-       | None -> session.presence <- `Online ; log (id ^ "available" ^ stat)
-       | Some ShowChat -> session.presence <- `Free ; log (id ^ "free" ^ stat)
-       | Some ShowAway -> session.presence <- `Away ; log (id ^ "away" ^ stat)
-       | Some ShowDND -> session.presence <- `DoNotDisturb ; log (id ^ "dnd" ^ stat)
-       | Some ShowXA -> session.presence <- `ExtendedAway ; log (id ^ "extended away" ^ stat)
+       | None -> session.presence <- `Online ; log id ("available" ^ stat)
+       | Some ShowChat -> session.presence <- `Free ; log id ("free" ^ stat)
+       | Some ShowAway -> session.presence <- `Away ; log id ("away" ^ stat)
+       | Some ShowDND -> session.presence <- `DoNotDisturb ; log id ("dnd" ^ stat)
+       | Some ShowXA -> session.presence <- `ExtendedAway ; log id ("extended away" ^ stat)
      end
-   | Some Probe -> log (id ^ "probed" ^ stat)
-   | Some Subscribe -> log (id ^ "subscription request" ^ stat)
-   | Some Subscribed -> log (id ^ "successfully subscribed" ^ stat)
-   | Some Unsubscribe -> log (id ^ "shouldn't see this unsubscribe" ^ stat)
-   | Some Unsubscribed -> log (id ^ "you're so off my buddy list" ^ stat)
-   | Some Unavailable -> session.presence <- `Offline ; log (id ^ "offline" ^ stat)
+   | Some Probe -> log id ("probed" ^ stat)
+   | Some Subscribe -> log id ("subscription request" ^ stat)
+   | Some Subscribed -> log id ("successfully subscribed" ^ stat)
+   | Some Unsubscribe -> log id ("shouldn't see this unsubscribe" ^ stat)
+   | Some Unsubscribed -> log id ("you're so off my buddy list" ^ stat)
+   | Some Unavailable -> session.presence <- `Offline ; log id ("offline" ^ stat)
   );
   return ()
 
