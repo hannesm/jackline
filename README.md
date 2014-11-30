@@ -22,11 +22,14 @@ Trusted code base is at the moment:
 - [OCaml-TLS](https://github.com/mirleft/ocaml-tls)
 - [XMPP](https://github.com/hannesm/xmpp)
 - [XML](https://github.com/ermine/xml)
-- [OCaml compiler](http://ocaml.org/)
-- [OPAM](http://opam.ocaml.org/)
+- [OCaml compiler](http://ocaml.org/) (and runtime thereof)
 
 Security audits are needed, please contact me if you plan to do some. Transitive dependencies are only partially listed. For a more complete list, use ``opam list --required-by=xmpp_client``.
 
-OPAM is the OCaml package manager, and not directly needed, but very convenient. [It lacks package signing](https://github.com/ocaml/opam/issues/423)!
+Why should you trust this? Well, first of all whom do you trust? And why? Did you read through your libc and malloc implementation? What about OpenSSL? libotr? libpurple (or whatever XMPP implementation you use)?
 
-Some old GTK gui code is around as well, ``gui_client``, using lablgtk2.
+OCaml is (compared to C) a game changer: no manual memory management, I stick to a pure (immutable and declarative) coding style (as usual, it can be improved). Some auditing and black box testing was done against our TLS stack.
+
+OPAM is the OCaml package manager, and not directly needed, but very convenient for installation and updating. [It lacks package signing](https://github.com/ocaml/opam/issues/423)!
+
+Some orphaned GTK gui code is around as well, ``gui_client``, using lablgtk2.
