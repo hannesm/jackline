@@ -37,9 +37,10 @@ let empty_ui_state user session users = {
   notifications = []
 }
 
-let make_prompt size time state =
+let make_prompt size time network state =
   let tm = Unix.localtime time in
   (*  Printf.printf "\n\nblabla r%dc%d\n\n%!" size.rows size.cols ; *)
+  state.log <- (network :: state.log);
   let logs = String.concat "\n" (List.rev (take_fill 6 state.log [])) in
 
   let session = state.session in
@@ -120,7 +121,7 @@ let time =
   ignore (Lwt_engine.on_timer 60.0 true (fun _ -> set_time (Unix.time ())));
   time
 
-class read_line ~term ~history ~state ~completions = object(self)
+class read_line ~term ~network ~history ~state ~completions = object(self)
   inherit LTerm_read_line.read_line ~history ()
   inherit [Zed_utf8.t] LTerm_read_line.term term
 
@@ -132,15 +133,16 @@ class read_line ~term ~history ~state ~completions = object(self)
   method show_box = false
 
   initializer
-    self#set_prompt (S.l2 (fun size time -> make_prompt size time state) self#size time)
+    self#set_prompt (S.l3 (fun size time network -> make_prompt size time network state)
+                       self#size time network)
 end
 
-let rec loop (config : Config.t) term hist state =
+let rec loop (config : Config.t) term hist state network s_n =
   let completions = commands in
   let history = LTerm_history.contents hist in
   match_lwt
     try_lwt
-      lwt command = (new read_line ~term ~history ~completions ~state)#run in
+      lwt command = (new read_line ~term ~history ~completions ~state ~network)#run in
       return (Some command)
     with
       | Sys.Break -> return None
@@ -155,7 +157,7 @@ let rec loop (config : Config.t) term hist state =
        let cont = match String.trim cmd with
          | "quit" -> false
          | "connect" ->
-           let received x = state.log <- (x :: state.log) in
+           let received x = print_endline "blarg" ; s_n x in
            let otr_config = config.Config.otr_config in
            let (user_data : Xmpp_callbacks.user_data) = Xmpp_callbacks.({
              otr_config ;
@@ -167,13 +169,13 @@ let rec loop (config : Config.t) term hist state =
          | _ -> Printf.printf "NYI" ; true
        in
        if cont then
-         loop config term hist state
+         loop config term hist state network s_n
        else
          return state
    | Some message ->
        LTerm_history.add hist message;
-       loop config term hist state
-   | None -> loop config term hist state
+       loop config term hist state network s_n
+   | None -> loop config term hist state network s_n
 
 let () =
   Lwt_main.run (
@@ -190,8 +192,9 @@ let () =
     let user = User.find_or_add config.Config.jid users in
     let session = User.ensure_session config.Config.jid config.Config.otr_config user in
     let state = empty_ui_state user session users in
+    let n, s_n = S.create "nothing" in
     Lazy.force LTerm.stdout >>= fun term ->
-    loop config term history state >>= fun state ->
+    loop config term history state n s_n >>= fun state ->
     Printf.printf "now dumping state %d\n%!" (User.Users.length state.users) ;
     print_newline () ;
     (* dump_users cfgdir x.users *)
