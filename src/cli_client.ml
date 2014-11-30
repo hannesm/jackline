@@ -157,12 +157,11 @@ let rec loop (config : Config.t) term hist state network s_n =
        let cont = match String.trim cmd with
          | "quit" -> false
          | "connect" ->
-           let received x = print_endline "blarg" ; s_n x in
            let otr_config = config.Config.otr_config in
            let (user_data : Xmpp_callbacks.user_data) = Xmpp_callbacks.({
              otr_config ;
              users = state.users ;
-             received
+             received = s_n
            }) in
            Xmpp_callbacks.connect config user_data () ;
            true
