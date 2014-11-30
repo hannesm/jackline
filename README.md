@@ -1,6 +1,8 @@
 XMPP-Client
 ===========
 
+![First screenshot](http://berlin.ccc.de/~hannes/cli2.png)
+
 The goal is a minimalistic graphical user interface for a secure (fail hard!) and trustworthy XMPP client.
 
 This goal is achieved with clean-slate libraries (OCaml-TLS, OCaml-OTR) and few features: no support for HTML/avatars/which music you're playing/...
