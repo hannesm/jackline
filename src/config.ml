@@ -40,7 +40,7 @@ let t_of_sexp t =
           { t with otr_config = Otr.State.config_of_sexp v }
         | _ -> assert false)
         empty l
-  | _ -> Printf.printf "unknown t\n" ; empty
+  | _ -> Printf.printf "unknown t\n" ; raise (Invalid_argument "broken config")
 
 let record kvs =
   Sexp.List List.(map (fun (k, v) -> (Sexp.List [Sexp.Atom k; v])) kvs)
@@ -56,7 +56,7 @@ let sexp_of_t t =
   ]
 
 let load_config bytes =
-  try t_of_sexp (Sexp.of_string bytes) with _ -> empty
+  try Some (t_of_sexp (Sexp.of_string bytes)) with _ -> None
 
 let store_config t =
   Sexp.to_string_mach (sexp_of_t t)

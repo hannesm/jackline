@@ -70,14 +70,16 @@ let dump_users cfgdir data =
   let cfgdir = xmpp_config cfgdir in
   write cfgdir users (User.store_users data)
 
-let init cfgdir =
-  Tls_lwt.rng_init () >>= fun () ->
+let load_config cfgdir =
   let cfg = xmpp_config cfgdir in
-  read cfg config >>= fun cfgdata ->
-  let config = try Config.load_config cfgdata with _ -> Config.empty in
+  read cfg config >|= fun cfgdata ->
+  Config.load_config cfgdata
+
+let load_users cfgdir =
+  let cfg = xmpp_config cfgdir in
   read cfg users >|= fun userdata ->
   let users = try User.load_users userdata with _ -> User.Users.create 100 in
-  (config, users)
+  users
 
 let user_session stanza user_data =
   match stanza.jid_from with
@@ -159,7 +161,6 @@ let presence_error t ?id ?jid_from ?jid_to ?lang error =
 
 
 let session_callback t =
-  print_endline "in session callback" ;
   register_iq_request_handler t Version.ns_version
     (fun ev _jid_from _jid_to _lang () ->
       match ev with
@@ -202,20 +203,15 @@ let session_callback t =
             in
             User.(Users.replace users t.jid t)
          ) items );
-      Printf.printf "users is now: %s\n%!" (User.store_users users) ;
       return ()) >>= fun () ->
-  print_endline "sending presence" ;
   send_presence t () >>= fun () ->
-  print_endline "returning" ;
   return ()
 
 let connect config user_data _ =
-  Printf.printf "connecting\n%!" ;
   let open Config in
   let server = JID.to_idn config.jid
   and port = config.port
   in
-  Printf.printf "connecting to %s %d\n%!" server port ;
   let inet_addr =
     try Unix.inet_addr_of_string server
     with Failure("inet_addr_of_string") ->
@@ -235,7 +231,6 @@ let connect config user_data _ =
     end in
     return (module TLS_module : XMPPClient.Socket)
   in
-  print_endline "setting up" ;
   XMPPClient.setup_session
     ~user_data
     ~myjid:config.jid
