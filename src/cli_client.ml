@@ -13,11 +13,11 @@ let rec take_rev x l acc =
   | n, [] -> acc
   | n, x :: xs -> take_rev (pred n) xs (x :: acc)
 
-let rec take_fill ?(neutral = "") x l acc =
+let rec take_fill neutral x l acc =
   match x, l with
   | 0, _     -> List.rev acc
-  | n, x::xs -> take_fill ~neutral (pred n) xs (x::acc)
-  | n, []    -> take_fill ~neutral (pred n) [] (neutral::acc)
+  | n, x::xs -> take_fill neutral (pred n) xs (x::acc)
+  | n, []    -> take_fill neutral (pred n) [] (neutral::acc)
 
 let rec pad_l neutral x l =
   match x - (List.length l) with
@@ -31,11 +31,16 @@ let pad x s =
   | d when d > 0 -> s ^ (String.make d ' ')
   | d (* when d < 0 *) -> String.sub s 0 x
 
+let rec find_index id i = function
+  | [] -> assert false
+  | x::xs when x = id -> i
+  | _::xs -> find_index id (succ i) xs
+
 type ui_state = {
   user : User.user ; (* set initially *)
   session : User.session ; (* set initially *)
   mutable log : (Unix.tm * string * string) list ; (* set by xmpp callbacks -- should be time * string list *)
-  active_chat : User.user option ; (* modified by user (scrolling through buddies) *)
+  mutable active_chat : User.user ; (* modified by user (scrolling through buddies) *)
   users : User.users ; (* extended by xmpp callbacks *)
   notifications : User.user list ; (* or a set? adjusted once messages drop in, reset when chat becomes active *)
   (* events : ?? list ; (* primarily subscription requests - anything else? *) *)
@@ -45,12 +50,12 @@ let empty_ui_state user session users = {
   user ;
   session ;
   log = [] ;
-  active_chat = Some user ;
+  active_chat = user ;
   users ;
   notifications = []
 }
 
-let make_prompt size time network state =
+let make_prompt size time network state redraw =
   let tm = Unix.localtime time in
 
   (* network should be an event, then I wouldn't need a check here *)
@@ -78,7 +83,9 @@ let make_prompt size time network state =
   let buddy_width = 24 in
 
   let buddies =
-    User.Users.fold (fun k u acc ->
+    let us = User.keys state.users in
+    List.map (fun id ->
+        let u = User.Users.find state.users id in
         let session = User.good_session u in
         let s = match session with
           | None -> `Offline
@@ -96,24 +103,18 @@ let make_prompt size time network state =
           else
             User.subscription_to_chars u.User.subscription
         in
-        let bg = match state.active_chat with
-          | None -> white
-          | Some x when x = u -> lcyan
-          | Some _ -> white
-        in
+        let bg = if state.active_chat = u then lcyan else white in
         let item =
-          let data = Printf.sprintf " %s%s%s %s" f (User.presence_to_char s) t k in
+          let data = Printf.sprintf " %s%s%s %s" f (User.presence_to_char s) t id in
           pad buddy_width data
         in
-        [B_fg fg ; B_bg bg ; S item ; E_bg ; E_fg ] :: acc)
-      state.users []
+        [B_fg fg ; B_bg bg ; S item ; E_bg ; E_fg ])
+      us
   in
   (* handle overflowings: text might be too long for one row *)
 
   let buddylist =
-    (* let lst = take_fill ~neutral:([ S (pad buddy_width "") ]) main_size buddies [] in *)
-    let lst = take_rev main_size buddies [] in
-    let lst = pad_l [ S (String.make buddy_width ' ') ] main_size lst in
+    let lst = take_fill [ S (String.make buddy_width ' ') ] main_size buddies [] in
     List.map (fun x -> x @ [ B_fg lcyan ; S (Zed_utf8.singleton (UChar.of_int 0x2502)) ; E_fg ; S "\n" ]) lst
   in
   let hline =
@@ -141,8 +142,9 @@ let make_prompt size time network state =
     S" )─< ";
     B_fg lblue; S jid; E_fg;
     S" >─";
+    S redraw ;
     S(Zed_utf8.make
-        (size.cols - 22 - String.length jid - String.length status)
+        (size.cols - 22 - String.length jid - String.length status - String.length redraw)
         (UChar.of_int 0x2500));
     S"[ ";
     B_fg (if session.User.presence = `Offline then lred else lgreen); S status; E_fg;
@@ -165,9 +167,11 @@ let time =
 let up = UChar.of_int 0x2500
 let down = UChar.of_int 0x2501
 
+let redraw, force_redraw = S.create ""
+
 class read_line ~term ~network ~history ~state ~completions = object(self)
   inherit LTerm_read_line.read_line ~history () as super
-  inherit [Zed_utf8.t] LTerm_read_line.term term
+  inherit [Zed_utf8.t] LTerm_read_line.term term as t
 
   method completion =
     let prefix  = Zed_rope.to_string self#input_prev in
@@ -178,17 +182,25 @@ class read_line ~term ~network ~history ~state ~completions = object(self)
 
   method send_action = function
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = down ->
-      print_endline "downdowndown" ;
+      let userlist = User.keys state.users in
+      let active_idx = find_index state.active_chat.User.jid 0 userlist in
+      if List.length userlist > (succ active_idx) then
+        state.active_chat <- User.Users.find state.users (List.nth userlist (succ active_idx)) ;
+      force_redraw ("bla" ^ (string_of_int (Random.int 100)))
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = up ->
-      print_endline "upupup" ;
+      let userlist = User.keys state.users in
+      let active_idx = find_index state.active_chat.User.jid 0 userlist in
+      if pred active_idx >= 0 then
+        state.active_chat <- User.Users.find state.users (List.nth userlist (pred active_idx)) ;
+      force_redraw ("bla" ^ (string_of_int (Random.int 100)))
     | action ->
       super#send_action action
 
   initializer
     LTerm_read_line.bind [LTerm_key.({ control = false; meta = false; shift = false; code = Prev_page })] [LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert up))];
     LTerm_read_line.bind [LTerm_key.({ control = false; meta = false; shift = false; code = Next_page })] [LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert down))];
-    self#set_prompt (S.l3 (fun size time network -> make_prompt size time network state)
-                       self#size time network)
+    self#set_prompt (S.l4 (fun size time network redraw -> make_prompt size time network state redraw)
+                       self#size time network redraw)
 end
 
 let rec loop (config : Config.t) term hist state network s_n =

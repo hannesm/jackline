@@ -98,7 +98,8 @@ module Users = Hashtbl.Make(StringHash)
 type users = user Users.t
 
 let keys users =
-  Users.fold (fun k _ acc -> k :: acc) users []
+  let us = Users.fold (fun k _ acc -> k :: acc) users [] in
+  List.sort compare us
 
 let bare_jid jid =
   let { JID.lnode ; JID.ldomain ; JID.lresource } = jid in
