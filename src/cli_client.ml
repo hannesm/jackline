@@ -19,10 +19,10 @@ let rec take_fill ?(neutral = "") x l acc =
   | n, x::xs -> take_fill ~neutral (pred n) xs (x::acc)
   | n, []    -> take_fill ~neutral (pred n) [] (neutral::acc)
 
-let rec pad_l x l =
+let rec pad_l neutral x l =
   match x - (List.length l) with
   | 0 -> l
-  | d when d > 0 ->  pad_l x ("" :: l)
+  | d when d > 0 ->  pad_l neutral x (neutral :: l)
   | d -> assert false
 
 let pad x s =
@@ -45,7 +45,7 @@ let empty_ui_state user session users = {
   user ;
   session ;
   log = [] ;
-  active_chat = None ;
+  active_chat = Some user ;
   users ;
   notifications = []
 }
@@ -64,7 +64,7 @@ let make_prompt size time network state =
   let logs =
     let entries = take_rev 6 state.log [] in
     let ent = List.map print entries in
-    let msgs = pad_l 6 ent in
+    let msgs = pad_l "" 6 ent in
     String.concat "\n" msgs
   in
 
@@ -79,9 +79,16 @@ let make_prompt size time network state =
 
   let buddies =
     User.Users.fold (fun k u acc ->
-        let s = match User.good_session u with
+        let session = User.good_session u in
+        let s = match session with
           | None -> `Offline
           | Some s -> s.User.presence
+        in
+        let fg = match session with
+          | None -> black
+          | Some x -> match x.otr.state.message_state with
+            | MSGSTATE_ENCRYPTED _ -> lgreen
+            | _ -> black
         in
         let f, t =
           if u = state.user then
@@ -89,15 +96,25 @@ let make_prompt size time network state =
           else
             User.subscription_to_chars u.User.subscription
         in
-        let item = Printf.sprintf " %s%s%s %s" f (User.presence_to_char s) t k in
-        (pad buddy_width item) :: acc)
+        let bg = match state.active_chat with
+          | None -> white
+          | Some x when x = u -> lcyan
+          | Some _ -> white
+        in
+        let item =
+          let data = Printf.sprintf " %s%s%s %s" f (User.presence_to_char s) t k in
+          pad buddy_width data
+        in
+        [B_fg fg ; B_bg bg ; S item ; E_bg ; E_fg ] :: acc)
       state.users []
   in
   (* handle overflowings: text might be too long for one row *)
 
   let buddylist =
-    let lst = take_fill ~neutral:(pad buddy_width "") main_size buddies [] in
-    List.map (fun x -> x ^ (Zed_utf8.singleton (UChar.of_int 0x2502))) lst
+    (* let lst = take_fill ~neutral:([ S (pad buddy_width "") ]) main_size buddies [] in *)
+    let lst = take_rev main_size buddies [] in
+    let lst = pad_l [ S (String.make buddy_width ' ') ] main_size lst in
+    List.map (fun x -> x @ [ B_fg lcyan ; S (Zed_utf8.singleton (UChar.of_int 0x2502)) ; E_fg ; S "\n" ]) lst
   in
   let hline =
     (Zed_utf8.make buddy_width (UChar.of_int 0x2500)) ^
@@ -105,9 +122,8 @@ let make_prompt size time network state =
     (Zed_utf8.make (size.cols - (succ buddy_width)) (UChar.of_int 0x2500))
   in
 
-  eval [
-
-    S (String.concat "\n" buddylist) ; S "\n" ;
+  eval (
+    List.flatten buddylist @ [
 
     B_fg lcyan;
     S hline ;
@@ -135,7 +151,7 @@ let make_prompt size time network state =
     S"\n";
 
     E_bold;
-  ]
+  ])
 
 let commands =
   [ "/connect" ; "/add" ; "/status" ; "/quit" ]
