@@ -53,6 +53,7 @@ let empty_ui_state user session users = {
 let make_prompt size time network state =
   let tm = Unix.localtime time in
 
+  (* network should be an event, then I wouldn't need a check here *)
   (if List.length state.log = 0 || List.hd state.log <> network then
      state.log <- (network :: state.log)) ;
 
