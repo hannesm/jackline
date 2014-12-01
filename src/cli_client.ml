@@ -203,7 +203,7 @@ class read_line ~term ~network ~history ~state ~completions = object(self)
                        self#size time network redraw)
 end
 
-let rec loop (config : Config.t) term hist state network s_n =
+let rec loop (config : Config.t) term hist state session_data network s_n =
   let completions = commands in
   let history = LTerm_history.contents hist in
   match_lwt
@@ -220,31 +220,46 @@ let rec loop (config : Config.t) term hist state network s_n =
          let ws = try String.index command ' ' with Not_found -> String.length command in
          String.sub command 1 (pred ws)
        in
-       let cont = match String.trim cmd with
-         | "quit" -> false
-         | "connect" ->
-           let otr_config = config.Config.otr_config in
-           let cb jid msg =
-               let now = Unix.localtime (Unix.time ()) in
-               s_n (now, jid, msg)
-           in
-           let (user_data : Xmpp_callbacks.user_data) = Xmpp_callbacks.({
-             otr_config ;
-             users = state.users ;
-             received = cb
-           }) in
-           Xmpp_callbacks.connect config user_data () ;
-           true
-         | _ -> Printf.printf "NYI" ; true
-       in
+       (match String.trim cmd with
+        | "quit" -> return (false, session_data)
+        | "connect" ->
+          match session_data with
+          | None ->
+            let otr_config = config.Config.otr_config in
+            let cb jid msg =
+              let now = Unix.localtime (Unix.time ()) in
+              s_n (now, jid, msg)
+            in
+            let (user_data : Xmpp_callbacks.user_data) = Xmpp_callbacks.({
+                otr_config ;
+                users = state.users ;
+                received = cb
+              }) in
+            Xmpp_callbacks.connect config user_data () >>= fun session_data ->
+            Lwt.async (fun () -> Xmpp_callbacks.parse_loop session_data) ;
+            return (true, Some session_data)
+          | Some _ -> Printf.printf "already connected\n"; return (true, session_data)
+        | _ -> Printf.printf "NYI" ; return (true, session_data)) >>= fun (cont, session_data) ->
        if cont then
-         loop config term hist state network s_n
+         loop config term hist state session_data network s_n
        else
+         (* close! *)
          return state
-   | Some message ->
+     | Some message ->
        LTerm_history.add hist message;
-       loop config term hist state network s_n
-   | None -> loop config term hist state network s_n
+       let session = match User.good_session state.active_chat with
+         | None -> assert false
+         | Some x -> x
+       in
+       let ctx, out, warn = Otr.Handshake.send_otr session.otr message in
+       session.otr <- ctx ;
+       (match session_data with
+        | None -> Printf.printf "not connected, cannot send\n" ; return_unit
+        | Some x -> Xmpp_callbacks.XMPPClient.send_message x
+                      ~jid_to:(JID.of_string state.active_chat.User.jid)
+                      ?body:out () ) >>= fun () ->
+       loop config term hist state session_data network s_n
+   | None -> loop config term hist state session_data network s_n
 
 let () =
   Lwt_main.run (
@@ -263,7 +278,7 @@ let () =
     let state = empty_ui_state user session users in
     let n, s_n = S.create (Unix.localtime (Unix.time ()), "nobody", "nothing") in
     Lazy.force LTerm.stdout >>= fun term ->
-    loop config term history state n s_n >>= fun state ->
+    loop config term history state None n s_n >>= fun state ->
     Printf.printf "now dumping state %d\n%!" (User.Users.length state.users) ;
     print_newline () ;
     (* dump_users cfgdir x.users *)

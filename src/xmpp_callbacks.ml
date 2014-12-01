@@ -222,29 +222,29 @@ let connect config user_data _ =
       (Unix.gethostbyname server).Unix.h_addr_list.(0) in
   let sockaddr = Unix.ADDR_INET (inet_addr, port) in
 
-  Lwt.async (fun () ->
-    PlainSocket.open_connection sockaddr >>= fun socket_data ->
-    let module Socket_module = struct type t = PlainSocket.socket
+  PlainSocket.open_connection sockaddr >>= fun socket_data ->
+  let module Socket_module = struct type t = PlainSocket.socket
+    let socket = socket_data
+    include PlainSocket
+  end in
+  let make_tls () =
+    TLSSocket.switch (PlainSocket.get_fd socket_data) server config.trust_anchor >>= fun socket_data ->
+    let module TLS_module = struct type t = Tls_lwt.Unix.t
       let socket = socket_data
-      include PlainSocket
+      include TLSSocket
     end in
-    let make_tls () =
-      TLSSocket.switch (PlainSocket.get_fd socket_data) server config.trust_anchor >>= fun socket_data ->
-      let module TLS_module = struct type t = Tls_lwt.Unix.t
-        let socket = socket_data
-        include TLSSocket
-      end in
-      return (module TLS_module : XMPPClient.Socket)
-    in
-    print_endline "setting up" ;
-    XMPPClient.setup_session
-      ~user_data
-      ~myjid:config.jid
-      ~plain_socket:(module Socket_module : XMPPClient.Socket)
-      ~tls_socket:make_tls
-      ~password:config.password
-      session_callback >>= fun session_data ->
-    XMPPClient.parse session_data >>= fun () ->
-    let module S = (val session_data.socket : Socket) in
-    S.close S.socket
-  )
+    return (module TLS_module : XMPPClient.Socket)
+  in
+  print_endline "setting up" ;
+  XMPPClient.setup_session
+    ~user_data
+    ~myjid:config.jid
+    ~plain_socket:(module Socket_module : XMPPClient.Socket)
+    ~tls_socket:make_tls
+    ~password:config.password
+    session_callback
+
+let parse_loop session_data =
+  XMPPClient.parse session_data >>= fun () ->
+  let module S = (val session_data.socket : Socket) in
+  S.close S.socket
