@@ -162,8 +162,11 @@ let time =
   ignore (Lwt_engine.on_timer 60.0 true (fun _ -> set_time (Unix.time ())));
   time
 
+let up = UChar.of_int 0x2500
+let down = UChar.of_int 0x2501
+
 class read_line ~term ~network ~history ~state ~completions = object(self)
-  inherit LTerm_read_line.read_line ~history ()
+  inherit LTerm_read_line.read_line ~history () as super
   inherit [Zed_utf8.t] LTerm_read_line.term term
 
   method completion =
@@ -173,7 +176,17 @@ class read_line ~term ~network ~history ~state ~completions = object(self)
 
   method show_box = false
 
+  method send_action = function
+    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = down ->
+      print_endline "downdowndown" ;
+    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = up ->
+      print_endline "upupup" ;
+    | action ->
+      super#send_action action
+
   initializer
+    LTerm_read_line.bind [LTerm_key.({ control = false; meta = false; shift = false; code = Prev_page })] [LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert up))];
+    LTerm_read_line.bind [LTerm_key.({ control = false; meta = false; shift = false; code = Next_page })] [LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert down))];
     self#set_prompt (S.l3 (fun size time network -> make_prompt size time network state)
                        self#size time network)
 end
