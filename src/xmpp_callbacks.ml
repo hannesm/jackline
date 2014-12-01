@@ -200,7 +200,7 @@ let session_callback t =
                       User.groups = item.Roster.group ;
                       subscription ; props }
             in
-            User.Users.replace users t.jid t
+            User.(Users.replace users t.jid t)
          ) items );
       Printf.printf "users is now: %s\n%!" (User.store_users users) ;
       return ()) >>= fun () ->

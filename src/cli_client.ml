@@ -86,7 +86,7 @@ let make_prompt size time network state =
         in
         let fg = match session with
           | None -> black
-          | Some x -> match x.otr.state.message_state with
+          | Some x -> match Otr.State.(x.User.otr.state.message_state) with
             | `MSGSTATE_ENCRYPTED _ -> lgreen
             | _ -> black
         in
