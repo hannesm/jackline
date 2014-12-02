@@ -23,9 +23,9 @@ let () =
      | [| _ |] -> cfgdir ()
      | _ ->
        cfgdir () >>= fun dir ->
-       fail (Invalid_argument ("Usage: " ^ Sys.argv.(0) ^ " [-f dir (defaults to " ^ dir ^ ")]")) ) >>= fun cfgdir ->
+       fail (Invalid_argument ("Usage: " ^ Sys.argv.(0) ^ " [-f dir (defaults to " ^ dir ^ ")]"))
+    ) >>= fun cfgdir ->
 
-    (* look for -f command line flag *)
     Xmpp_callbacks.load_config cfgdir >>= fun (config) ->
     (match config with
      | None ->
