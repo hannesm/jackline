@@ -40,7 +40,7 @@ type ui_state = {
   user : User.user ; (* set initially *)
   session : User.session ; (* set initially *)
   mutable log : (Unix.tm * string * string) list ; (* set by xmpp callbacks -- should be time * string list *)
-  mutable active_chat : User.user ; (* modified by user (scrolling through buddies) *)
+  mutable active_chat : (User.user * User.session option) ; (* modified by user (scrolling through buddies) *)
   users : User.users ; (* extended by xmpp callbacks *)
   notifications : User.user list ; (* or a set? adjusted once messages drop in, reset when chat becomes active *)
   (* events : ?? list ; (* primarily subscription requests - anything else? *) *)
@@ -50,7 +50,7 @@ let empty_ui_state user session users = {
   user ;
   session ;
   log = [] ;
-  active_chat = user ;
+  active_chat = (user, Some session) ;
   users ;
   notifications = []
 }
@@ -103,7 +103,7 @@ let make_prompt size time network state redraw =
           else
             User.subscription_to_chars u.User.subscription
         in
-        let bg = if state.active_chat = u then lcyan else white in
+        let bg = if (fst state.active_chat) = u then lcyan else white in
         let item =
           let data = Printf.sprintf " %s%s%s %s" f (User.presence_to_char s) t id in
           pad buddy_width data
@@ -183,15 +183,19 @@ class read_line ~term ~network ~history ~state ~completions = object(self)
   method send_action = function
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = down ->
       let userlist = User.keys state.users in
-      let active_idx = find_index state.active_chat.User.jid 0 userlist in
+      let active_idx = find_index (fst state.active_chat).User.jid 0 userlist in
       if List.length userlist > (succ active_idx) then
-        state.active_chat <- User.Users.find state.users (List.nth userlist (succ active_idx)) ;
+        (let user = User.Users.find state.users (List.nth userlist (succ active_idx)) in
+         let session = User.good_session user in
+          state.active_chat <- (user, session)) ;
       force_redraw ("bla" ^ (string_of_int (Random.int 100)))
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = up ->
       let userlist = User.keys state.users in
-      let active_idx = find_index state.active_chat.User.jid 0 userlist in
+      let active_idx = find_index (fst state.active_chat).User.jid 0 userlist in
       if pred active_idx >= 0 then
-        state.active_chat <- User.Users.find state.users (List.nth userlist (pred active_idx)) ;
+        (let user = User.Users.find state.users (List.nth userlist (pred active_idx)) in
+         let session = User.good_session user in
+         state.active_chat <- (user, session)) ;
       force_redraw ("bla" ^ (string_of_int (Random.int 100)))
     | action ->
       super#send_action action
@@ -255,16 +259,16 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
          return state
      | Some message ->
        LTerm_history.add hist message;
-       let session = match User.good_session state.active_chat with
-         | None -> assert false
-         | Some x -> x
+       let user, session = match state.active_chat with
+         | (user, None) -> assert false
+         | (user, Some x) -> user, x
        in
        let ctx, out, warn = Otr.Handshake.send_otr session.User.otr message in
        session.User.otr <- ctx ;
        (match session_data with
         | None -> Printf.printf "not connected, cannot send\n" ; return_unit
         | Some x -> Xmpp_callbacks.XMPPClient.send_message x
-                      ~jid_to:(JID.of_string state.active_chat.User.jid)
+                      ~jid_to:(JID.of_string user.User.jid)
                       ?body:out () ) >>= fun () ->
        loop config term hist state session_data network s_n
    | None -> loop config term hist state session_data network s_n
