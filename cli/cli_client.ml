@@ -293,7 +293,7 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
         | Some w -> session.User.messages <- (`Local, true, true, Unix.localtime (Unix.time ()), ("Warning: " ^ w)) :: session.User.messages) ;
        session.User.messages <- (`To, enc, false, Unix.localtime (Unix.time ()), message) :: session.User.messages ;
        (match session_data with
-        | None -> Printf.printf "not connected, cannot send\n" ; return_unit
+        | None -> s_n (Unix.localtime (Unix.time ()), "error", "not connected, cannot send: " ^ message) ; return_unit
         | Some x -> Xmpp_callbacks.XMPPClient.send_message x
                       ~jid_to:(JID.of_string user.User.jid)
                       ?body:out () ) >>= fun () ->
