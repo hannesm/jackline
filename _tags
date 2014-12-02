@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: ef7ed7a4cac29ab2162d10464fb7ef71)
+# DO NOT EDIT (digest: a5f419f09ec3e0c2e2427e4afeaa2bd5)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -20,44 +20,46 @@ true: annot, bin_annot
 "src/xmpp_connection.cmx": for-pack(Xmpp_client)
 "src/xmpp_callbacks.cmx": for-pack(Xmpp_client)
 "src/user.cmx": for-pack(Xmpp_client)
-# Executable cli_client
-"src/cli_client.native": pkg_erm_xmpp
-"src/cli_client.native": pkg_hex
-"src/cli_client.native": pkg_lambda-term
-"src/cli_client.native": pkg_lwt
-"src/cli_client.native": pkg_lwt.syntax
-"src/cli_client.native": pkg_nocrypto
-"src/cli_client.native": pkg_otr
-"src/cli_client.native": pkg_sexplib
-"src/cli_client.native": pkg_sexplib.syntax
-"src/cli_client.native": pkg_tls
-"src/cli_client.native": pkg_tls.lwt
-"src/cli_client.native": use_xmpp_client
-<src/*.ml{,i,y}>: pkg_lambda-term
-<src/*.ml{,i,y}>: pkg_lwt.syntax
-# Executable gui_client
-"src/gui_client.native": pkg_erm_xmpp
-"src/gui_client.native": pkg_hex
-"src/gui_client.native": pkg_lablgtk2
-"src/gui_client.native": pkg_lwt
-"src/gui_client.native": pkg_lwt.glib
-"src/gui_client.native": pkg_nocrypto
-"src/gui_client.native": pkg_otr
-"src/gui_client.native": pkg_sexplib
-"src/gui_client.native": pkg_sexplib.syntax
-"src/gui_client.native": pkg_tls
-"src/gui_client.native": pkg_tls.lwt
-"src/gui_client.native": use_xmpp_client
 <src/*.ml{,i,y}>: pkg_erm_xmpp
 <src/*.ml{,i,y}>: pkg_hex
-<src/*.ml{,i,y}>: pkg_lablgtk2
 <src/*.ml{,i,y}>: pkg_lwt
-<src/*.ml{,i,y}>: pkg_lwt.glib
 <src/*.ml{,i,y}>: pkg_nocrypto
 <src/*.ml{,i,y}>: pkg_otr
 <src/*.ml{,i,y}>: pkg_sexplib
 <src/*.ml{,i,y}>: pkg_sexplib.syntax
 <src/*.ml{,i,y}>: pkg_tls
 <src/*.ml{,i,y}>: pkg_tls.lwt
-<src/*.ml{,i,y}>: use_xmpp_client
+# Library xmpp_client_cli
+"cli/xmpp_client_cli.cmxs": use_xmpp_client_cli
+"cli/cli_config.cmx": for-pack(Xmpp_client_cli)
+"cli/cli_client.cmx": for-pack(Xmpp_client_cli)
+# Executable cli_client
+"cli/cli_main.native": pkg_erm_xmpp
+"cli/cli_main.native": pkg_hex
+"cli/cli_main.native": pkg_lambda-term
+"cli/cli_main.native": pkg_lwt
+"cli/cli_main.native": pkg_lwt.syntax
+"cli/cli_main.native": pkg_nocrypto
+"cli/cli_main.native": pkg_otr
+"cli/cli_main.native": pkg_react
+"cli/cli_main.native": pkg_sexplib
+"cli/cli_main.native": pkg_sexplib.syntax
+"cli/cli_main.native": pkg_tls
+"cli/cli_main.native": pkg_tls.lwt
+"cli/cli_main.native": use_xmpp_client
+"cli/cli_main.native": use_xmpp_client_cli
+<cli/*.ml{,i,y}>: pkg_erm_xmpp
+<cli/*.ml{,i,y}>: pkg_hex
+<cli/*.ml{,i,y}>: pkg_lambda-term
+<cli/*.ml{,i,y}>: pkg_lwt
+<cli/*.ml{,i,y}>: pkg_lwt.syntax
+<cli/*.ml{,i,y}>: pkg_nocrypto
+<cli/*.ml{,i,y}>: pkg_otr
+<cli/*.ml{,i,y}>: pkg_react
+<cli/*.ml{,i,y}>: pkg_sexplib
+<cli/*.ml{,i,y}>: pkg_sexplib.syntax
+<cli/*.ml{,i,y}>: pkg_tls
+<cli/*.ml{,i,y}>: pkg_tls.lwt
+<cli/*.ml{,i,y}>: use_xmpp_client
+<cli/*.ml{,i,y}>: use_xmpp_client_cli
 # OASIS_STOP

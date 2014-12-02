@@ -17,16 +17,15 @@ Library "xmpp_client"
   Pack            : true
   BuildDepends    : erm_xmpp, otr, tls, tls.lwt, lwt, sexplib, sexplib.syntax, hex, nocrypto
 
-Executable "cli_client"
-  Path            : src/
-  Install         : false
-  CompiledObject  : native
-  MainIs          : cli_client.ml
-  BuildDepends    : lambda-term, lwt.syntax, xmpp_client
+Library "xmpp_client_cli"
+  Path            : cli/
+  Modules         : Cli_config, Cli_client
+  Pack            : true
+  BuildDepends    : lambda-term, react, lwt.syntax, xmpp_client
 
 Executable "cli_client"
   Path            : cli/
   Install         : false
   CompiledObject  : native
   MainIs          : cli_main.ml
-  BuildDepends    : lambda-term, xmpp_client_cli
+  BuildDepends    : lambda-term, react, xmpp_client_cli, xmpp_client

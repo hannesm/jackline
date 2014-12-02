@@ -1,5 +1,5 @@
 (* OASIS_START *)
-(* DO NOT EDIT (digest: 1397d43097eff7282d258a56f16545b2) *)
+(* DO NOT EDIT (digest: d3cbb348119a21b46bb3c610938ec0a8) *)
 module OASISGettext = struct
 (* # 22 "src/oasis/OASISGettext.ml" *)
 
@@ -607,10 +607,11 @@ end
 open Ocamlbuild_plugin;;
 let package_default =
   {
-     MyOCamlbuildBase.lib_ocaml = [("xmpp_client", ["src"], [])];
+     MyOCamlbuildBase.lib_ocaml =
+       [("xmpp_client", ["src"], []); ("xmpp_client_cli", ["cli"], [])];
      lib_c = [];
      flags = [];
-     includes = []
+     includes = [("cli", ["src"])]
   }
   ;;
 
@@ -618,6 +619,6 @@ let conf = {MyOCamlbuildFindlib.no_automatic_syntax = false}
 
 let dispatch_default = MyOCamlbuildBase.dispatch_default conf package_default;;
 
-# 622 "myocamlbuild.ml"
+# 623 "myocamlbuild.ml"
 (* OASIS_STOP *)
 Ocamlbuild_plugin.dispatch dispatch_default;;
