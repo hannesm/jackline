@@ -244,7 +244,7 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
        let cmd, args =
          let split_command_list = Str.split (Str.regexp " +") command in
          let cmd = List.hd split_command_list in
-         String.sub cmd 1 ((String.length cmd) -1 )   (* remove leading "/" *)
+         Str.string_after cmd 1   (* remove leading "/" *)
          , List.tl split_command_list
        and
          now = Unix.localtime (Unix.time ())
