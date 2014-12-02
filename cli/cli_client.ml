@@ -7,6 +7,8 @@ open LTerm_geom
 open CamomileLibraryDyn.Camomile
 open React
 
+open Str
+
 let rec take_rev x l acc =
   match x, l with
   | 0, _ -> acc
@@ -175,7 +177,7 @@ let make_prompt size time network state redraw =
   ])
 
 let commands =
-  [ "/connect" ; "/add" ; "/status" ; "/quit" ]
+  [ "/connect" ; "/add" ; "/status" ; "/quit"; "/help" ]
 
 let time =
   let time, set_time = S.create (Unix.time ()) in
@@ -207,7 +209,7 @@ class read_line ~term ~network ~history ~state ~completions = object(self)
         (let user = User.Users.find state.users (List.nth userlist (succ active_idx)) in
          let session = User.good_session user in
           state.active_chat <- (user, session)) ;
-      force_redraw ("bla" ^ (string_of_int (Random.int 100)))
+      force_redraw ("bla" ^ (string_of_int (Random.int 100))); force_redraw("") (* ugly hack to redraw *)
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = up ->
       let userlist = User.keys state.users in
       let active_idx = find_index (fst state.active_chat).User.jid 0 userlist in
@@ -215,7 +217,7 @@ class read_line ~term ~network ~history ~state ~completions = object(self)
         (let user = User.Users.find state.users (List.nth userlist (pred active_idx)) in
          let session = User.good_session user in
          state.active_chat <- (user, session)) ;
-      force_redraw ("bla" ^ (string_of_int (Random.int 100)))
+      force_redraw ("bla" ^ (string_of_int (Random.int 100))); force_redraw("") (* ugly hack to redraw *)
     | action ->
       super#send_action action
 
@@ -239,13 +241,20 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
   with
    | Some command when (String.length command > 0) && String.get command 0 = '/' ->
        LTerm_history.add hist command;
-       let cmd =
-         let ws = try String.index command ' ' with Not_found -> String.length command in
-         String.sub command 1 (pred ws)
+       let cmd, args =
+         let split_command_list = Str.split (Str.regexp " +") command in
+         let cmd = List.hd split_command_list in
+         String.sub cmd 1 ((String.length cmd) -1 )   (* remove leading "/" *)
+         , List.tl split_command_list
+       and
+         now = Unix.localtime (Unix.time ())
        in
-       (match String.trim cmd with
-        | "quit" -> return (false, session_data)
-        | "connect" ->
+       (match cmd, args with
+        | "quit", _ -> return (false, session_data)
+        | "help", _ -> let () =
+                    s_n (now, "help", String.concat " " (List.sort String.compare commands) )
+                    in return (true, session_data)  (* TODO no idea what return () does here :-) *)
+        | "connect", _ ->
           (match session_data with
            | None ->
              let otr_config = config.Config.otr_config in
@@ -269,8 +278,10 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
                | Some s ->
                  Lwt.async (fun () -> Xmpp_callbacks.parse_loop s) ;
                  return (true, Some s))
-           | Some _ -> Printf.printf "already connected\n"; return (true, session_data) )
-        | _ -> Printf.printf "NYI" ; return (true, session_data)) >>= fun (cont, session_data) ->
+           | Some _ -> s_n(now, "error", "already connected") ; return (true, session_data))
+        | _, _ ->
+          s_n(now, "error", "Unimplemented command: " ^ (String.concat " -> " (cmd::args)))
+          ; return (true, session_data)) >>= fun (cont, session_data) ->
        if cont then
          loop config term hist state session_data network s_n
        else
