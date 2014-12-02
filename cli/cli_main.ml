@@ -8,9 +8,7 @@ let () =
 
     Lazy.force LTerm.stdout >>= fun term ->
 
-    (match Sys.argv with
-     | [| _ ; "-f" ; dir |] -> return dir
-     | [| _ |] ->
+    let cfgdir () =
        Lwt_unix.getlogin () >>= fun user ->
        Lwt_unix.getpwnam user >>= fun pw_ent ->
        let cfgdir =
@@ -18,7 +16,14 @@ let () =
          Filename.concat home ".config"
        in
        return (Xmpp_callbacks.xmpp_config cfgdir)
-     | _ -> fail (Invalid_argument ("Usage: " ^ Sys.argv.(0) ^ " [-f dir (default: ~/.config/ocaml-xmpp-client/)]")) ) >>= fun cfgdir ->
+    in
+
+    (match Sys.argv with
+     | [| _ ; "-f" ; dir |] -> return dir
+     | [| _ |] -> cfgdir ()
+     | _ ->
+       cfgdir () >>= fun dir ->
+       fail (Invalid_argument ("Usage: " ^ Sys.argv.(0) ^ " [-f dir (defaults to " ^ dir ^ ")]")) ) >>= fun cfgdir ->
 
     (* look for -f command line flag *)
     Xmpp_callbacks.load_config cfgdir >>= fun (config) ->
