@@ -9,11 +9,7 @@ License:     FreeBSD
 Plugins:     META (0.4), DevFiles (0.4)
 BuildTools:  ocamlbuild
 Description:
-  Graphical XMPP client with OTR
-
-Flag "gui"
-  Description : GUI interface (GTK2)
-  Default     : false
+  Console XMPP client with OTR
 
 Library "xmpp_client"
   Path            : src/
@@ -28,10 +24,9 @@ Executable "cli_client"
   MainIs          : cli_client.ml
   BuildDepends    : lambda-term, lwt.syntax, xmpp_client
 
-Executable "gui_client"
-  Build          $: flag(gui)
-  Path            : src/
+Executable "cli_client"
+  Path            : cli/
   Install         : false
   CompiledObject  : native
-  MainIs          : gui_client.ml
-  BuildDepends    : lablgtk2, lwt.glib, xmpp_client
+  MainIs          : cli_main.ml
+  BuildDepends    : lambda-term, xmpp_client_cli

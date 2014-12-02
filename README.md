@@ -34,5 +34,3 @@ Why should you trust this? Well, first of all whom do you trust? And why? Did yo
 OCaml is (compared to C) a game changer: no manual memory management, I stick to a pure (immutable and declarative) coding style (as usual, it can be improved). Some auditing and black box testing was done against our TLS stack.
 
 OPAM is the OCaml package manager, and not directly needed, but very convenient for installation and updating. [It lacks package signing](https://github.com/ocaml/opam/issues/423)!
-
-Some orphaned GTK gui code is around as well, ``gui_client``, using lablgtk2.
