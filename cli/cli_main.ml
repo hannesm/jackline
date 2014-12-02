@@ -33,7 +33,6 @@ let () =
        Xmpp_callbacks.dump_config cfgdir config >>= fun () ->
        return config
      | Some cfg -> return cfg ) >>= fun config ->
-    print_endline ("config is now " ^ (Config.store_config config)) ;
 
     Xmpp_callbacks.load_users cfgdir >>= fun (users) ->
 
