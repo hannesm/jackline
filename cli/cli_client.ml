@@ -62,13 +62,13 @@ let make_prompt size time network state redraw =
   (if List.length state.log = 0 || List.hd state.log <> network then
      state.log <- (network :: state.log)) ;
 
-  let print (lt, from, msg) =
+  let print_log (lt, from, msg) =
     let time = Printf.sprintf "[%02d:%02d:%02d] " lt.Unix.tm_hour lt.Unix.tm_min lt.Unix.tm_sec in
     time ^ from ^ ": " ^ msg
   in
   let logs =
     let entries = take_rev 6 state.log [] in
-    let ent = List.map print entries in
+    let ent = List.map print_log entries in
     let msgs = pad_l "" 6 ent in
     String.concat "\n" msgs
   in
@@ -126,6 +126,7 @@ let make_prompt size time network state redraw =
     in
     match snd state.active_chat with
       | None -> []
+      | Some x when x = state.session -> List.map print_log state.log
       | Some x -> List.map printmsg x.messages
   in
 
