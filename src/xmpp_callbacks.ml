@@ -134,22 +134,28 @@ let presence_callback t stanza =
     | Some x when x = "" -> session.status <- None ; ""
     | Some x -> session.status <- Some x ; (" - " ^ x)
   in
+  let old = User.presence_to_char session.presence in
+  let logp () =
+    let n = User.presence_to_char session.presence in
+    let nl = User.presence_to_string session.presence in
+    log id ("presence changed: [" ^ old ^ ">" ^ n ^ "] (now " ^ nl ^ ")" ^ stat)
+  in
   (match stanza.content.presence_type with
    | None ->
      begin
        match stanza.content.show with
-       | None -> session.presence <- `Online ; log id ("available" ^ stat)
-       | Some ShowChat -> session.presence <- `Free ; log id ("free" ^ stat)
-       | Some ShowAway -> session.presence <- `Away ; log id ("away" ^ stat)
-       | Some ShowDND -> session.presence <- `DoNotDisturb ; log id ("dnd" ^ stat)
-       | Some ShowXA -> session.presence <- `ExtendedAway ; log id ("extended away" ^ stat)
+       | None -> session.presence <- `Online ; logp ()
+       | Some ShowChat -> session.presence <- `Free ; logp ()
+       | Some ShowAway -> session.presence <- `Away ; logp ()
+       | Some ShowDND -> session.presence <- `DoNotDisturb ; logp ()
+       | Some ShowXA -> session.presence <- `ExtendedAway ; logp ()
      end
    | Some Probe -> log id ("probed" ^ stat)
    | Some Subscribe -> log id ("subscription request" ^ stat)
    | Some Subscribed -> log id ("successfully subscribed" ^ stat)
    | Some Unsubscribe -> log id ("shouldn't see this unsubscribe" ^ stat)
    | Some Unsubscribed -> log id ("you're so off my buddy list" ^ stat)
-   | Some Unavailable -> session.presence <- `Offline ; log id ("offline" ^ stat)
+   | Some Unavailable -> session.presence <- `Offline ; logp ()
   );
   return ()
 
