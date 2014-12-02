@@ -62,21 +62,17 @@ open Sexplib
 
 let xmpp_config dir = Filename.concat dir "ocaml-xmpp-client"
 
-let dump_config dir cfg =
-  let cfgdir = xmpp_config dir in
+let dump_config cfgdir cfg =
   write cfgdir config (Config.store_config cfg)
 
 let dump_users cfgdir data =
-  let cfgdir = xmpp_config cfgdir in
   write cfgdir users (User.store_users data)
 
-let load_config cfgdir =
-  let cfg = xmpp_config cfgdir in
+let load_config cfg =
   read cfg config >|= fun cfgdata ->
   Config.load_config cfgdata
 
-let load_users cfgdir =
-  let cfg = xmpp_config cfgdir in
+let load_users cfg =
   read cfg users >|= fun userdata ->
   let users = try User.load_users userdata with _ -> User.Users.create 100 in
   users

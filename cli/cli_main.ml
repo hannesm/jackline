@@ -8,13 +8,19 @@ let () =
 
     Lazy.force LTerm.stdout >>= fun term ->
 
+    (match Sys.argv with
+     | [| _ ; "-f" ; dir |] -> return dir
+     | [| _ |] ->
+       Lwt_unix.getlogin () >>= fun user ->
+       Lwt_unix.getpwnam user >>= fun pw_ent ->
+       let cfgdir =
+         let home = pw_ent.Lwt_unix.pw_dir in
+         Filename.concat home ".config"
+       in
+       return (Xmpp_callbacks.xmpp_config cfgdir)
+     | _ -> fail (Invalid_argument ("Usage: " ^ Sys.argv.(0) ^ " [-f dir (default: ~/.config/ocaml-xmpp-client/)]")) ) >>= fun cfgdir ->
+
     (* look for -f command line flag *)
-    Lwt_unix.getlogin () >>= fun user ->
-    Lwt_unix.getpwnam user >>= fun pw_ent ->
-    let cfgdir =
-      let home = pw_ent.Lwt_unix.pw_dir in
-      Filename.concat home ".config"
-    in
     Xmpp_callbacks.load_config cfgdir >>= fun (config) ->
     (match config with
      | None ->
@@ -32,6 +38,5 @@ let () =
     let state = Cli_client.empty_ui_state user session users in
     let n, s_n = S.create (Unix.localtime (Unix.time ()), "nobody", "nothing") in
     Cli_client.loop config term history state None n s_n >>= fun state ->
-    Printf.printf "now dumping state %d\n%!" (User.Users.length state.Cli_client.users) ;
     Xmpp_callbacks.dump_users cfgdir state.Cli_client.users
   )
