@@ -73,9 +73,9 @@ let make_prompt size time network state redraw =
     String.concat "\n" msgs
   in
 
-  let session = state.session in
-  let status = User.presence_to_string session.User.presence in
-  let jid = state.user.User.jid ^ "/" ^ session.User.resource in
+  let mysession = state.session in
+  let status = User.presence_to_string mysession.User.presence in
+  let jid = state.user.User.jid ^ "/" ^ mysession.User.resource in
 
   let main_size = size.rows - 6 (* log *) - 3 (* status + readline *) in
   assert (main_size > 0) ;
@@ -113,9 +113,27 @@ let make_prompt size time network state redraw =
   in
   (* handle overflowings: text might be too long for one row *)
 
+  let chat =
+    let printmsg (dir, enc, received, lt, msg) =
+      let time = Printf.sprintf "[%02d:%02d:%02d] " lt.Unix.tm_hour lt.Unix.tm_min lt.Unix.tm_sec in
+      let en = if enc then "O" else "-" in
+      let pre = match dir with
+        | `From -> "<" ^ en ^ "- "
+        | `To -> (if received then "-" else "r") ^ en ^ "> "
+        | `Local -> "*** "
+      in
+      time ^ pre ^ msg
+    in
+    match snd state.active_chat with
+      | None -> []
+      | Some x -> List.map printmsg x.messages
+  in
+
   let buddylist =
-    let lst = take_fill [ S (String.make buddy_width ' ') ] main_size buddies [] in
-    List.map (fun x -> x @ [ B_fg lcyan ; S (Zed_utf8.singleton (UChar.of_int 0x2502)) ; E_fg ; S "\n" ]) lst
+    let buddylst = take_fill [ S (String.make buddy_width ' ') ] main_size buddies [] in
+    let chatlst = List.rev (take_fill "" main_size chat []) in
+    let comb = List.combine buddylst chatlst in
+    List.map (fun (b, c) -> b @ [ B_fg lcyan ; S (Zed_utf8.singleton (UChar.of_int 0x2502)) ; E_fg ; S c ; S "\n" ]) comb
   in
   let hline =
     (Zed_utf8.make buddy_width (UChar.of_int 0x2500)) ^
@@ -147,7 +165,7 @@ let make_prompt size time network state redraw =
         (size.cols - 22 - String.length jid - String.length status - String.length redraw)
         (UChar.of_int 0x2500));
     S"[ ";
-    B_fg (if session.User.presence = `Offline then lred else lgreen); S status; E_fg;
+    B_fg (if mysession.User.presence = `Offline then lred else lgreen); S status; E_fg;
     S" ]─";
     E_fg;
     S"\n";
@@ -265,6 +283,11 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
        in
        let ctx, out, warn = Otr.Handshake.send_otr session.User.otr message in
        session.User.otr <- ctx ;
+       let enc = match Otr.State.(ctx.state.message_state) with
+         | `MSGSTATE_ENCRYPTED _ -> true
+         | _ -> false
+       in
+       session.messages <- (`To, enc, false, Unix.localtime (Unix.time ()), message) :: session.messages ;
        (match session_data with
         | None -> Printf.printf "not connected, cannot send\n" ; return_unit
         | Some x -> Xmpp_callbacks.XMPPClient.send_message x

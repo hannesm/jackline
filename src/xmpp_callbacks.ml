@@ -89,22 +89,24 @@ let message_callback (t : user_data session_data) stanza =
   let log = t.user_data.received in
   let user, session = user_session stanza t.user_data in
   let userid = User.userid user session in
+  let msg dir enc received txt =
+    (dir, enc, received, Unix.localtime (Unix.time ()), txt)
+  in
   match stanza.content.body with
-  | None -> log userid "nothing received" ; return ()
+  | None ->
+    session.messages <- (msg `Local false true "**empty message**") :: session.messages ;
+    return_unit
   | Some v ->
     let ctx, out, warn, received, plain = Otr.Handshake.handle session.User.otr v in
-    (match plain with
-     | None -> ()
-     | Some p -> log userid ("plain message: " ^ p)) ;
     (match warn with
      | None -> ()
-     | Some w -> log userid ("warning: " ^ w)) ;
+     | Some w -> session.messages <- (msg `Local false true ("Warning: " ^ w)) :: session.messages) ;
+    (match plain with
+     | None -> ()
+     | Some p -> session.messages <- (msg `From false true p) :: session.messages) ;
     (match received with
      | None -> ()
-     | Some c -> log userid ("received encrypted: " ^ c)) ;
-    (match plain, warn, received with
-     | None, None, None -> log userid ("nothing usable received...")
-     | _ -> ()) ;
+     | Some c -> session.messages <- (msg `From true true c) :: session.messages) ;
     session.User.otr <- ctx ;
     match out with
     | None -> return ()

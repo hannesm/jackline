@@ -20,12 +20,14 @@ let presence_to_char = function
   | `ExtendedAway -> "x"
   | `Offline -> "_"
 
+type direction = [ `From | `To | `Local ]
+
 type session = {
   resource : string ;
   mutable presence : presence ;
   mutable status : string option ;
   mutable priority : int ;
-  mutable messages : string list ;
+  mutable messages : (direction * bool * bool * Unix.tm * string) list ;   (* direction, encryption, received, timestamp, msg *)
   mutable otr : Otr.State.session
 }
 
