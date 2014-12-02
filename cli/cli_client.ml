@@ -127,7 +127,7 @@ let make_prompt size time network state redraw =
     match snd state.active_chat with
       | None -> []
       | Some x when x = state.session -> List.map print_log state.log
-      | Some x -> List.map printmsg x.messages
+      | Some x -> List.map printmsg x.User.messages
   in
 
   let buddylist =
@@ -290,8 +290,8 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
        in
        (match warn with
         | None -> ()
-        | Some w -> session.messages <- (`Local, true, true, Unix.localtime (Unix.time ()), ("Warning: " ^ w)) :: session.messages) ;
-       session.messages <- (`To, enc, false, Unix.localtime (Unix.time ()), message) :: session.messages ;
+        | Some w -> session.User.messages <- (`Local, true, true, Unix.localtime (Unix.time ()), ("Warning: " ^ w)) :: session.User.messages) ;
+       session.User.messages <- (`To, enc, false, Unix.localtime (Unix.time ()), message) :: session.User.messages ;
        (match session_data with
         | None -> Printf.printf "not connected, cannot send\n" ; return_unit
         | Some x -> Xmpp_callbacks.XMPPClient.send_message x
