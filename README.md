@@ -2,7 +2,7 @@ XMPP-Client
 ===========
 
 (active: cyan bg, OTR session green fg, subscription status via `?` (not for specific side), `[`, `]` (subscribed), `{}` (self-contact))
-![First screenshot](http://berlin.ccc.de/~hannes/cli3.png)
+![Fourth screenshot](http://berlin.ccc.de/~hannes/cli4.png)
 
 The goal is a minimalistic graphical user interface for a secure (fail hard!) and trustworthy XMPP client.
 
