@@ -10,12 +10,12 @@ let () =
 
     let cfgdir () =
        Lwt_unix.getlogin () >>= fun user ->
-       Lwt_unix.getpwnam user >>= fun pw_ent ->
+       Lwt_unix.getpwnam user >|= fun pw_ent ->
        let cfgdir =
          let home = pw_ent.Lwt_unix.pw_dir in
          Filename.concat home ".config"
        in
-       return (Xmpp_callbacks.xmpp_config cfgdir)
+       Xmpp_callbacks.xmpp_config cfgdir
     in
 
     (match Sys.argv with
@@ -30,8 +30,8 @@ let () =
     (match config with
      | None ->
        Cli_config.configure term () >>= fun config ->
-       Xmpp_callbacks.dump_config cfgdir config >>= fun () ->
-       return config
+       Xmpp_callbacks.dump_config cfgdir config >|= fun () ->
+       config
      | Some cfg -> return cfg ) >>= fun config ->
 
     Xmpp_callbacks.load_users cfgdir >>= fun (users) ->
