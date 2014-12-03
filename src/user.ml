@@ -73,11 +73,36 @@ type user = {
   groups : string list ;
   subscription : subscription ;
   props : props list ; (* not persistent *)
-  otr_fingerprints : fingerprint list ;
+  mutable otr_fingerprints : fingerprint list ;
   mutable active_sessions : session list (* not persistent *)
 }
 
-let userid u s = u.jid ^ "/" ^ s.resource
+let userid u s = match s.resource with
+  | r when r = "" -> u.jid
+  | r -> u.jid ^ "/" ^ r
+
+let fingerprint otr =
+  let hex x = match Hex.of_string (Cstruct.to_string x) with
+      `Hex e -> (String.((sub e 0 8) ^ " " ^ (sub e 8 8) ^ " " ^ (sub e 16 8) ^ " " ^ (sub e 24 8) ^ " " ^ (sub e 32 8)), e)
+  in
+  match otr.Otr.State.their_dsa with
+  | None -> ("No OTR", "")
+  | Some x -> hex (Otr.Crypto.OtrDsa.fingerprint x)
+
+let insert_inc u r fp =
+  u.otr_fingerprints <-
+    { fp with
+      session_count = succ fp.session_count ;
+      resources = r :: (List.filter (fun x -> x <> r) fp.resources)
+    } :: (List.filter (fun x -> x.data <> fp.data) u.otr_fingerprints)
+
+let find_fp u otr =
+  let fp, raw = fingerprint otr in
+  let fps = try List.find (fun x -> x.data = raw) u.otr_fingerprints with
+      Not_found -> { data = raw ; verified = false ; resources = []; session_count = 0 }
+  in
+  (fp, fps)
+
 
 let empty = {
   name = "" ;
