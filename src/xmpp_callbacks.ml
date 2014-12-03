@@ -98,6 +98,7 @@ let message_callback (t : user_data session_data) stanza =
     let ctx, out, user, received = Otr.Handshake.handle session.User.otr v in
     (match user with
      | None -> ()
+     | Some w when w = "encrypted OTR connection established" -> session.User.messages <- (msg `Local false true w) :: session.User.messages (* do this fingerprint stuff etc. *)
      | Some w -> session.User.messages <- (msg `Local false true w) :: session.User.messages) ;
     (match received with
      | None -> ()
