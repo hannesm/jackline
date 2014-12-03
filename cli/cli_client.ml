@@ -44,7 +44,7 @@ type ui_state = {
   mutable log : (Unix.tm * string * string) list ; (* set by xmpp callbacks -- should be time * string list *)
   mutable active_chat : (User.user * User.session option) ; (* modified by user (scrolling through buddies) *)
   users : User.users ; (* extended by xmpp callbacks *)
-  notifications : User.user list ; (* or a set? adjusted once messages drop in, reset when chat becomes active *)
+  mutable notifications : User.user list ;
   (* events : ?? list ; (* primarily subscription requests - anything else? *) *)
 }
 
@@ -110,7 +110,8 @@ let make_prompt size time network state redraw =
           let data = Printf.sprintf " %s%s%s %s" f (User.presence_to_char s) t id in
           pad buddy_width data
         in
-        [B_fg fg ; B_bg(index bg) ; S item ; E_bg ; E_fg ])
+        let blinka, blinkb = if List.mem u state.notifications then ([ B_blink true ], [ E_blink ]) else ([], []) in
+        blinka @ [B_fg fg ; B_bg(index bg) ; S item ; E_bg ; E_fg ] @ blinkb)
       us
   in
   (* handle overflowings: text might be too long for one row *)
@@ -208,7 +209,8 @@ class read_line ~term ~network ~history ~state ~completions = object(self)
       if List.length userlist > (succ active_idx) then
         (let user = User.Users.find state.users (List.nth userlist (succ active_idx)) in
          let session = User.good_session user in
-          state.active_chat <- (user, session)) ;
+         state.active_chat <- (user, session) ;
+         state.notifications <- List.filter (fun a -> a <> user) state.notifications ) ;
       force_redraw ("bla"); force_redraw("") (* ugly hack to redraw *)
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = up ->
       let userlist = User.keys state.users in
@@ -216,7 +218,8 @@ class read_line ~term ~network ~history ~state ~completions = object(self)
       if pred active_idx >= 0 then
         (let user = User.Users.find state.users (List.nth userlist (pred active_idx)) in
          let session = User.good_session user in
-         state.active_chat <- (user, session)) ;
+         state.active_chat <- (user, session) ;
+         state.notifications <- List.filter (fun a -> a <> user) state.notifications ) ;
       force_redraw ("bla"); force_redraw("") (* ugly hack to redraw *)
     | action ->
       super#send_action action
@@ -262,11 +265,17 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
              let cb jid msg =
                let now = Unix.localtime (Unix.time ()) in
                s_n (now, jid, msg)
+             and notify u =
+               if List.mem u state.notifications then
+                 ()
+               else
+                 state.notifications <- u :: state.notifications
              in
              let (user_data : Xmpp_callbacks.user_data) = Xmpp_callbacks.({
                  otr_config ;
                  users = state.users ;
-                 received = cb
+                 received = cb ;
+                 notify ;
                }) in
              (* TODO: I'd like to catch tls and auth failures here, but neither try_lwt nor Lwt.catch seem to do that *)
              (Xmpp_callbacks.connect config user_data () >|= fun s -> Some s) >>= fun session_data ->

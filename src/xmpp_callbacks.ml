@@ -22,6 +22,7 @@ type user_data = {
   otr_config : Otr.State.config ;
   users : User.users ;
   received : string -> string -> unit ;
+  notify : User.user -> unit ;
 }
 
 let read dir file =
@@ -89,7 +90,8 @@ let message_callback (t : user_data session_data) stanza =
   let user, session = user_session stanza t.user_data in
   let msg dir enc received txt =
     let message = (dir, enc, received, Unix.localtime (Unix.time ()), txt) in
-    session.User.messages <- message :: session.User.messages
+    session.User.messages <- message :: session.User.messages ;
+    t.user_data.notify user
   in
   match stanza.content.body with
   | None ->
