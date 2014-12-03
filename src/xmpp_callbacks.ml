@@ -34,9 +34,9 @@ let read dir file =
       let size = stats.Lwt_unix.st_size in
       let buf = Bytes.create size in
       Lwt_unix.read fd buf 0 size >>= fun s ->
-      Lwt_unix.close fd >>= fun () ->
+      Lwt_unix.close fd >|= fun () ->
       assert (s = size) ;
-      return buf)
+      String.trim buf)
     (fun _ -> return "")
 
 let write dir filename buf =
