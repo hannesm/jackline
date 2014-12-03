@@ -116,8 +116,13 @@ let message_callback (t : user_data session_data) stanza =
         ?body:out ()
 
 let message_error t ?id ?jid_from ?jid_to ?lang error =
-  print_endline ("message error: " ^ error.err_text);
-  return ()
+  let log = t.user_data.received in
+  let jid = match jid_from with
+    | None -> "unknown"
+    | Some x -> JID.string_of_jid x
+  in
+  log jid ("error message: " ^ error.err_text) ;
+  return_unit
 
 let presence_callback t stanza =
   let log = t.user_data.received in
@@ -158,8 +163,13 @@ let presence_callback t stanza =
   return ()
 
 let presence_error t ?id ?jid_from ?jid_to ?lang error =
-  print_endline ("presence error: " ^ error.err_text);
-  return ()
+  let log = t.user_data.received in
+  let jid = match jid_from with
+    | None -> "unknown"
+    | Some x -> JID.string_of_jid x
+  in
+  log jid ("presence message: " ^ error.err_text) ;
+  return_unit
 
 
 let session_callback t =
