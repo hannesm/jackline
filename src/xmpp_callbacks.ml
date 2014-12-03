@@ -95,13 +95,10 @@ let message_callback (t : user_data session_data) stanza =
     session.User.messages <- (msg `Local false true "**empty message**") :: session.User.messages ;
     return_unit
   | Some v ->
-    let ctx, out, warn, received, plain = Otr.Handshake.handle session.User.otr v in
-    (match warn with
+    let ctx, out, user, received = Otr.Handshake.handle session.User.otr v in
+    (match user with
      | None -> ()
-     | Some w -> session.User.messages <- (msg `Local false true ("Warning: " ^ w)) :: session.User.messages) ;
-    (match plain with
-     | None -> ()
-     | Some p -> session.User.messages <- (msg `From false true p) :: session.User.messages) ;
+     | Some w -> session.User.messages <- (msg `Local false true w) :: session.User.messages) ;
     (match received with
      | None -> ()
      | Some c -> session.User.messages <- (msg `From true true c) :: session.User.messages) ;

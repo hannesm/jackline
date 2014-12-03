@@ -288,16 +288,15 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
          | (user, None) -> assert false
          | (user, Some x) -> user, x
        in
-       let ctx, out, warn = Otr.Handshake.send_otr session.User.otr message in
+       let ctx, out, user_out = Otr.Handshake.send_otr session.User.otr message in
        session.User.otr <- ctx ;
        let enc = match Otr.State.(ctx.state.message_state) with
          | `MSGSTATE_ENCRYPTED _ -> true
          | _ -> false
        in
-       (match warn with
+       (match user_out with
         | None -> ()
-        | Some w -> session.User.messages <- (`Local, true, true, Unix.localtime (Unix.time ()), ("Warning: " ^ w)) :: session.User.messages) ;
-       session.User.messages <- (`To, enc, false, Unix.localtime (Unix.time ()), message) :: session.User.messages ;
+        | Some w -> session.User.messages <- (`To, enc, false, Unix.localtime (Unix.time ()), w) :: session.User.messages) ;
        (match session_data with
         | None -> s_n (Unix.localtime (Unix.time ()), "error", "not connected, cannot send: " ^ message) ; return_unit
         | Some x -> Xmpp_callbacks.XMPPClient.send_message x
