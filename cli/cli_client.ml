@@ -251,9 +251,8 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
        in
        (match cmd, args with
         | "quit", _ -> return (false, session_data)
-        | "help", _ -> let () =
-                    s_n (now, "help", String.concat " " (List.sort String.compare commands) )
-                    in return (true, session_data)  (* TODO no idea what return () does here :-) *)
+        | "help", _ -> s_n (now, "help", String.concat " " (List.sort String.compare commands) ) ;
+                            return (true, session_data)
         | "connect", _ ->
           (match session_data with
            | None ->
