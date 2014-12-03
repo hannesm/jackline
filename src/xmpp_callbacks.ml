@@ -88,18 +88,19 @@ let user_session stanza user_data =
 let message_callback (t : user_data session_data) stanza =
   let user, session = user_session stanza t.user_data in
   let msg dir enc received txt =
-    (dir, enc, received, Unix.localtime (Unix.time ()), txt)
+    let message = (dir, enc, received, Unix.localtime (Unix.time ()), txt) in
+    session.User.messages <- message :: session.User.messages
   in
   match stanza.content.body with
   | None ->
-    session.User.messages <- (msg `Local false true "**empty message**") :: session.User.messages ;
+    msg `Local false true "**empty message**" ;
     return_unit
   | Some v ->
     let ctx, out, user_data, received = Otr.Handshake.handle session.User.otr v in
     (match user_data with
      | None -> ()
      | Some w when w = "encrypted OTR connection established" ->
-       session.User.messages <- (msg `Local false true w) :: session.User.messages ;
+       msg `Local false true w ;
        let fp, fps = User.find_fp user ctx in
        let otrmsg = if fps.User.session_count = 0 then
            "new unverified OTR fingerprint: "
@@ -107,12 +108,12 @@ let message_callback (t : user_data session_data) stanza =
            let ver = if fps.User.verified then "verified" else "unverified" in
            ver ^ " OTR fingerprint (used " ^ (string_of_int fps.User.session_count) ^ " times): "
        in
-       session.User.messages <- (msg `Local false true (otrmsg ^ fp)) :: session.User.messages ;
+       msg `Local false true (otrmsg ^ fp) ;
        User.insert_inc user session.User.resource fps ;
-     | Some w -> session.User.messages <- (msg `Local false true w) :: session.User.messages) ;
+     | Some w -> msg `Local false true w);
     (match received with
      | None -> ()
-     | Some c -> session.User.messages <- (msg `From true true c) :: session.User.messages) ;
+     | Some c -> msg `From true true c) ;
     session.User.otr <- ctx ;
     match out with
     | None -> return ()
