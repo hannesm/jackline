@@ -266,12 +266,8 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
                  users = state.users ;
                  received = cb
                }) in
-             (try_lwt
-                Xmpp_callbacks.connect config user_data () >>= fun s -> return (Some s)
-              with
-                | Xmpp_callbacks.XMPPClient.AuthError s -> print_endline ("auth error: " ^ s); return None
-                | Xmpp_callbacks.XMPPClient.AuthFailure s -> print_endline ("auth failure: " ^ s); return None
-                | _ -> print_endline "caught exception" ; return None ) >>= fun session_data ->
+             (* TODO: I'd like to catch tls and auth failures here, but neither try_lwt nor Lwt.catch seem to do that *)
+             (Xmpp_callbacks.connect config user_data () >|= fun s -> Some s) >>= fun session_data ->
              (match session_data with
                | None -> return (true, None)
                | Some s ->
