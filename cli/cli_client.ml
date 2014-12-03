@@ -282,7 +282,7 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
        else
          (* close! *)
          return state
-     | Some message ->
+     | Some message when String.length message > 0 ->
        LTerm_history.add hist message;
        let user, session = match state.active_chat with
          | (user, None) -> assert false
@@ -304,5 +304,6 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
                       ~jid_to:(JID.of_string user.User.jid)
                       ?body:out () ) >>= fun () ->
        loop config term hist state session_data network s_n
-   | None -> loop config term hist state session_data network s_n
+     | Some message -> loop config term hist state session_data network s_n
+     | None -> loop config term hist state session_data network s_n
 
