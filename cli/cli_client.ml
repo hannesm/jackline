@@ -209,7 +209,7 @@ class read_line ~term ~network ~history ~state ~completions = object(self)
         (let user = User.Users.find state.users (List.nth userlist (succ active_idx)) in
          let session = User.good_session user in
           state.active_chat <- (user, session)) ;
-      force_redraw ("bla" ^ (string_of_int (Random.int 100))); force_redraw("") (* ugly hack to redraw *)
+      force_redraw ("bla"); force_redraw("") (* ugly hack to redraw *)
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = up ->
       let userlist = User.keys state.users in
       let active_idx = find_index (fst state.active_chat).User.jid 0 userlist in
@@ -217,7 +217,7 @@ class read_line ~term ~network ~history ~state ~completions = object(self)
         (let user = User.Users.find state.users (List.nth userlist (pred active_idx)) in
          let session = User.good_session user in
          state.active_chat <- (user, session)) ;
-      force_redraw ("bla" ^ (string_of_int (Random.int 100))); force_redraw("") (* ugly hack to redraw *)
+      force_redraw ("bla"); force_redraw("") (* ugly hack to redraw *)
     | action ->
       super#send_action action
 
