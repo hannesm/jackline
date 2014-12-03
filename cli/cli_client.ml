@@ -105,12 +105,12 @@ let make_prompt size time network state redraw =
           else
             User.subscription_to_chars u.User.subscription
         in
-        let bg = if (fst state.active_chat) = u then lcyan else white in
+        let bg = if (fst state.active_chat) = u then 7 else 15 in
         let item =
           let data = Printf.sprintf " %s%s%s %s" f (User.presence_to_char s) t id in
           pad buddy_width data
         in
-        [B_fg fg ; B_bg bg ; S item ; E_bg ; E_fg ])
+        [B_fg fg ; B_bg(index bg) ; S item ; E_bg ; E_fg ])
       us
   in
   (* handle overflowings: text might be too long for one row *)
