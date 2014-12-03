@@ -12,6 +12,14 @@ let presence_to_string = function
   | `ExtendedAway -> "extended away"
   | `Offline -> "offline"
 
+let string_to_presence = function
+  | "free" | "f" -> `Free
+  | "away" | "a" -> `Away
+  | "dnd" | "d" -> `DoNotDisturb
+  | "xa" | "x" -> `ExtendedAway
+  | "offline" | "_" -> `Offline
+  | "online" | "o" | _ -> `Online
+
 let presence_to_char = function
   | `Online -> "o"
   | `Free -> "f"
