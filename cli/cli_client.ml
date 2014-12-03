@@ -266,7 +266,7 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
                let now = Unix.localtime (Unix.time ()) in
                s_n (now, jid, msg)
              and notify u =
-               if List.mem u state.notifications then
+               if (List.mem u state.notifications) || (fst state.active_chat = u) then
                  ()
                else
                  state.notifications <- u :: state.notifications
