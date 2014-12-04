@@ -239,6 +239,20 @@ let split_ws s =
   let ws' = if ws = l then ws else succ ws in
   String.(sub s 0 ws, sub s ws' (l - ws'))
 
+let set_status session_data status =
+  let open Xmpp_callbacks.XMPPClient in
+  let p, msg = split_ws status in
+  let presence = User.string_to_presence p in
+  let kind, show = match presence with
+    | `Offline -> Some Unavailable, None
+    | `Online -> None, None
+    | `Free -> None, Some ShowChat
+    | `Away -> None, Some ShowAway
+    | `DoNotDisturb -> None, Some ShowDND
+    | `ExtendedAway -> None, Some ShowXA
+  in
+  let status = if msg = "" then None else Some msg in
+  send_presence session_data ?kind ?show ?status ()
 
 let rec loop (config : Config.t) term hist state session_data network s_n =
   let completions = commands in
@@ -258,7 +272,7 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
        in
        (match cmd, args with
         | "quit", _ -> return (false, session_data)
-        | "help", _ -> s_n (now, "help", String.concat " " (List.sort String.compare commands) ) ;
+        | "help", _ -> s_n (now, "help", String.concat " " (List.sort compare commands) ) ;
                             return (true, session_data)
         | "connect", _ ->
           (match session_data with
@@ -288,26 +302,13 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
                  Lwt.async (fun () -> Xmpp_callbacks.parse_loop s) ;
                  return (true, Some s))
            | Some _ -> s_n (now, "error", "already connected") ; return (true, session_data))
-        | "status", s -> ( match session_data with
-            | None -> s_n (now, "error", "not connected") ; return (true, session_data)
-            | Some x ->
-              let p, msg = split_ws s in
-              let presence = User.string_to_presence p in
-              let open Xmpp_callbacks.XMPPClient in
-              let kind, show = match presence with
-                | `Offline -> Some Unavailable, None
-                | `Online -> None, None
-                | `Free -> None, Some ShowChat
-                | `Away -> None, Some ShowAway
-                | `DoNotDisturb -> None, Some ShowDND
-                | `ExtendedAway -> None, Some ShowXA
-              in
-              let status = if msg = "" then None else Some msg in
-              Xmpp_callbacks.XMPPClient.send_presence x ?kind ?show ?status () >|= fun () ->
-              (true, session_data) )
-        | _, _ ->
-          s_n (now, "error", "Unimplemented command: " ^ command) ;
-          return (true, session_data)) >>= fun (cont, session_data) ->
+        | c, a ->
+          ( match session_data with
+            | None -> s_n (now, "error", "not connected") ; return_unit
+            | Some s -> match c with
+              | "status" -> set_status s a
+              | _ -> s_n (now, "error", "unimplemented command: " ^ command) ; return_unit
+          )  >|= fun () -> (true, session_data) ) >>= fun (cont, session_data) ->
        if cont then
          loop config term hist state session_data network s_n
        else
