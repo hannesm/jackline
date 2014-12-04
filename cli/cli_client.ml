@@ -177,7 +177,7 @@ let make_prompt size time network state redraw =
   ])
 
 let commands =
-  [ "/connect" ; "/add" ; "/status" ; "/quit"; "/help" ]
+  [ "/connect" ; "/add" ; "/status" ; "/authorization" ; "/quit"; "/help" ]
 
 let time =
   let time, set_time = S.create (Unix.time ()) in
@@ -316,6 +316,20 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
                    Xmpp_callbacks.XMPPClient.(send_presence s ~jid_to ~kind:Subscribe ()) >>= fun () ->
                    msg a "sent subscription request to"
                  with _ -> err "parse of jid failed" )
+              | "authorization" ->
+                let open Xmpp_callbacks.XMPPClient in
+                let user = fst state.active_chat in
+                let jid = user.User.jid in
+                let doit kind =
+                  send_presence s ~jid_to:(JID.of_string jid) ~kind () >>= fun () ->
+                  msg  jid (a ^ "ed subscription")
+                in
+                ( match a with
+                  | "allow" -> doit Subscribed
+                  | "cancel" -> doit Unsubscribed
+                  | "request" -> doit Subscribe
+                  | "request_unsubscribe" -> doit Unsubscribe
+                  | _ -> err "don't know what you want" )
               | _ -> err ("unimplemented command: " ^ command)
           )  >|= fun () -> (true, session_data) ) >>= fun (cont, session_data) ->
        if cont then
