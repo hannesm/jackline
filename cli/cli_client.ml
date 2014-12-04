@@ -270,6 +270,11 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
        let cmd, args = split_ws (String.sub command 1 (pred (String.length command)))
        and now = Unix.localtime (Unix.time ())
        in
+       let msg, err =
+         let msg from m = s_n (now, from, m) ; return_unit in
+         let err m = msg "error" m in
+         (msg, err)
+       in
        (match cmd, args with
         | "quit", _ -> return (false, session_data)
         | "help", _ -> s_n (now, "help", String.concat " " (List.sort compare commands) ) ;
@@ -278,9 +283,7 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
           (match session_data with
            | None ->
              let otr_config = config.Config.otr_config in
-             let cb jid msg =
-               let now = Unix.localtime (Unix.time ()) in
-               s_n (now, jid, msg)
+             let cb jid msg = s_n (now, jid, msg)
              and notify u =
                (if (List.mem u state.notifications) || (fst state.active_chat = u) then
                   ()
@@ -301,13 +304,19 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
                | Some s ->
                  Lwt.async (fun () -> Xmpp_callbacks.parse_loop s) ;
                  return (true, Some s))
-           | Some _ -> s_n (now, "error", "already connected") ; return (true, session_data))
+           | Some _ -> err "already connected" >|= fun () -> (true, session_data))
         | c, a ->
           ( match session_data with
-            | None -> s_n (now, "error", "not connected") ; return_unit
+            | None -> err "not connected"
             | Some s -> match c with
               | "status" -> set_status s a
-              | _ -> s_n (now, "error", "unimplemented command: " ^ command) ; return_unit
+              | "add" ->
+                (try
+                   let jid_to = JID.of_string a in
+                   Xmpp_callbacks.XMPPClient.(send_presence s ~jid_to ~kind:Subscribe ()) >>= fun () ->
+                   msg a "sent subscription request to"
+                 with _ -> err "parse of jid failed" )
+              | _ -> err ("unimplemented command: " ^ command)
           )  >|= fun () -> (true, session_data) ) >>= fun (cont, session_data) ->
        if cont then
          loop config term hist state session_data network s_n
