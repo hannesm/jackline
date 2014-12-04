@@ -39,6 +39,19 @@ let rec find_index id i = function
   | _::xs -> find_index id (succ i) xs
 
 let make_prompt size time network state redraw =
+
+  let rec line_wrap ~max_length ent acc : string list =
+    match ent with
+    | entry::remaining when String.length entry > max_length ->
+        let part1 = String.sub entry 0 max_length
+        and part2 = "  " ^ String.sub entry max_length ((String.length entry) - max_length)
+        in
+          line_wrap ~max_length (part2::remaining) (part1::acc)
+    | entry::remaining ->
+        line_wrap ~max_length remaining (entry::acc)
+    | [] -> acc
+  in
+
   let tm = Unix.localtime time in
 
   (* network should be an event, then I wouldn't need a check here *)
@@ -51,9 +64,9 @@ let make_prompt size time network state redraw =
   in
   let logs =
     let entries = take_rev 6 state.log [] in
-    let ent = List.map print_log entries in
-    let msgs = pad_l "" 6 ent in
-    String.concat "\n" msgs
+    let entries = List.map print_log entries in
+    let log_entries = line_wrap ~max_length:size.cols entries [] in
+    String.concat "\n" (List.rev (take_fill "" 6 log_entries  []))
   in
 
   let mysession = state.session in
@@ -116,6 +129,8 @@ let make_prompt size time network state redraw =
 
   let buddylist =
     let buddylst = take_fill [ S (String.make buddy_width ' ') ] main_size buddies [] in
+    let chat_wrap_length = (size.cols - buddy_width - 1 (* hline char *)) in
+    let chat = line_wrap ~max_length:chat_wrap_length (List.rev chat) [] in
     let chatlst = List.rev (take_fill "" main_size chat []) in
     let comb = List.combine buddylst chatlst in
     List.map (fun (b, c) -> b @ [ B_fg lcyan ; S (Zed_utf8.singleton (UChar.of_int 0x2502)) ; E_fg ; S c ; S "\n" ]) comb
@@ -159,7 +174,7 @@ let make_prompt size time network state redraw =
   ])
 
 let commands =
-  [ "/connect" ; "/add" ; "/status" ; "/authorization" ; "/quit"; "/help" ]
+  [ "/log"; "/connect" ; "/add" ; "/status" ; "/authorization" ; "/quit"; "/help" ]
 
 let time =
   let time, set_time = S.create (Unix.time ()) in
