@@ -184,6 +184,26 @@ let redraw, force_redraw =
   let a, b = S.create "" in
   (a, fun () -> b "bla" ; b "")
 
+let navigate_buddy_list state direction (* true - up ; false - down *) =
+  let userlist = User.keys state.users in
+  let active_idx = find_index (fst state.active_chat).User.jid 0 userlist in
+  let user_idx =
+    if (not direction) && List.length userlist > (succ active_idx) then
+      Some (succ active_idx)
+    else if direction && pred active_idx >= 0 then
+      Some (pred active_idx)
+    else
+      None
+  in
+  match user_idx with
+  | Some idx ->
+    let user = User.Users.find state.users (List.nth userlist idx) in
+    let session = User.good_session user in
+    state.active_chat <- (user, session) ;
+    state.notifications <- List.filter (fun a -> a <> user) state.notifications ;
+    force_redraw ()
+  | None -> ()
+
 class read_line ~term ~network ~history ~state = object(self)
   inherit LTerm_read_line.read_line ~history () as super
   inherit [Zed_utf8.t] LTerm_read_line.term term as t
@@ -197,23 +217,9 @@ class read_line ~term ~network ~history ~state = object(self)
 
   method send_action = function
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = down ->
-      let userlist = User.keys state.users in
-      let active_idx = find_index (fst state.active_chat).User.jid 0 userlist in
-      if List.length userlist > (succ active_idx) then
-        (let user = User.Users.find state.users (List.nth userlist (succ active_idx)) in
-         let session = User.good_session user in
-         state.active_chat <- (user, session) ;
-         state.notifications <- List.filter (fun a -> a <> user) state.notifications ) ;
-      force_redraw ()
+      navigate_buddy_list state false
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = up ->
-      let userlist = User.keys state.users in
-      let active_idx = find_index (fst state.active_chat).User.jid 0 userlist in
-      if pred active_idx >= 0 then
-        (let user = User.Users.find state.users (List.nth userlist (pred active_idx)) in
-         let session = User.good_session user in
-         state.active_chat <- (user, session) ;
-         state.notifications <- List.filter (fun a -> a <> user) state.notifications ) ;
-      force_redraw ()
+      navigate_buddy_list state true
     | action ->
       super#send_action action
 
