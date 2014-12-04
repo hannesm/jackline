@@ -89,7 +89,9 @@ let make_prompt size time network state redraw =
         in
         let fg = match session with
           | Some x when User.(encrypted x.otr) -> green
-          | _ -> red
+          | Some _ when u = state.user -> blue
+          | Some _ -> red
+          | None -> black
         in
         let f, t =
           if u = state.user then
