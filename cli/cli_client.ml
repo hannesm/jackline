@@ -175,14 +175,14 @@ let redraw, force_redraw =
   let a, b = S.create "" in
   (a, fun () -> b "bla" ; b "")
 
-class read_line ~term ~network ~history ~state ~completions = object(self)
+class read_line ~term ~network ~history ~state = object(self)
   inherit LTerm_read_line.read_line ~history () as super
   inherit [Zed_utf8.t] LTerm_read_line.term term as t
 
   method completion =
     let prefix  = Zed_rope.to_string self#input_prev in
-    let completions = List.filter (fun f -> Zed_utf8.starts_with f prefix) completions in
-    self#set_completion 0 (List.map (fun f -> (f, " ")) completions)
+    let completions = Cli_commands.topcompletion prefix in
+    self#set_completion 0 (List.map (fun f -> ("/" ^ f, " ")) completions)
 
   method show_box = false
 
@@ -215,132 +215,46 @@ class read_line ~term ~network ~history ~state ~completions = object(self)
                        self#size time network redraw)
 end
 
-let split_ws s =
-  let l = String.length s in
-  let ws = try String.index s ' ' with Not_found -> l in
-  let ws' = if ws = l then ws else succ ws in
-  String.(sub s 0 ws, sub s ws' (l - ws'))
-
-let set_status session_data status =
-  let open Xmpp_callbacks.XMPPClient in
-  let p, msg = split_ws status in
-  let presence = User.string_to_presence p in
-  let kind, show = match presence with
-    | `Offline -> Some Unavailable, None
-    | `Online -> None, None
-    | `Free -> None, Some ShowChat
-    | `Away -> None, Some ShowAway
-    | `DoNotDisturb -> None, Some ShowDND
-    | `ExtendedAway -> None, Some ShowXA
-  in
-  let status = if msg = "" then None else Some msg in
-  send_presence session_data ?kind ?show ?status ()
-
 let rec loop (config : Config.t) term hist state session_data network s_n =
-  let completions = commands in
   let history = LTerm_history.contents hist in
   match_lwt
     try_lwt
-      lwt command = (new read_line ~term ~history ~completions ~state ~network)#run in
+      lwt command = (new read_line ~term ~history ~state ~network)#run in
       return (Some command)
     with
       | Sys.Break -> return None
       | LTerm_read_line.Interrupt -> return (Some "/quit")
   with
    | Some command when (String.length command > 0) && String.get command 0 = '/' ->
-       LTerm_history.add hist command;
-       let cmd, args = split_ws (String.sub command 1 (pred (String.length command)))
-       and now = Unix.localtime (Unix.time ())
-       in
-       let msg, err =
-         let msg from m = s_n (now, from, m) ; return_unit in
-         let err m = msg "error" m in
-         (msg, err)
-       in
-       (match cmd, args with
-        | "quit", _ -> return (false, session_data)
-        | "help", _ -> s_n (now, "help", String.concat " " (List.sort compare commands) ) ;
-                            return (true, session_data)
-        | "connect", _ ->
-          (match session_data with
-           | None ->
-             let otr_config = config.Config.otr_config in
-             let cb jid msg = s_n (now, jid, msg)
-             and notify u =
-               (if (List.mem u state.notifications) || (fst state.active_chat = u) then
-                  ()
-                else
-                  state.notifications <- u :: state.notifications) ;
-               force_redraw ()
-             in
-             let (user_data : Xmpp_callbacks.user_data) = Xmpp_callbacks.({
-                 otr_config ;
-                 users = state.users ;
-                 received = cb ;
-                 notify ;
-               }) in
-             (* TODO: I'd like to catch tls and auth failures here, but neither try_lwt nor Lwt.catch seem to do that *)
-             (Xmpp_callbacks.connect config user_data () >|= fun s -> Some s) >>= fun session_data ->
-             (match session_data with
-               | None -> return (true, None)
-               | Some s ->
-                 Lwt.async (fun () -> Xmpp_callbacks.parse_loop s) ;
-                 return (true, Some s))
-           | Some _ -> err "already connected" >|= fun () -> (true, session_data))
-        | c, a ->
-          ( match session_data with
-            | None -> err "not connected"
-            | Some s -> match c with
-              | "status" -> set_status s a
-              | "add" ->
-                (try
-                   let jid_to = JID.of_string a in
-                   Xmpp_callbacks.XMPPClient.(send_presence s ~jid_to ~kind:Subscribe ()) >>= fun () ->
-                   msg a "sent subscription request to"
-                 with _ -> err "parse of jid failed" )
-              | "authorization" ->
-                let open Xmpp_callbacks.XMPPClient in
-                let user = fst state.active_chat in
-                let jid = user.User.jid in
-                let doit kind m =
-                  send_presence s ~jid_to:(JID.of_string jid) ~kind () >>= fun () ->
-                  msg jid m
-                in
-                ( match a with
-                  | "allow" -> doit Subscribed "is allowed to receive your presence updates"
-                  | "cancel" -> doit Unsubscribed "won't receive your presence updates"
-                  | "request" -> doit Subscribe "has been asked to sent presence updates to you"
-                  | "request_unsubscribe" -> doit Unsubscribe "has been asked to no longer sent presence updates to you"
-                  | _ -> err "don't know what you want" )
-              | _ -> err ("unimplemented command: " ^ command)
-          )  >|= fun () -> (true, session_data) ) >>= fun (cont, session_data) ->
-       if cont then
-         loop config term hist state session_data network s_n
-       else
-         (match session_data with
-          | None -> return_unit
-          | Some x ->
-            let otr_sessions = User.Users.fold (fun _ u acc ->
-                List.fold_left (fun acc s ->
-                    if User.encrypted s.User.otr then
-                      ((User.userid u s), s.User.otr) :: acc
-                    else acc)
-                  acc
-                  u.User.active_sessions)
-                state.users []
-            in
-            Lwt_list.iter_s
-              (fun (jid_to, ctx) ->
-                 let _, out = Otr.Handshake.end_otr ctx in
-                 Xmpp_callbacks.XMPPClient.send_message x ~jid_to:(JID.of_string jid_to) ?body:out ())
-              otr_sessions
-            (* close connection! *)
-         ) >|= fun () -> state
-     | Some message when String.length message > 0 ->
+      LTerm_history.add hist command;
+      Cli_commands.exec command state config session_data s_n force_redraw >>= fun (cont, session_data) ->
+      if cont then
+        loop config term hist state session_data network s_n
+      else
+        (match session_data with
+         | None -> return_unit
+         | Some x ->
+           let otr_sessions = User.Users.fold (fun _ u acc ->
+               List.fold_left (fun acc s ->
+                   if User.encrypted s.User.otr then
+                     ((User.userid u s), s.User.otr) :: acc
+                   else acc)
+                 acc
+                 u.User.active_sessions)
+               state.users []
+           in
+           Lwt_list.iter_s
+             (fun (jid_to, ctx) ->
+                let _, out = Otr.Handshake.end_otr ctx in
+                Xmpp_callbacks.XMPPClient.send_message x ~jid_to:(JID.of_string jid_to) ?body:out ())
+             otr_sessions
+             (* close connection! *)
+        ) >|= fun () -> state
+    | Some message when String.length message > 0 ->
        LTerm_history.add hist message;
        let user, session = match state.active_chat with
-         | (user, None) -> assert false
-         | (user, Some x) -> user, x
+        | (user, None) -> assert false
+        | (user, Some x) -> user, x
        in
        if user = state.user then
          loop config term hist state session_data network s_n
