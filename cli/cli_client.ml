@@ -7,7 +7,7 @@ open LTerm_geom
 open CamomileLibraryDyn.Camomile
 open React
 
-open Str
+open Cli_state
 
 let rec take_rev x l acc =
   match x, l with
@@ -37,24 +37,6 @@ let rec find_index id i = function
   | [] -> assert false
   | x::xs when x = id -> i
   | _::xs -> find_index id (succ i) xs
-
-type ui_state = {
-  user : User.user ; (* set initially *)
-  session : User.session ; (* set initially *)
-  mutable log : (Unix.tm * string * string) list ; (* set by xmpp callbacks -- should be time * string list *)
-  mutable active_chat : (User.user * User.session option) ; (* modified by user (scrolling through buddies) *)
-  users : User.users ; (* extended by xmpp callbacks *)
-  mutable notifications : User.user list ;
-}
-
-let empty_ui_state user session users = {
-  user ;
-  session ;
-  log = [] ;
-  active_chat = (user, Some session) ;
-  users ;
-  notifications = []
-}
 
 let make_prompt size time network state redraw =
   let tm = Unix.localtime time in

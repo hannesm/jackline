@@ -39,8 +39,8 @@ let () =
     let history = LTerm_history.create [] in
     let user = User.find_or_add config.Config.jid users in
     let session = User.ensure_session config.Config.jid config.Config.otr_config user in
-    let state = Cli_client.empty_ui_state user session users in
+    let state = Cli_state.empty_ui_state user session users in
     let n, s_n = S.create (Unix.localtime (Unix.time ()), "nobody", "nothing") in
     Cli_client.loop config term history state None n s_n >>= fun state ->
-    Xmpp_callbacks.dump_users cfgdir state.Cli_client.users
+    Xmpp_callbacks.dump_users cfgdir state.Cli_state.users
   )
