@@ -24,11 +24,6 @@ let new_command name documentation completion =
 
 let _ =
   new_command
-    "help" "[/help [cmd]] shows available commands or detailed help for cmd"
-    (fun arg ->
-       let cmds = keys () in
-       List.filter (fun f -> Zed_utf8.starts_with f arg) cmds) ;
-  new_command
     "add" "[/add jid] adds jid to your buddy list, and sends a subscription request"
     (fun _ -> []) ;
   new_command
@@ -40,14 +35,18 @@ let _ =
     "connect" "[/connect] connects to the server"
     (fun _ -> []) ;
   new_command
-    "status" "[/status presence message] sets your presence and status message"
+    "status" "[/status presence message] sets your presence [one of 'free' 'away' 'dnd' 'xa' 'offline' or 'online'] and status message"
     (fun arg ->
        let subcmds = [ "free" ; "away" ; "dnd" ; "xa" ; "offline" ; "online" ] in
        List.filter (fun f -> Zed_utf8.starts_with f arg) subcmds) ;
   new_command
     "quit" "[/quit] exits this client"
-    (fun _ -> [])
-
+    (fun _ -> []) ;
+  new_command
+    "help" "[/help [cmd]] shows available commands or detailed help for cmd"
+    (fun arg ->
+       let cmds = keys () in
+       List.filter (fun f -> Zed_utf8.starts_with f arg) cmds)
 
 let split_ws s =
   let l = String.length s in
@@ -89,9 +88,10 @@ let exec input state config session_data log redraw =
     (msg, err)
   in
   match cmd_arg input with
-  | Some ("help", Some arg) when Commands.mem commands arg ->
-    let cmd = Commands.find commands arg in
-    msg ("help for " ^ arg) cmd.documentation >|= fun () ->
+  | Some ("help", Some arg) when Commands.mem commands (String.trim arg) ->
+    let a = String.trim arg in
+    let cmd = Commands.find commands a in
+    msg ("help for " ^ a) cmd.documentation >|= fun () ->
     (true, session_data)
   | Some ("help", _) ->
     let cmds = String.concat " " (keys ()) in
