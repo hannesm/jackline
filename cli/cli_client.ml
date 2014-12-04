@@ -38,6 +38,12 @@ let rec find_index id i = function
   | x::xs when x = id -> i
   | _::xs -> find_index id (succ i) xs
 
+let color_session u su= function
+  | Some x when User.(encrypted x.otr) -> green
+  | Some _ when u = su -> black
+  | Some _ -> red
+  | None -> black
+
 let make_prompt size time network state redraw =
 
   let rec line_wrap ~max_length ent acc : string list =
@@ -87,12 +93,7 @@ let make_prompt size time network state redraw =
           | None -> `Offline
           | Some s -> s.User.presence
         in
-        let fg = match session with
-          | Some x when User.(encrypted x.otr) -> green
-          | Some _ when u = state.user -> blue
-          | Some _ -> red
-          | None -> black
-        in
+        let fg = color_session u state.user session in
         let f, t =
           if u = state.user then
             ("{", "}")
@@ -126,13 +127,15 @@ let make_prompt size time network state redraw =
       | Some x -> List.map printmsg x.User.messages
   in
 
+  let fg_color = color_session (fst state.active_chat) state.user (snd state.active_chat) in
+
   let buddylist =
     let buddylst = take_fill [ S (String.make buddy_width ' ') ] main_size buddies [] in
     let chat_wrap_length = (size.cols - buddy_width - 1 (* hline char *)) in
     let chat = line_wrap ~max_length:chat_wrap_length (List.rev chat) [] in
     let chatlst = List.rev (take_fill "" main_size chat []) in
     let comb = List.combine buddylst chatlst in
-    List.map (fun (b, c) -> b @ [ B_fg lcyan ; S (Zed_utf8.singleton (UChar.of_int 0x2502)) ; E_fg ; S c ; S "\n" ]) comb
+    List.map (fun (b, c) -> b @ [ B_fg fg_color ; S (Zed_utf8.singleton (UChar.of_int 0x2502)) ; E_fg ; S c ; S "\n" ]) comb
   in
   let hline =
     (Zed_utf8.make buddy_width (UChar.of_int 0x2500)) ^
@@ -143,7 +146,7 @@ let make_prompt size time network state redraw =
   eval (
     List.flatten buddylist @ [
 
-    B_fg lcyan;
+    B_fg fg_color;
     S hline ;
     E_fg;
     S "\n" ;
@@ -153,9 +156,9 @@ let make_prompt size time network state redraw =
 
     B_bold true;
 
-    B_fg lcyan;
+    B_fg fg_color;
     S"─( ";
-    B_fg lmagenta; S(Printf.sprintf "%02d:%02d" tm.Unix.tm_hour tm.Unix.tm_min); E_fg;
+    S(Printf.sprintf "%02d:%02d" tm.Unix.tm_hour tm.Unix.tm_min);
     S" )─< ";
     B_fg lblue; S jid; E_fg;
     S" >─";
