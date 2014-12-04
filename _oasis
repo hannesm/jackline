@@ -19,7 +19,7 @@ Library "xmpp_client"
 
 Library "xmpp_client_cli"
   Path            : cli/
-  Modules         : Cli_config, Cli_client
+  Modules         : Cli_config, Cli_state, Cli_commands, Cli_client
   Pack            : true
   BuildDepends    : lambda-term, react, lwt.syntax, xmpp_client
 
