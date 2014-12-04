@@ -335,8 +335,24 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
        if cont then
          loop config term hist state session_data network s_n
        else
-         (* close! *)
-         return state
+         (match session_data with
+          | None -> return_unit
+          | Some x ->
+            let otr_sessions = User.Users.fold (fun _ u acc ->
+                List.fold_left (fun acc s -> match s.User.otr.Otr.State.state.Otr.State.message_state with
+                    | `MSGSTATE_ENCRYPTED _ -> ((User.userid u s), s.User.otr) :: acc
+                    | _ -> acc)
+                  acc
+                  u.User.active_sessions)
+                state.users []
+            in
+            Lwt_list.iter_s
+              (fun (jid_to, ctx) ->
+                 let _, out = Otr.Handshake.end_otr ctx in
+                 Xmpp_callbacks.XMPPClient.send_message x ~jid_to:(JID.of_string jid_to) ?body:out ())
+              otr_sessions
+            (* close connection! *)
+         ) >|= fun () -> state
      | Some message when String.length message > 0 ->
        LTerm_history.add hist message;
        let user, session = match state.active_chat with
