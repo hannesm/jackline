@@ -45,7 +45,6 @@ type ui_state = {
   mutable active_chat : (User.user * User.session option) ; (* modified by user (scrolling through buddies) *)
   users : User.users ; (* extended by xmpp callbacks *)
   mutable notifications : User.user list ;
-  (* events : ?? list ; (* primarily subscription requests - anything else? *) *)
 }
 
 let empty_ui_state user session users = {
@@ -189,7 +188,10 @@ let time =
 let up = UChar.of_int 0x2500
 let down = UChar.of_int 0x2501
 
-let redraw, force_redraw = S.create ""
+let redraw, force_redraw =
+  (* this is just an ugly hack which should be removed *)
+  let a, b = S.create "" in
+  (a, fun () -> b "bla" ; b "")
 
 class read_line ~term ~network ~history ~state ~completions = object(self)
   inherit LTerm_read_line.read_line ~history () as super
@@ -211,7 +213,7 @@ class read_line ~term ~network ~history ~state ~completions = object(self)
          let session = User.good_session user in
          state.active_chat <- (user, session) ;
          state.notifications <- List.filter (fun a -> a <> user) state.notifications ) ;
-      force_redraw ("bla"); force_redraw("") (* ugly hack to redraw *)
+      force_redraw ()
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = up ->
       let userlist = User.keys state.users in
       let active_idx = find_index (fst state.active_chat).User.jid 0 userlist in
@@ -220,7 +222,7 @@ class read_line ~term ~network ~history ~state ~completions = object(self)
          let session = User.good_session user in
          state.active_chat <- (user, session) ;
          state.notifications <- List.filter (fun a -> a <> user) state.notifications ) ;
-      force_redraw ("bla"); force_redraw("") (* ugly hack to redraw *)
+      force_redraw ()
     | action ->
       super#send_action action
 
@@ -266,10 +268,11 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
                let now = Unix.localtime (Unix.time ()) in
                s_n (now, jid, msg)
              and notify u =
-               if (List.mem u state.notifications) || (fst state.active_chat = u) then
-                 ()
-               else
-                 state.notifications <- u :: state.notifications
+               (if (List.mem u state.notifications) || (fst state.active_chat = u) then
+                  ()
+                else
+                  state.notifications <- u :: state.notifications) ;
+               force_redraw ()
              in
              let (user_data : Xmpp_callbacks.user_data) = Xmpp_callbacks.({
                  otr_config ;
