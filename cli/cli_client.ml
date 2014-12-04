@@ -75,10 +75,6 @@ let make_prompt size time network state redraw =
     String.concat "\n" (List.rev (take_fill "" 6 log_entries  []))
   in
 
-  let mysession = state.session in
-  let status = User.presence_to_string mysession.User.presence in
-  let jid = state.user.User.jid ^ "/" ^ mysession.User.resource in
-
   let main_size = size.rows - 6 (* log *) - 3 (* status + readline *) in
   assert (main_size > 0) ;
 
@@ -137,11 +133,27 @@ let make_prompt size time network state redraw =
     let comb = List.combine buddylst chatlst in
     List.map (fun (b, c) -> b @ [ B_fg fg_color ; S (Zed_utf8.singleton (UChar.of_int 0x2502)) ; E_fg ; S c ; S "\n" ]) comb
   in
+
   let hline =
+    let buddy, pres = match state.active_chat with
+      | u, Some s ->
+        let p = User.presence_to_string s.User.presence in
+        let status = match s.User.status with | None -> "" | Some x -> " - " ^ x in
+        let otr, _ = User.fingerprint s.User.otr in
+        (User.userid u s, " - " ^ p ^ status ^ " " ^ otr)
+      | u, None -> (u.User.jid, "")
+    in
+    let txt = " chatting with " ^ buddy ^ pres ^ " " in
     (Zed_utf8.make buddy_width (UChar.of_int 0x2500)) ^
     (Zed_utf8.singleton (UChar.of_int 0x2534)) ^
-    (Zed_utf8.make (size.cols - (succ buddy_width)) (UChar.of_int 0x2500))
+    txt ^
+    (Zed_utf8.make (size.cols - (succ buddy_width) - (String.length txt)) (UChar.of_int 0x2500))
   in
+
+  let mysession = state.session in
+  let status = User.presence_to_string mysession.User.presence in
+  let jid = User.userid state.user mysession in
+
 
   eval (
     List.flatten buddylist @ [
