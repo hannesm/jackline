@@ -247,7 +247,10 @@ let connect config user_data _ =
     include PlainSocket
   end in
   let make_tls () =
-    TLSSocket.switch (PlainSocket.get_fd socket_data) server config.trust_anchor >>= fun socket_data ->
+    (match config.trust_anchor, config.tls_fingerprint with
+     | Some x, None -> X509_lwt.authenticator (`Ca_file x)
+     | None, Some fp -> X509_lwt.authenticator (`Fingerprint fp) ) >>= fun authenticator ->
+    TLSSocket.switch (PlainSocket.get_fd socket_data) server authenticator >>= fun socket_data ->
     let module TLS_module = struct type t = Tls_lwt.Unix.t
       let socket = socket_data
       include TLSSocket

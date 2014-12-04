@@ -7,16 +7,18 @@ type t = {
   jid : JID.t ;
   port : int ;
   password : string ;
-  trust_anchor : string ;
+  trust_anchor : string option ;
+  tls_fingerprint : string option ;
   otr_config : Otr.State.config ;
 }
 
 let empty = {
-  version = 0 ;
+  version = 1 ;
   jid = JID.of_string "user@server/resource" ;
   port = 5222 ;
   password = "" ;
-  trust_anchor = "" ;
+  trust_anchor = None ;
+  tls_fingerprint = None ;
   otr_config = Otr.State.default_config
 }
 
@@ -34,8 +36,12 @@ let t_of_sexp t =
           { t with port = int_of_sexp port }
         | Sexp.List [ Sexp.Atom "password" ; Sexp.Atom password ] ->
           { t with password }
-        | Sexp.List [ Sexp.Atom "trust_anchor" ; Sexp.Atom trust_anchor ] ->
-          { t with trust_anchor }
+        | Sexp.List [ Sexp.Atom "trust_anchor" ; trust_anchor ] ->
+          (match t.version with
+           | 0 -> { t with trust_anchor = Some (string_of_sexp trust_anchor) }
+           | _ -> { t with trust_anchor = option_of_sexp string_of_sexp trust_anchor } )
+        | Sexp.List [ Sexp.Atom "tls_fingerprint" ; tls_fp ] ->
+          { t with tls_fingerprint = option_of_sexp string_of_sexp tls_fp }
         | Sexp.List [ Sexp.Atom "otr_config" ; v ] ->
           { t with otr_config = Otr.State.config_of_sexp v }
         | _ -> assert false)
@@ -51,7 +57,8 @@ let sexp_of_t t =
     "jid" , sexp_of_string (JID.string_of_jid t.jid) ;
     "port" , sexp_of_int t.port ;
     "password" , sexp_of_string t.password ;
-    "trust_anchor" , sexp_of_string t.trust_anchor ;
+    "trust_anchor" , sexp_of_option sexp_of_string t.trust_anchor ;
+    "tls_fingerprint" , sexp_of_option sexp_of_string t.tls_fingerprint ;
     "otr_config" , Otr.State.sexp_of_config t.otr_config ;
   ]
 

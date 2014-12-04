@@ -59,8 +59,7 @@ struct
     print_endline str;
     Tls_lwt.Unix.write s (Cstruct.of_string str)
 
-  let switch fd host trust_anchor =
-    X509_lwt.authenticator (`Ca_file trust_anchor) >>= fun authenticator ->
+  let switch fd host authenticator =
     let config = Tls.Config.client ~authenticator () in
     Tls_lwt.Unix.client_of_fd config ~host fd
 

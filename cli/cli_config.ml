@@ -74,8 +74,14 @@ let configure term () =
    else return_unit ) >>= fun () ->
   (new read_password term)#run >>= fun password ->
   (* trust anchor *)
-  (new read_inputline ~term ~prompt:"enter path to trust anchor: " ())#run >>= fun trust_anchor ->
-  Lwt_unix.access trust_anchor [ Unix.F_OK ; Unix.R_OK ] >>= fun () ->
+  read_yes_no term "Provide trust anchor (alternative: tls server fingerprint)?" >>= fun ta ->
+  ( if ta then
+      (new read_inputline ~term ~prompt:"enter path to trust anchor: " ())#run >>= fun trust_anchor ->
+      Lwt_unix.access trust_anchor [ Unix.F_OK ; Unix.R_OK ] >|= fun () ->
+      (Some trust_anchor, None)
+    else
+      (new read_inputline ~term ~prompt:"enter server certificate fingerprint (by running for example `openssl s_client -connect jabber.ccc.de:5222 -starttls xmpp | openssl x509 -sha256 -fingerprint -noout`): " ())#run >|= fun fp ->
+      (None, Some fp) ) >>= fun (trust_anchor, tls_fingerprint) ->
   (* otr config *)
   LTerm.fprintl term "OTR config" >>= fun () ->
   read_yes_no term "Protocol version 2 support (recommended)" >>= fun v2 ->
@@ -97,5 +103,5 @@ let configure term () =
       if error_starts then [`ERROR_START_AKE] else [] ]
   in
   let otr_config = { Otr.State.versions = versions ; Otr.State.policies = policies ; Otr.State.dsa = dsa } in
-  let config = Config.({ version = 0 ; jid ; port ; password ; trust_anchor ; otr_config }) in
+  let config = Config.({ version = 0 ; jid ; port ; password ; trust_anchor ; tls_fingerprint ; otr_config }) in
   return config
