@@ -59,24 +59,28 @@ let split_ws s =
   in
   (String.sub s 0 ws, arg)
 
-let cmd_arg = function
-  | s when String.length s > 0 && String.get s 0 = '/' ->
-    Some (split_ws (String.sub s 1 (pred (String.length s))))
-  | s -> None
+let cmd_arg input =
+  let open String in
+  let l = length input in
+  assert (l > 0) ;
+  assert (get input 0 = '/') ;
+  split_ws (sub input 1 (pred l))
 
 let topcompletion input =
-  match cmd_arg input with
-  | Some (cmd, None) when Commands.mem commands cmd ->
-    let command = Commands.find commands cmd in
-    List.map (fun f -> cmd ^ " " ^ f) (command.completion "")
-  | Some (cmd, None) ->
-    let cmds = keys () in
-    List.filter (fun f -> Zed_utf8.starts_with f cmd) cmds
-  | Some (cmd, Some arg) when Commands.mem commands cmd ->
-    let command = Commands.find commands cmd in
-    List.map (fun f -> cmd ^ " " ^ f) (command.completion arg)
-  | Some (cmd, Some arg) -> [cmd ^ " " ^ arg]
-  | None -> [input]
+  if String.(length input > 0 && get input 0 = '/') then
+    match cmd_arg input with
+    | (cmd, None) when Commands.mem commands cmd ->
+      let command = Commands.find commands cmd in
+      List.map (fun f -> cmd ^ " " ^ f) (command.completion "")
+    | (cmd, None) ->
+      let cmds = keys () in
+      List.filter (fun f -> Zed_utf8.starts_with f cmd) cmds
+    | (cmd, Some arg) when Commands.mem commands cmd ->
+      let command = Commands.find commands cmd in
+      List.map (fun f -> cmd ^ " " ^ f) (command.completion arg)
+    | (cmd, Some arg) -> [cmd ^ " " ^ arg]
+  else
+    [input]
 
 open Lwt
 
@@ -88,19 +92,19 @@ let exec input state config session_data log redraw =
     (msg, err)
   in
   match cmd_arg input with
-  | Some ("help", Some arg) when Commands.mem commands (String.trim arg) ->
+  | ("help", Some arg) when Commands.mem commands (String.trim arg) ->
     let a = String.trim arg in
     let cmd = Commands.find commands a in
     msg ("help for " ^ a) cmd.documentation >|= fun () ->
     (true, session_data)
-  | Some ("help", _) ->
+  | ("help", _) ->
     let cmds = String.concat " " (keys ()) in
     msg "available commands" cmds >|= fun () ->
     (true, session_data)
-  | Some ("quit", _) ->
+  | ("quit", _) ->
     msg "self-destruction mechanism initiated" "have a nice day" >|= fun () ->
     (false, session_data)
-  | Some x ->
+  | x ->
     (match session_data, x with
      | None, ("connect", _) ->
        let otr_config = config.Config.otr_config in
@@ -164,4 +168,3 @@ let exec input state config session_data log redraw =
          | _ -> err "don't know what you want" )
      | Some _, ("connect", _) -> err "already connected"
      | _ -> err "unknown command or not connected" ) >|= fun s -> (true, s)
-  | None -> err "shouldn't happen" >|= fun s -> (true, s)
