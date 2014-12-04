@@ -320,15 +320,15 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
                 let open Xmpp_callbacks.XMPPClient in
                 let user = fst state.active_chat in
                 let jid = user.User.jid in
-                let doit kind =
+                let doit kind m =
                   send_presence s ~jid_to:(JID.of_string jid) ~kind () >>= fun () ->
-                  msg  jid (a ^ "ed subscription")
+                  msg jid m
                 in
                 ( match a with
-                  | "allow" -> doit Subscribed
-                  | "cancel" -> doit Unsubscribed
-                  | "request" -> doit Subscribe
-                  | "request_unsubscribe" -> doit Unsubscribe
+                  | "allow" -> doit Subscribed "is allowed to receive your presence updates"
+                  | "cancel" -> doit Unsubscribed "won't receive your presence updates"
+                  | "request" -> doit Subscribe "has been asked to sent presence updates to you"
+                  | "request_unsubscribe" -> doit Unsubscribe "has been asked to no longer sent presence updates to you"
                   | _ -> err "don't know what you want" )
               | _ -> err ("unimplemented command: " ^ command)
           )  >|= fun () -> (true, session_data) ) >>= fun (cont, session_data) ->
