@@ -88,10 +88,8 @@ let make_prompt size time network state redraw =
           | Some s -> s.User.presence
         in
         let fg = match session with
-          | None -> black
-          | Some x -> match Otr.State.(x.User.otr.state.message_state) with
-            | `MSGSTATE_ENCRYPTED _ -> lgreen
-            | _ -> black
+          | Some x when User.(encrypted x.otr) -> lgreen
+          | _ -> black
         in
         let f, t =
           if u = state.user then
@@ -108,7 +106,6 @@ let make_prompt size time network state redraw =
         blinka @ [B_fg fg ; B_bg(index bg) ; S item ; E_bg ; E_fg ] @ blinkb)
       us
   in
-  (* handle overflowings: text might be too long for one row *)
 
   let chat =
     let printmsg (dir, enc, received, lt, msg) =
