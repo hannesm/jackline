@@ -1,4 +1,5 @@
 open Cli_state
+open User
 
 type command = {
   name : string ;
@@ -34,6 +35,9 @@ let _ =
   new_command
     "connect" "[/connect] connects to the server"
     (fun _ -> []) ;
+  new_command
+    "fingerprint" "[/fingerprint fingerprint] marks the current contact's OTR fingerprint as verified"
+    (fun arg -> []);
   new_command
     "status" "[/status presence message] sets your presence [one of 'free' 'away' 'dnd' 'xa' 'offline' or 'online'] and status message"
     (fun arg ->
@@ -152,6 +156,25 @@ let exec input state config session_data log redraw =
           msg arg "has been asked to sent presence updates to you" >|= fun () ->
           session_data
         with _ -> err "parse of jid failed")
+     | Some s, ("fingerprint", Some arg) -> 
+       let (remote_user,remote_session) = state.active_chat in
+       begin match remote_session with
+       | None -> err "Not in a started session"
+       | Some remote_session ->
+         if not (User.encrypted remote_session.otr) then
+           err "In a session with user, but no OTR state data recorded"
+         else
+           let manual_fp = String.lowercase (String.trim arg) in
+           remote_user.otr_fingerprints <- List.map (
+             fun (stored_fp:fingerprint) -> (
+               if stored_fp.data <> manual_fp then stored_fp
+               else
+                  {stored_fp with verified = true}
+               )
+             )
+             remote_user.otr_fingerprints ;
+           return session_data
+       end
      | Some s, ("authorization", Some arg) ->
        let open Xmpp_callbacks.XMPPClient in
        let user = fst state.active_chat in
