@@ -173,9 +173,6 @@ let make_prompt size time network state redraw =
     E_bold;
   ])
 
-let commands =
-  [ "/log"; "/connect" ; "/add" ; "/status" ; "/authorization" ; "/quit"; "/help" ]
-
 let time =
   let time, set_time = S.create (Unix.time ()) in
   (* Update the time every 60 seconds. *)
