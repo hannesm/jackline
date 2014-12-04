@@ -339,9 +339,10 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
           | None -> return_unit
           | Some x ->
             let otr_sessions = User.Users.fold (fun _ u acc ->
-                List.fold_left (fun acc s -> match s.User.otr.Otr.State.state.Otr.State.message_state with
-                    | `MSGSTATE_ENCRYPTED _ -> ((User.userid u s), s.User.otr) :: acc
-                    | _ -> acc)
+                List.fold_left (fun acc s ->
+                    if User.encrypted s.User.otr then
+                      ((User.userid u s), s.User.otr) :: acc
+                    else acc)
                   acc
                   u.User.active_sessions)
                 state.users []
@@ -364,10 +365,7 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
        else
          let ctx, out, user_out = Otr.Handshake.send_otr session.User.otr message in
          session.User.otr <- ctx ;
-         let enc = match Otr.State.(ctx.state.message_state) with
-           | `MSGSTATE_ENCRYPTED _ -> true
-           | _ -> false
-         in
+         let enc = User.encrypted ctx in
          (match user_out with
           | None -> ()
           | Some w -> session.User.messages <- (`To, enc, false, Unix.localtime (Unix.time ()), w) :: session.User.messages) ;

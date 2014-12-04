@@ -85,6 +85,11 @@ type user = {
   mutable active_sessions : session list (* not persistent *)
 }
 
+let encrypted ctx =
+  match Otr.State.(ctx.state.message_state) with
+  | `MSGSTATE_ENCRYPTED _ -> true
+  | _ -> false
+
 let userid u s = match s.resource with
   | r when r = "" -> u.jid
   | r -> u.jid ^ "/" ^ r
