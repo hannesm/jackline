@@ -160,66 +160,96 @@ let make_prompt size time network state redraw =
   in
 
   let hline =
-    let buddy, pres = match state.active_chat with
+    let buddy, pres, col, otr = match state.active_chat with
       | u, Some s ->
         let p = User.presence_to_string s.User.presence in
         let status = match s.User.status with | None -> "" | Some x -> " - " ^ x in
-        let otr = match User.fingerprint s.User.otr with
-          | fp, Some raw when User.verified_fp u raw -> " - OTR verified"
-          | fp, Some raw -> " - unverified OTR: " ^ fp
-          | fp, None -> " - no OTR"
+        let otr, col = match User.fingerprint s.User.otr with
+          | fp, Some raw when User.verified_fp u raw -> (" - OTR verified", fg_color)
+          | fp, Some raw -> (" - unverified OTR: " ^ fp, red)
+          | fp, None -> (" - no OTR", red)
         in
-        (User.userid u s, otr ^ " -- " ^ p ^ status)
-      | u, None -> (u.User.jid, "")
+        (User.userid u s, " -- " ^ p ^ status, col, otr)
+      | u, None -> (u.User.jid, "", black, "")
     in
-    let txt = " chatting with " ^ buddy ^ pres ^ " " in
-    let fill = size.cols - (succ buddy_width) in
-    let remaining = fill - (String.length txt) in
-    let pre = (Zed_utf8.make buddy_width (UChar.of_int 0x2500)) ^
-              (Zed_utf8.singleton (UChar.of_int 0x2534))
-    in
-    match compare remaining 0 with
-    | -1 -> pre ^ (String.sub txt 0 fill)
-    | 0 -> pre ^ txt
-    | 1 -> pre ^ txt ^ (Zed_utf8.make remaining) (UChar.of_int 0x2500)
+    let pre = (Zed_utf8.make buddy_width (UChar.of_int 0x2500)) ^ (Zed_utf8.singleton (UChar.of_int 0x2534)) in
+    let txt = " buddy: " ^ buddy in
+    let leftover = size.cols - (String.length txt) - buddy_width - 1 in
+    if leftover > 0 && (String.length otr) < leftover then
+      let leftover' = leftover - (String.length otr) in
+      let post =
+        if (String.length pres) < leftover' then
+          let pos = Zed_utf8.make (leftover' - (String.length pres) - 1) (UChar.of_int 0x2500) in
+          [ B_fg fg_color ; S pres ; S " " ; S pos ; E_fg ]
+        else
+          [ B_fg fg_color ; S (String.sub pres 0 leftover') ; E_fg ]
+      in
+      [ B_fg fg_color ; S pre ; S txt ; E_fg ; B_fg col ; S otr ; E_fg ] @ post
+    else if leftover > 0 then
+      [ B_fg fg_color ; S pre ; S txt ; E_fg ; B_fg col ; S (String.sub otr 0 leftover) ; E_fg ]
+    else if (String.length txt) < size.cols then
+      let pos = Zed_utf8.make (size.cols - (String.length txt) - 1) (UChar.of_int 0x2500) in
+      [ B_fg fg_color ; S txt ; S " " ; S pos ; E_fg ]
+    else
+      [ B_fg fg_color ; S (String.sub txt 0 size.cols) ; E_fg ]
   in
 
-  let mysession = state.session in
-  let status = User.presence_to_string mysession.User.presence in
-  let jid = User.userid state.user mysession in
 
+  let status =
+    let mysession = state.session in
+    let status = User.presence_to_string mysession.User.presence in
+    let jid = User.userid state.user mysession in
+    let time = Printf.sprintf "%02d:%02d" tm.Unix.tm_hour tm.Unix.tm_min in
+
+    let leftover = size.cols - (String.length jid) - 5 in
+    let jid, left =
+      if leftover > 0 then
+        ([ S "< "; B_fg lblue; S jid; E_fg; S" >─" ], leftover)
+      else if (size.cols > String.length jid) then
+        ([ B_fg blue ; S jid ; E_fg ], size.cols - String.length jid)
+      else
+        ([ B_fg blue ; S (String.sub jid 0 size.cols) ; E_fg ], 0)
+    in
+
+    let leftover' = left - (String.length status) - 5 in
+    let status, left =
+      if leftover' > 0 then
+        ([ S "[ " ;
+           B_fg (if mysession.User.presence = `Offline then lred else lgreen);
+           S status;
+           E_fg ;
+           S" ]─" ],
+         leftover')
+      else
+        ([], left)
+    in
+
+    let left = left - (String.length redraw) in
+
+    let leftover''' = left - 11 in
+    let time, left =
+      if leftover''' > 0 then
+        ([ S "─( " ; S time ; S " )─" ], leftover''')
+      else
+        ([], left)
+    in
+
+    let fill =
+      if left > 0 then
+        Zed_utf8.make left (UChar.of_int 0x2500)
+      else
+        ""
+    in
+    [ B_bold true; B_fg fg_color ] @
+    time @ jid @
+    [ S redraw ; S fill ] @
+    status @
+    [ E_fg; S"\n"; E_bold ]
+  in
 
   eval (
-    List.flatten buddylist @ [
-
-    B_fg fg_color;
-    S hline ;
-    E_fg;
-    S "\n" ;
-
-    S logs ;
-    S "\n" ;
-
-    B_bold true;
-
-    B_fg fg_color;
-    S"─( ";
-    S(Printf.sprintf "%02d:%02d" tm.Unix.tm_hour tm.Unix.tm_min);
-    S" )─< ";
-    B_fg lblue; S jid; E_fg;
-    S" >─";
-    S redraw ;
-    S(Zed_utf8.make
-        (size.cols - 22 - String.length jid - String.length status - String.length redraw)
-        (UChar.of_int 0x2500));
-    S"[ ";
-    B_fg (if mysession.User.presence = `Offline then lred else lgreen); S status; E_fg;
-    S" ]─";
-    E_fg;
-    S"\n";
-
-    E_bold;
-  ])
+    List.flatten buddylist @ hline @ [ S "\n" ; S logs ; S "\n" ] @ status
+  )
 
 let time =
   let time, set_time = S.create (Unix.time ()) in
