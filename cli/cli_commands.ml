@@ -36,10 +36,10 @@ let new_command name documentation completion =
 
 let _ =
   new_command
-    "add" "[/add jid] adds jid to your buddy list, and sends a subscription request"
+    "add" "[/add jid] adds jid to your contact list, and sends a subscription request"
     (fun _ -> []) ;
   new_command
-    "authorization" "[/authorization new] changes presence subscription of the current user to new"
+    "authorization" "[/authorization new] changes presence subscription of the current contact to new -- one of 'allow', 'cancel', 'request', 'request_unsubscribe'"
     (fun arg ->
        let subcommands = [ "allow" ; "cancel" ; "request" ; "request_unsubscribe" ] in
        List.filter (fun f -> Zed_utf8.starts_with f arg) subcommands) ;
@@ -47,7 +47,7 @@ let _ =
     "connect" "[/connect] connects to the server"
     (fun _ -> []) ;
   new_command
-    "fingerprint" "[/fingerprint fingerprint] marks the current contact's OTR fingerprint as verified"
+    "fingerprint" "[/fingerprint fingerprint] verifies the current contact's OTR fingerprint (fingerprint must match the one used in the currently established session)"
     (fun arg -> []);
   new_command
     "status" "[/status presence message] sets your presence [one of 'free' 'away' 'dnd' 'xa' 'offline' or 'online'] and status message"
@@ -172,22 +172,21 @@ let exec input state config session_data log redraw =
          match state.active_chat with
          | user, Some session when User.encrypted session.User.otr ->
            let manual_fp = string_normalize_fingerprint arg in
-           let cur_fp, raw_cur_fp = User.fingerprint session.User.otr in
-           if raw_cur_fp = manual_fp then
-             let fp = try
-                 Some (List.find
-                         (fun x -> x.User.data = manual_fp)
-                         user.User.otr_fingerprints)
-               with Not_found -> None
-             in
-             ( match fp with
-               | None -> err "fingerprint didn't match"
-               | Some x ->
-                 User.replace user { x with User.verified = true } ;
-                 msg user.User.jid "fingerprint is now verified" >|= fun () ->
-                 session_data)
-           else
-             err "provided fingerprint does not match the one of this active session"
+           ( match User.fingerprint session.User.otr with
+             | cur_fp, Some raw_cur_fp when raw_cur_fp = manual_fp ->
+               let fp = try
+                   Some (List.find
+                           (fun x -> x.User.data = manual_fp)
+                           user.User.otr_fingerprints)
+                 with Not_found -> None
+               in
+               ( match fp with
+                 | None -> err "fingerprint didn't match"
+                 | Some x ->
+                   User.replace user { x with User.verified = true } ;
+                   msg user.User.jid "fingerprint is now verified" >|= fun () ->
+                   session_data)
+             | _ -> err "provided fingerprint does not match the one of this active session" )
          | _ -> err "no active OTR session"
        end
      | Some s, ("authorization", Some arg) ->

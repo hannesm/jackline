@@ -103,15 +103,19 @@ let message_callback (t : user_data session_data) stanza =
      | None -> ()
      | Some w when w = "encrypted OTR connection established" ->
        msg `Local false true w ;
-       let fp, fps = User.find_fp user ctx in
-       let otrmsg = if fps.User.session_count = 0 then
-           "new unverified OTR fingerprint: "
-         else
-           let ver = if fps.User.verified then "verified" else "unverified" in
-           ver ^ " OTR fingerprint (used " ^ (string_of_int fps.User.session_count) ^ " times): "
-       in
-       msg `Local false true (otrmsg ^ fp) ;
-       User.insert_inc user session.User.resource fps ;
+       ( match User.find_fp user ctx with
+         | fp, Some fps ->
+           let otrmsg =
+             if fps.User.session_count = 0 then
+               "new unverified OTR fingerprint: "
+             else
+               let ver = if fps.User.verified then "verified" else "unverified" in
+               ver ^ " OTR fingerprint (used " ^ (string_of_int fps.User.session_count) ^ " times): "
+           in
+           msg `Local false true (otrmsg ^ fp) ;
+           User.insert_inc user session.User.resource fps ;
+         | fp, None ->
+           msg `Local false true "shouldn't happen - OTR established but couldn't find fingerprint" )
      | Some w -> msg `Local false true w);
     (match received with
      | None -> ()
