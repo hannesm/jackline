@@ -6,6 +6,7 @@ type ui_state = {
   mutable active_chat : (User.user * User.session option) ; (* modified by user (scrolling through buddies) *)
   users : User.users ; (* extended by xmpp callbacks *)
   mutable notifications : User.user list ;
+  mutable show_offline : bool ;
 }
 
 let empty_ui_state user session users = {
@@ -14,5 +15,6 @@ let empty_ui_state user session users = {
   log = [] ;
   active_chat = (user, Some session) ;
   users ;
-  notifications = []
+  notifications = [] ;
+  show_offline = true ;
 }

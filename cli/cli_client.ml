@@ -81,29 +81,32 @@ let make_prompt size time network state redraw =
   let buddy_width = 24 in
 
   let buddies =
-    let us = User.keys state.users in
-    List.map (fun id ->
+    List.fold_right (fun id acc ->
         let u = User.Users.find state.users id in
         let session = User.good_session u in
-        let s = match session with
+        let presence = match session with
           | None -> `Offline
           | Some s -> s.User.presence
         in
         let fg = color_session u state.user session in
+        let bg = if (fst state.active_chat) = u then 7 else 15 in
         let f, t =
           if u = state.user then
             ("{", "}")
           else
             User.subscription_to_chars u.User.subscription
         in
-        let bg = if (fst state.active_chat) = u then 7 else 15 in
         let item =
-          let data = Printf.sprintf " %s%s%s %s" f (User.presence_to_char s) t id in
+          let data = Printf.sprintf " %s%s%s %s" f (User.presence_to_char presence) t id in
           pad buddy_width data
         in
-        let blinka, blinkb = if List.mem u state.notifications then ([ B_blink true ], [ E_blink ]) else ([], []) in
-        blinka @ [B_fg fg ; B_bg(index bg) ; S item ; E_bg ; E_fg ] @ blinkb)
-      us
+        let show = [B_fg fg ; B_bg(index bg) ; S item ; E_bg ; E_fg ] in
+        match List.mem u state.notifications, state.show_offline, presence with
+        | true,  _    , _        -> (B_blink true :: show @ [ E_blink ]) :: acc
+        | false, true , _        -> show :: acc
+        | false, false, `Offline -> acc
+        | false, false, _        -> show :: acc)
+      (User.keys state.users) []
   in
 
   let chat =
@@ -199,6 +202,8 @@ let time =
 
 let up = UChar.of_int 0x2500
 let down = UChar.of_int 0x2501
+let f5 = UChar.of_int 0x2502
+let f12 = UChar.of_int 0x2503
 
 let redraw, force_redraw =
   (* this is just an ugly hack which should be removed *)
@@ -241,12 +246,18 @@ class read_line ~term ~network ~history ~state = object(self)
       navigate_buddy_list state false
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = up ->
       navigate_buddy_list state true
+    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = f5 ->
+      state.show_offline <- not state.show_offline
+    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = f12 ->
+      ()
     | action ->
       super#send_action action
 
   initializer
-    LTerm_read_line.bind [LTerm_key.({ control = false; meta = false; shift = false; code = Prev_page })] [LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert up))];
-    LTerm_read_line.bind [LTerm_key.({ control = false; meta = false; shift = false; code = Next_page })] [LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert down))];
+    LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = false; code = Prev_page })] [Edit (LTerm_edit.Zed (Zed_edit.Insert up))]);
+    LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = false; code = Next_page })] [Edit (LTerm_edit.Zed (Zed_edit.Insert down))]);
+    LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = false; code = F5 })] [Edit (LTerm_edit.Zed (Zed_edit.Insert f5))]);
+    LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = false; code = F12 })] [Edit (LTerm_edit.Zed (Zed_edit.Insert f12))]);
     self#set_prompt (S.l4 (fun size time network redraw -> make_prompt size time network state redraw)
                        self#size time network redraw)
 end
