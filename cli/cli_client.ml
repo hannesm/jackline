@@ -60,28 +60,27 @@ let show_buddies state =
       | false, false, _        -> id :: acc)
     (User.keys state.users) []
 
+let rec line_wrap ~max_length entries acc : string list =
+  let open String in
+  match entries with
+  | entry::remaining when contains entry '\n' ->
+    let part1     = sub entry 0 (index entry '\n') in
+    let part1_len = 1 + length part1 in (* +1: account for \n *)
+    let part2     = "  " ^ sub entry part1_len ((length entry) - part1_len) in
+    let acc       = if 0 <> length (trim part1) then part1::acc else acc
+    and remaining = if 0 <> length (trim part2) then part2::remaining else remaining
+    in
+    line_wrap ~max_length remaining acc
+  | entry::remaining when (length entry) > max_length ->
+    let part1 = sub entry 0 max_length
+    and part2 = "  " ^ sub entry max_length ((length entry) - max_length)
+    in
+    line_wrap ~max_length (part2::remaining) (part1::acc)
+  | entry::remaining ->
+    line_wrap ~max_length remaining (entry::acc)
+  | [] -> acc
+
 let make_prompt size time network state redraw =
-
-  let rec line_wrap ~max_length ent acc : string list =
-    match ent with
-    | entry::remaining when String.contains entry '\n' ->
-      let part1     = String.sub entry 0 (String.index entry '\n') in
-      let part1_len = 1 + String.length part1 in (* +1: account for \n *)
-      let part2    = "  " ^ String.sub entry part1_len ((String.length entry) - part1_len) in
-      let acc       = if 0 <> String.length (String.trim part1) then (part1::acc) else acc in
-      let remaining = if 0 <> String.length (String.trim part2) then (part2::remaining) else remaining
-      in
-          line_wrap ~max_length remaining acc
-    | entry::remaining when (String.length entry) > max_length ->
-        let part1 = String.sub entry 0 max_length
-        and part2 = "  " ^ String.sub entry max_length ((String.length entry) - max_length)
-        in
-          line_wrap ~max_length (part2::remaining) (part1::acc)
-    | entry::remaining ->
-        line_wrap ~max_length remaining (entry::acc)
-    | [] -> acc
-  in
-
   let tm = Unix.localtime time in
 
   (* network should be an event, then I wouldn't need a check here *)
