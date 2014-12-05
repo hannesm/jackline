@@ -88,21 +88,21 @@ let user_session stanza user_data =
 
 let message_callback (t : user_data session_data) stanza =
   let user, session = user_session stanza t.user_data in
-  let msg dir enc received txt =
-    let message = (dir, enc, received, Unix.localtime (Unix.time ()), txt) in
+  let msg dir enc txt =
+    let message = (dir, enc, true, Unix.localtime (Unix.time ()), txt) in
     session.User.messages <- message :: session.User.messages ;
     t.user_data.notify user
   in
   match stanza.content.body with
   | None ->
-    msg `Local false true "**empty message**" ;
+    msg `Local false "**empty message**" ;
     return_unit
   | Some v ->
     let ctx, out, user_data, received = Otr.Handshake.handle session.User.otr v in
     (match user_data with
-     | None -> msg `Local false true "empty OTR message"
+     | None -> msg `Local false "empty OTR message"
      | Some w when w = "encrypted OTR connection established" ->
-       msg `Local false true w ;
+       msg `Local false w ;
        ( match User.find_fp user ctx with
          | fp, Some fps ->
            let verified_key = List.exists (fun x -> x.User.verified) user.User.otr_fingerprints in
@@ -110,18 +110,19 @@ let message_callback (t : user_data session_data) stanza =
            let otrmsg =
              match verified_key, fps.User.verified, fps.User.session_count with
              | _, true, _ -> "verified encrypted OTR connection"
-             | true, false, 0 -> "BREAKIN ATTEMPT? unverified OTR fingerprint (verified key is present)! " ^ verify
+             | true, false, 0 -> "BREAKIN ATTEMPT? unverified new OTR fingerprint (verified key is present)! " ^ verify
              | true, false, n -> "unverified OTR fingerprint (used " ^ (string_of_int n) ^ " times), but other verified key exists for user! please " ^ verify
+             | false, false, 0 -> "new unverified key! please " ^ verify
              | false, false, n -> "unverified key (used " ^ (string_of_int n) ^ " times). please " ^ verify
            in
-           msg `Local false true otrmsg ;
+           msg `Local false otrmsg ;
            User.insert_inc user session.User.resource fps ;
          | fp, None ->
-           msg `Local false true "shouldn't happen - OTR established but couldn't find fingerprint" )
-     | Some w -> msg `Local false true w);
+           msg `Local false "shouldn't happen - OTR established but couldn't find fingerprint" )
+     | Some w -> msg `Local false w);
     (match received with
      | None -> ()
-     | Some c -> msg `From true true c) ;
+     | Some c -> msg `From true c) ;
     session.User.otr <- ctx ;
     match out with
     | None -> return ()
