@@ -262,7 +262,8 @@ class read_line ~term ~network ~history ~state = object(self)
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = up ->
       navigate_buddy_list state true
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = f5 ->
-      state.show_offline <- not state.show_offline
+      state.show_offline <- not state.show_offline ;
+      force_redraw ()
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = f12 ->
       ()
     | action ->
