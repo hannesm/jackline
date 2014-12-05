@@ -102,19 +102,29 @@ let fingerprint otr =
   | None -> ("No OTR", "")
   | Some x -> hex (Otr.Crypto.OtrDsa.fingerprint x)
 
-let insert_inc u r fp =
+let replace u fp =
   u.otr_fingerprints <-
+    fp :: (List.filter (fun x -> x.data <> fp.data) u.otr_fingerprints)
+
+let insert_inc u r fp =
+  replace u
     { fp with
       session_count = succ fp.session_count ;
       resources = r :: (List.filter (fun x -> x <> r) fp.resources)
-    } :: (List.filter (fun x -> x.data <> fp.data) u.otr_fingerprints)
+    }
+
+let find_raw_fp u raw =
+  try List.find (fun x -> x.data = raw) u.otr_fingerprints with
+    Not_found -> { data = raw ; verified = false ; resources = []; session_count = 0 }
 
 let find_fp u otr =
   let fp, raw = fingerprint otr in
-  let fps = try List.find (fun x -> x.data = raw) u.otr_fingerprints with
-      Not_found -> { data = raw ; verified = false ; resources = []; session_count = 0 }
-  in
+  let fps = find_raw_fp u raw in
   (fp, fps)
+
+let verified_fp u raw =
+  let fps = find_raw_fp u raw in
+  fps.verified
 
 
 let empty = {
