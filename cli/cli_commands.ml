@@ -1,5 +1,4 @@
 open Cli_state
-open User
 
 let string_normalize_fingerprint fpstr =
   let fpstr = String.lowercase (String.trim fpstr) in
@@ -168,24 +167,28 @@ let exec input state config session_data log redraw =
           msg arg "has been asked to sent presence updates to you" >|= fun () ->
           session_data
         with _ -> err "parse of jid failed")
-     | Some s, ("fingerprint", Some arg) -> 
-       let (remote_user,remote_session) = state.active_chat in
-       begin match remote_session with
-       | None -> err "Not in a started session"
-       | Some remote_session ->
-         if not (User.encrypted remote_session.otr) then
-           err "In a session with user, but no OTR state data recorded"
-         else
+     | Some s, ("fingerprint", Some arg) ->
+       begin
+         match state.active_chat with
+         | user, Some session when User.encrypted session.User.otr ->
            let manual_fp = string_normalize_fingerprint arg in
-           remote_user.otr_fingerprints <- List.map (
-             fun (stored_fp:fingerprint) -> (
-               if stored_fp.data <> manual_fp then stored_fp
-               else
-                  {stored_fp with verified = true}
-               )
-             )
-             remote_user.otr_fingerprints ;
-           return session_data
+           let cur_fp, raw_cur_fp = User.fingerprint session.User.otr in
+           if raw_cur_fp = manual_fp then
+             let fp = try
+                 Some (List.find
+                         (fun x -> x.User.data = manual_fp)
+                         user.User.otr_fingerprints)
+               with Not_found -> None
+             in
+             ( match fp with
+               | None -> err "fingerprint didn't match"
+               | Some x ->
+                 User.replace user { x with User.verified = true } ;
+                 msg user.User.jid "fingerprint is now verified" >|= fun () ->
+                 session_data)
+           else
+             err "provided fingerprint does not match the one of this active session"
+         | _ -> err "no active OTR session"
        end
      | Some s, ("authorization", Some arg) ->
        let open Xmpp_callbacks.XMPPClient in
