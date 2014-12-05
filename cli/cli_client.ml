@@ -139,8 +139,9 @@ let make_prompt size time network state redraw =
       | u, Some s ->
         let p = User.presence_to_string s.User.presence in
         let status = match s.User.status with | None -> "" | Some x -> " - " ^ x in
-        let otr, _ = User.fingerprint s.User.otr in
-        (User.userid u s, " - " ^ p ^ status ^ " " ^ otr)
+        let otr, raw = User.fingerprint s.User.otr in
+        let verified = if User.verified_fp u raw then "verified" else "not verified" in
+        (User.userid u s, " - " ^ p ^ status ^ " " ^ otr ^ " " ^ verified)
       | u, None -> (u.User.jid, "")
     in
     let txt = " chatting with " ^ buddy ^ pres ^ " " in
