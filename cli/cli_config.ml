@@ -61,12 +61,6 @@ let configure term () =
   (match jid with
    | None -> fail (Invalid_argument "bad jabber ID")
    | Some x -> return x) >>= fun jid ->
-  let { JID.ldomain } = jid in
-  Lwt_unix.getprotobyname "tcp" >>= fun tcp ->
-  Lwt_unix.getaddrinfo ldomain "xmpp-client" [Lwt_unix.AI_PROTOCOL tcp.Lwt_unix.p_proto] >>= fun r ->
-  (match r with
-   | []    -> fail (Invalid_argument ("no address for " ^ ldomain))
-   | ai::_ -> return ai.Lwt_unix.ai_addr ) >>= fun _addr ->
   (new read_inputline ~term ~prompt:"enter port [5222]: " ())#run >>= fun port ->
   let port = if port = "" then 5222 else int_of_string port in
   (if port <= 0 || port > 65535 then
