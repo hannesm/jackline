@@ -1,6 +1,18 @@
 open Cli_state
 open User
 
+let string_normalize_fingerprint fpstr =
+  let fpstr = String.lowercase (String.trim fpstr) in
+  let rec worker ~fpstr ~acclst = function
+  | -1 -> String.concat "" acclst
+  | i -> worker ~fpstr ~acclst:(
+    (match (String.get fpstr i) with
+     | ' '| ':' -> ""
+     | c -> String.make 1 c
+    )::acclst) (i-1)
+  in
+    worker ~fpstr ~acclst:[] ((String.length fpstr)-1)
+
 type command = {
   name : string ;
   documentation : string ;
@@ -164,7 +176,7 @@ let exec input state config session_data log redraw =
          if not (User.encrypted remote_session.otr) then
            err "In a session with user, but no OTR state data recorded"
          else
-           let manual_fp = String.lowercase (String.trim arg) in
+           let manual_fp = string_normalize_fingerprint arg in
            remote_user.otr_fingerprints <- List.map (
              fun (stored_fp:fingerprint) -> (
                if stored_fp.data <> manual_fp then stored_fp
