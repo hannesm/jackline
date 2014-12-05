@@ -42,7 +42,7 @@ Get OCaml (4.02.1 preferred), get opam (1.2!), gmp is also needed
 If you have an older OCaml compiler, get opam and run `opam switch 4.02.1`
 
 Run the following commands:
-opam repo add xmpp git@github.com:hannesm/xmpp-opam.git
-opam install xmpp_client
+- `opam repo add xmpp github.com:hannesm/xmpp-opam.git`
+- `opam install xmpp_client`
 
-Now you should have a ~/.opam/system/bin/cli_client (or ~/.opam/4.02.1/bin/cli_client)
+Now you should have a `~/.opam/system/bin/cli_client` (or `~/.opam/4.02.1/bin/cli_client`) living in your `PATH`... interactive configuration will appear if you don't have a `~/.config/ocaml-xmpp-client/config.sexp`
