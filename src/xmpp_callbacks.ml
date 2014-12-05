@@ -225,8 +225,9 @@ let session_callback t =
               let ask = match item.Roster.ask with | Some _ -> [ `Pending ] | None -> [] in
               app @ ask
             in
+            let name = if item.Roster.name = "" then None else Some item.Roster.name in
             let t = { user with
-                      User.name = item.Roster.name ;
+                      User.name = name ;
                       User.groups = item.Roster.group ;
                       subscription ; props }
             in

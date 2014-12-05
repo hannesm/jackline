@@ -76,7 +76,7 @@ type props = [
 ]
 
 type user = {
-  name : string ; (* TODO: option *)
+  name : string option ;
   jid : string ; (* user@domain, unique key *)
   groups : string list ;
   subscription : subscription ;
@@ -130,7 +130,7 @@ let verified_fp u raw =
 
 
 let empty = {
-  name = "" ;
+  name = None ;
   jid = "a@b" ;
   groups = [] ;
   subscription = `None ;
@@ -186,11 +186,17 @@ let good_session user =
     else
       Some (List.hd (List.sort (fun a b -> compare b.priority a.priority) s))
 
-let t_of_sexp t =
+let t_of_sexp t version =
   match t with
   | Sexp.List l ->
-      List.fold_left (fun t v -> match v with
-        | Sexp.List [ Sexp.Atom "name" ; Sexp.Atom name ] -> { t with name }
+      let u = List.fold_left (fun t v -> match v with
+        | Sexp.List [ Sexp.Atom "name" ; nam ] ->
+          let name = match version with
+            | 0 -> let str = string_of_sexp nam in
+                   if str = "" then None else Some str
+            | n -> option_of_sexp string_of_sexp nam
+          in
+          { t with name }
         | Sexp.List [ Sexp.Atom "jid" ; Sexp.Atom jid ] ->
           { t with jid }
         | Sexp.List [ Sexp.Atom "groups" ; gps ] ->
@@ -202,7 +208,9 @@ let t_of_sexp t =
           { t with otr_fingerprints = list_of_sexp fingerprint_of_sexp fps }
         | _ -> assert false)
         empty l
-  | _ -> Printf.printf "unknown t\n" ; empty
+      in
+      Some u
+  | _ -> Printf.printf "ignoring unknown user\n" ; None
 
 
 let record kvs =
@@ -210,7 +218,7 @@ let record kvs =
 
 let sexp_of_t t =
   record [
-    "name" , sexp_of_string t.name ;
+    "name" , sexp_of_option sexp_of_string t.name ;
     "jid" , sexp_of_string t.jid ;
     "groups", sexp_of_list sexp_of_string t.groups ;
     "subscription", sexp_of_subscription t.subscription ;
@@ -223,7 +231,7 @@ let load_users bytes =
        | Sexp.List [ ver ; Sexp.List users ] ->
          let version = int_of_sexp ver in
          List.iter (fun s ->
-             match try Some (t_of_sexp s) with _ -> None with
+             match try t_of_sexp s version with _ -> None with
                | None -> Printf.printf "parse failure %s\n%!" (Sexp.to_string_hum s)
                | Some u ->
                  let id = u.jid in
@@ -238,4 +246,4 @@ let load_users bytes =
 
 let store_users users =
   let users = Users.fold (fun _ s acc -> (sexp_of_t s) :: acc) users [] in
-  Sexp.to_string_mach (Sexp.List [ sexp_of_int 0 ; Sexp.List users ])
+  Sexp.to_string_mach (Sexp.List [ sexp_of_int 1 ; Sexp.List users ])
