@@ -44,6 +44,22 @@ let color_session u su= function
   | Some _ -> red
   | None -> black
 
+let show_buddies state =
+  List.fold_right (fun id acc ->
+      let u = User.Users.find state.users id in
+      let session = User.good_session u in
+      let presence = match session with
+        | None -> `Offline
+        | Some s -> s.User.presence
+      in
+      let rly_show = u = state.user || u = fst state.active_chat || List.mem u state.notifications in
+      match rly_show, state.show_offline, presence with
+      | true,  _    , _        -> id :: acc
+      | false, true , _        -> id :: acc
+      | false, false, `Offline -> acc
+      | false, false, _        -> id :: acc)
+    (User.keys state.users) []
+
 let make_prompt size time network state redraw =
 
   let rec line_wrap ~max_length ent acc : string list =
@@ -81,7 +97,7 @@ let make_prompt size time network state redraw =
   let buddy_width = 24 in
 
   let buddies =
-    List.fold_right (fun id acc ->
+    List.map (fun id ->
         let u = User.Users.find state.users id in
         let session = User.good_session u in
         let presence = match session with
@@ -101,12 +117,11 @@ let make_prompt size time network state redraw =
           pad buddy_width data
         in
         let show = [B_fg fg ; B_bg(index bg) ; S item ; E_bg ; E_fg ] in
-        match List.mem u state.notifications, state.show_offline, presence with
-        | true,  _    , _        -> (B_blink true :: show @ [ E_blink ]) :: acc
-        | false, true , _        -> show :: acc
-        | false, false, `Offline -> acc
-        | false, false, _        -> show :: acc)
-      (User.keys state.users) []
+        if List.mem u state.notifications then
+          B_blink true :: show @ [ E_blink ]
+        else
+          show)
+      (show_buddies state)
   in
 
   let chat =
@@ -211,7 +226,7 @@ let redraw, force_redraw =
   (a, fun () -> b "bla" ; b "")
 
 let navigate_buddy_list state direction (* true - up ; false - down *) =
-  let userlist = User.keys state.users in
+  let userlist = show_buddies state in
   let active_idx = find_index (fst state.active_chat).User.jid 0 userlist in
   let user_idx =
     if (not direction) && List.length userlist > (succ active_idx) then
