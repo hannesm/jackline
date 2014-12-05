@@ -105,14 +105,16 @@ let message_callback (t : user_data session_data) stanza =
        msg `Local false true w ;
        ( match User.find_fp user ctx with
          | fp, Some fps ->
+           let verified_key = List.exists (fun x -> x.User.verified) user.User.otr_fingerprints in
+           let verify = "verify over secondary channel (and type /fingerprint fp)" in
            let otrmsg =
-             if fps.User.session_count = 0 then
-               "new unverified OTR fingerprint: "
-             else
-               let ver = if fps.User.verified then "verified" else "unverified" in
-               ver ^ " OTR fingerprint (used " ^ (string_of_int fps.User.session_count) ^ " times): "
+             match verified_key, fps.User.verified, fps.User.session_count with
+             | _, true, _ -> "verified encrypted OTR connection"
+             | true, false, 0 -> "BREAKIN ATTEMPT? unverified OTR fingerprint (verified key is present)! " ^ verify
+             | true, false, n -> "unverified OTR fingerprint (used " ^ (string_of_int n) ^ " times), but other verified key exists for user! please " ^ verify
+             | false, false, n -> "unverified key (used " ^ (string_of_int n) ^ " times). please " ^ verify
            in
-           msg `Local false true (otrmsg ^ fp) ;
+           msg `Local false true otrmsg ;
            User.insert_inc user session.User.resource fps ;
          | fp, None ->
            msg `Local false true "shouldn't happen - OTR established but couldn't find fingerprint" )
