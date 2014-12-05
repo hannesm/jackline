@@ -34,3 +34,15 @@ Why should you trust this? Well, first of all whom do you trust? And why? Did yo
 OCaml is (compared to C) a game changer: no manual memory management, I stick to a pure (immutable and declarative) coding style (as usual, it can be improved). Some auditing and black box testing was done against our TLS stack.
 
 OPAM is the OCaml package manager, and not directly needed, but very convenient for installation and updating. [It lacks package signing](https://github.com/ocaml/opam/issues/423)!
+
+How to build
+============
+
+Get OCaml (4.02.1 preferred), get opam (1.2!), gmp is also needed
+If you have an older OCaml compiler, get opam and run `opam switch 4.02.1`
+
+Run the following commands:
+opam repo add xmpp git@github.com:hannesm/xmpp-opam.git
+opam install xmpp_client
+
+Now you should have a ~/.opam/system/bin/cli_client (or ~/.opam/4.02.1/bin/cli_client)
