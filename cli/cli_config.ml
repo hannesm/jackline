@@ -26,24 +26,12 @@ class read_password term = object(self)
     self#set_prompt (S.const (LTerm_text.of_string "password: "))
 end
 
-let rec read_char term =
-  LTerm.read_event term >>= function
-    | LTerm_event.Key { LTerm_key.code = LTerm_key.Char ch } ->
-        return ch
-    | _ ->
-        read_char term
-
 let rec read_yes_no term msg =
-  LTerm.fprint term (msg ^ " [answer 'y' or 'n']: ") >>= fun () ->
-  read_char term >|= Zed_utf8.singleton >>= fun ch ->
-  match ch with
-    | "y" ->
-        return true
-    | "n" ->
-        return false
-    | _ ->
-        LTerm.fprintl term "Please enter 'y' or 'n'!" >>= fun () ->
-        read_yes_no term msg
+  (new read_inputline ~term ~prompt:(msg ^ " [answer 'y' or 'n']: ") ())#run >>= fun res ->
+  match res with
+  | "Y" | "y" | "Yes" | "yes" -> return true
+  | "N" | "n" | "No"  | "no"  -> return false
+  | _ -> read_yes_no term msg
 
 let exactly_one char s =
   String.contains s char &&
