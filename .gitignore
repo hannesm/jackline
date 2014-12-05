@@ -7,9 +7,10 @@
 *.cmx
 *.cmxs
 *.cmxa
+*.swp
 _build
 setup.data
 setup.log
 *byte
-*native
+*.native
 *core
