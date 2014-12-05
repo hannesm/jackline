@@ -166,10 +166,15 @@ let make_prompt size time network state redraw =
       | u, None -> (u.User.jid, "")
     in
     let txt = " chatting with " ^ buddy ^ pres ^ " " in
-    (Zed_utf8.make buddy_width (UChar.of_int 0x2500)) ^
-    (Zed_utf8.singleton (UChar.of_int 0x2534)) ^
-    txt ^
-    (Zed_utf8.make (size.cols - (succ buddy_width) - (String.length txt)) (UChar.of_int 0x2500))
+    let fill = size.cols - (succ buddy_width) in
+    let remaining = fill - (String.length txt) in
+    let pre = (Zed_utf8.make buddy_width (UChar.of_int 0x2500)) ^
+              (Zed_utf8.singleton (UChar.of_int 0x2534))
+    in
+    match compare remaining 0 with
+    | -1 -> pre ^ (String.sub txt 0 fill)
+    | 0 -> pre ^ txt
+    | 1 -> pre ^ txt ^ (Zed_utf8.make remaining) (UChar.of_int 0x2500)
   in
 
   let mysession = state.session in
