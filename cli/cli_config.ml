@@ -90,5 +90,5 @@ let configure term () =
       if error_starts then [`ERROR_START_AKE] else [] ]
   in
   let otr_config = { Otr.State.versions = versions ; Otr.State.policies = policies ; Otr.State.dsa = dsa } in
-  let config = Config.({ version = 0 ; jid ; port ; password ; trust_anchor ; tls_fingerprint ; otr_config }) in
+  let config = Config.({ version = 1 ; jid ; port ; password ; trust_anchor ; tls_fingerprint ; otr_config }) in
   return config
