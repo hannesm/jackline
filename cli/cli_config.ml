@@ -61,6 +61,7 @@ let configure term () =
   (match jid with
    | None -> fail (Invalid_argument "bad jabber ID")
    | Some x -> return x) >>= fun jid ->
+  let { JID.ldomain } = jid in
   (new read_inputline ~term ~prompt:"enter port [5222]: " ())#run >>= fun port ->
   let port = if port = "" then 5222 else int_of_string port in
   (if port <= 0 || port > 65535 then
@@ -70,12 +71,16 @@ let configure term () =
   (* trust anchor *)
   read_yes_no term "Provide trust anchor (alternative: tls server fingerprint)?" >>= fun ta ->
   ( if ta then
-      (new read_inputline ~term ~prompt:"enter path to trust anchor: " ())#run >>= fun trust_anchor ->
-      Lwt_unix.access trust_anchor [ Unix.F_OK ; Unix.R_OK ] >|= fun () ->
-      (Some trust_anchor, None)
+      begin
+        (new read_inputline ~term ~prompt:"enter path to trust anchor: " ())#run >>= fun trust_anchor ->
+        Lwt_unix.access trust_anchor [ Unix.F_OK ; Unix.R_OK ] >|= fun () ->
+        (Some trust_anchor, None)
+      end
     else
-      (new read_inputline ~term ~prompt:"enter server certificate fingerprint (by running for example `openssl s_client -connect jabber.ccc.de:5222 -starttls xmpp | openssl x509 -sha256 -fingerprint -noout`): " ())#run >|= fun fp ->
-      (None, Some fp) ) >>= fun (trust_anchor, tls_fingerprint) ->
+      begin
+        (new read_inputline ~term ~prompt:("enter server certificate fingerprint (by running for example `openssl s_client -connect " ^ ldomain ^ ":" ^ (string_of_int port) ^ " -starttls xmpp | openssl x509 -sha256 -fingerprint -noout`): ") ())#run >|= fun fp ->
+        (None, Some fp)
+      end ) >>= fun (trust_anchor, tls_fingerprint) ->
   (* otr config *)
   LTerm.fprintl term "OTR config" >>= fun () ->
   read_yes_no term "Protocol version 2 support (recommended)" >>= fun v2 ->
