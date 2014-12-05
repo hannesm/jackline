@@ -114,7 +114,7 @@ let exec input state config session_data log redraw =
     (true, session_data)
   | ("help", _) ->
     let cmds = String.concat " " (keys ()) in
-    msg "available commands" cmds >|= fun () ->
+    msg "available commands (try [/help cmd])" cmds >|= fun () ->
     (true, session_data)
   | ("quit", _) ->
     msg "self-destruction mechanism initiated" "have a nice day" >|= fun () ->
