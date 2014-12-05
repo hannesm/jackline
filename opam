@@ -1,0 +1,29 @@
+opam-version: "1.2"
+name:         "xmpp_client"
+version:      "0.1.0"
+homepage:     "https://github.com/hannesm/xmpp-client"
+dev-repo:     "https://github.com/hannesm/xmpp-client.git"
+bug-reports:  "https://github.com/hannesm/xmpp-client/issues"
+author:       ["Hannes Mehnert <hannes@mehnert.org>"]
+maintainer:   ["Hannes Mehnert <hannes@mehnert.org>"]
+license:      "BSD2"
+
+build: [
+  ["ocaml" "setup.ml" "-configure" "--prefix" prefix]
+  ["ocaml" "setup.ml" "-build"]
+]
+install: ["ocaml" "setup.ml" "-install"]
+remove: ["ocamlfind" "remove" "xmpp_client"]
+
+depends: [
+  "ocamlfind"
+  "erm_xmpp" {>= "0.3"}
+  "tls" {>= "0.2.1"}
+  "x509" {>= "0.2.1"}
+  "lwt"
+  "otr"
+  "lambda-term"
+  "react"
+  "sexplib"
+  "hex"
+]

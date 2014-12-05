@@ -25,7 +25,7 @@ Library "xmpp_client_cli"
 
 Executable "cli_client"
   Path            : cli/
-  Install         : false
+  Install         : true
   CompiledObject  : native
   MainIs          : cli_main.ml
   BuildDepends    : lambda-term, react, xmpp_client_cli, xmpp_client
