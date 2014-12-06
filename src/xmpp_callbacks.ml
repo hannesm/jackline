@@ -109,9 +109,9 @@ let message_callback (t : user_data session_data) stanza =
            let verify = "verify over secondary channel (and type /fingerprint fp)" in
            let otrmsg =
              match verified_key, fps.User.verified, fps.User.session_count with
-             | _, true, _ -> "verified encrypted OTR connection"
-             | true, false, 0 -> "BREAKIN ATTEMPT? unverified new OTR fingerprint (verified key is present)! " ^ verify
-             | true, false, n -> "unverified OTR fingerprint (used " ^ (string_of_int n) ^ " times), but other verified key exists for user! please " ^ verify
+             | _, true, _ -> "verified OTR fingerprint"
+             | true, false, 0 -> "POSSIBLE BREAKIN ATTEMPT! new unverified OTR fingerprint, verified fingerprint present for contact! " ^ verify
+             | true, false, n -> "unverified OTR fingerprint (used " ^ (string_of_int n) ^ " times), verified fingerprint present for contact! please " ^ verify
              | false, false, 0 -> "new unverified key! please " ^ verify
              | false, false, n -> "unverified key (used " ^ (string_of_int n) ^ " times). please " ^ verify
            in
