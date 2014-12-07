@@ -1,6 +1,8 @@
 XMPP-Client
 ===========
 
+This is unreleased alpha software... Testers and feedback welcome!
+
 (active: grey bg, encrypted OTR session: green fg, subscription status via `?` (not for specific side), `[`, `]` (subscribed), `{}` (self-contact))
 ![screenshot](http://berlin.ccc.de/~hannes/cli8b.png)
 
@@ -37,6 +39,8 @@ OPAM is the OCaml package manager, and not directly needed, but very convenient 
 
 How to build
 ============
+
+First be aware that this is unreleased alpha software. Bug reports are welcome (pull requests as well).
 
 Get OCaml (4.02.1 preferred), get opam (1.2!), gmp is also needed
 If you have an older OCaml compiler, get opam and run `opam switch 4.02.1`
