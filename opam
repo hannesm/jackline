@@ -13,8 +13,11 @@ build: [
   ["ocaml" "setup.ml" "-build"]
 ]
 install: ["ocaml" "setup.ml" "-install"]
-remove: ["ocamlfind" "remove" "xmpp_client"]
-
+remove: [
+  ["ocamlfind" "remove" "xmpp_client"]
+  ["ocamlfind" "remove" "xmpp_client_cli"]
+  ["rm" "-f" "%{bin}%/cli_client"]
+]
 depends: [
   "ocamlfind"
   "erm_xmpp" {>= "0.3"}
