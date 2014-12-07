@@ -197,7 +197,7 @@ let exec input state config session_data log redraw =
          send_presence s ~jid_to:(JID.of_string jid) ~kind () >>= fun () ->
          msg jid m >|= fun () -> session_data
        in
-       ( match arg with
+       ( match String.trim arg with
          | "allow" -> doit Subscribed "is allowed to receive your presence updates"
          | "cancel" -> doit Unsubscribed "won't receive your presence updates"
          | "request" -> doit Subscribe "has been asked to sent presence updates to you"
