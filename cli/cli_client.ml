@@ -361,23 +361,28 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
         ) >|= fun () -> state
     | Some message when String.length message > 0 ->
        LTerm_history.add hist message;
-       (match state.active_chat with
-         | (user, _) when user = state.user -> return_unit
-         | (user, None) ->
-           s_n (Unix.localtime (Unix.time ()), "error", "no active session, cannot send") ;
-           return_unit
-         | (user, Some session) ->
+       let err data = s_n (Unix.localtime (Unix.time ()), "error", data) ; return_unit in
+       ( match state.active_chat, session_data with
+         | (user, _), _ when user = state.user -> return_unit
+         | (user, None), _ -> err "no active session, cannot send"
+         | (user, Some session), Some x ->
            let ctx, out, user_out = Otr.Handshake.send_otr session.User.otr message in
            session.User.otr <- ctx ;
-           let enc = User.encrypted ctx in
+           let add_msg direction enc data =
+             let msg =
+               let now = Unix.localtime (Unix.time ()) in
+               (direction, enc, false, now, data)
+             in
+             session.User.messages <- msg :: session.User.messages
+           in
            (match user_out with
-            | None -> ()
-            | Some w -> session.User.messages <- (`To, enc, false, Unix.localtime (Unix.time ()), w) :: session.User.messages) ;
-           (match session_data with
-            | None -> s_n (Unix.localtime (Unix.time ()), "error", "not connected, cannot send: " ^ message) ; return_unit
-            | Some x -> Xmpp_callbacks.XMPPClient.send_message x
-                          ~jid_to:(JID.of_string user.User.jid)
-                          ?body:out () ) ) >>= fun () ->
+            | `Warning msg -> add_msg `Local false msg
+            | `Sent m -> add_msg `To false m
+            | `Sent_encrypted m -> add_msg `To true m ) ;
+           Xmpp_callbacks.XMPPClient.send_message x
+             ~jid_to:(JID.of_string user.User.jid)
+             ?body:out ()
+         | _, None -> err "no active session, try to connect first" ) >>= fun () ->
        loop config term hist state session_data network s_n
      | Some message -> loop config term hist state session_data network s_n
      | None -> loop config term hist state session_data network s_n
