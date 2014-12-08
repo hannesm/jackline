@@ -48,9 +48,9 @@ If you have an older OCaml compiler, get opam and run `opam switch 4.02.1`
 Run the following commands:
 - `opam repo add xmpp-dev git://github.com/hannesm/xmpp-opam`
 - `opam update -u`
-- `opam install xmpp_client`
+- `opam install jackline`
 
-Now you should have a `~/.opam/system/bin/cli_client` (or `~/.opam/4.02.1/bin/cli_client`) living in your `PATH`... interactive configuration will appear if you don't have a `~/.config/ocaml-xmpp-client/config.sexp`
+Now you should have a `~/.opam/system/bin/jackline` (or `~/.opam/4.02.1/bin/jackline`) in your `PATH`... interactive configuration will appear if you don't have a `~/.config/ocaml-xmpp-client/config.sexp` (and don't pass a `-f` argument to the configuration directory).
 
 Using it
 ========

@@ -23,9 +23,9 @@ Library "xmpp_client_cli"
   Pack            : true
   BuildDepends    : lambda-term, react, lwt.syntax, xmpp_client
 
-Executable "cli_client"
+Executable "jackline"
   Path            : cli/
   Install         : true
   CompiledObject  : native
-  MainIs          : cli_main.ml
+  MainIs          : jackline.ml
   BuildDepends    : lambda-term, react, xmpp_client_cli, xmpp_client

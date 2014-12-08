@@ -1,9 +1,9 @@
 opam-version: "1.2"
 name:         "xmpp_client"
 version:      "0.1.0"
-homepage:     "https://github.com/hannesm/xmpp-client"
-dev-repo:     "https://github.com/hannesm/xmpp-client.git"
-bug-reports:  "https://github.com/hannesm/xmpp-client/issues"
+homepage:     "https://github.com/hannesm/jackline"
+dev-repo:     "https://github.com/hannesm/jackline.git"
+bug-reports:  "https://github.com/hannesm/jackline/issues"
 author:       ["Hannes Mehnert <hannes@mehnert.org>"]
 maintainer:   ["Hannes Mehnert <hannes@mehnert.org>"]
 license:      "BSD2"
