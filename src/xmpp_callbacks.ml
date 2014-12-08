@@ -186,7 +186,7 @@ let presence_error t ?id ?jid_from ?jid_to ?lang error =
     | None -> "unknown"
     | Some x -> JID.string_of_jid x
   in
-  log jid ("presence message: " ^ error.err_text) ;
+  log jid ("presence error: " ^ error.err_text) ;
   return_unit
 
 
