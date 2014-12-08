@@ -255,10 +255,10 @@ let connect config user_data _ =
     include PlainSocket
   end in
   let make_tls () =
-    (match config.trust_anchor, config.tls_fingerprint with
-     | Some x, None  -> X509_lwt.authenticator (`Ca_file x)
-     | None, Some fp -> X509_lwt.authenticator (`Hex_fingerprints (`SHA256, [(server, fp)]))
-     | _ -> fail (Invalid_argument "Specify exactly one TLS authentication method: Fingerprint or CA cert") ) >>= fun authenticator ->
+    (match config.authenticator with
+     | `Trust_anchor x  -> X509_lwt.authenticator (`Ca_file x)
+     | `Fingerprint fp -> X509_lwt.authenticator (`Hex_fingerprints (`SHA256, [(server, fp)]))
+     | `None -> fail (Invalid_argument "Specify a TLS authentication method: Fingerprint or path to trust anchors") ) >>= fun authenticator ->
     TLSSocket.switch (PlainSocket.get_fd socket_data) server authenticator >>= fun socket_data ->
     let module TLS_module = struct type t = Tls_lwt.Unix.t
       let socket = socket_data
