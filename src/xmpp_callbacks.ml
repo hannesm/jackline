@@ -239,7 +239,8 @@ let session_callback t =
   send_presence t () >>= fun () ->
   return ()
 
-let connect config user_data _ =
+let connect ?out config user_data _ =
+  debug_out := out ;
   let open Config in
   let server = JID.to_idn config.jid
   and port = config.port
@@ -263,6 +264,7 @@ let connect config user_data _ =
     TLSSocket.switch (PlainSocket.get_fd socket_data) server authenticator >>= fun socket_data ->
     let module TLS_module = struct type t = Tls_lwt.Unix.t
       let socket = socket_data
+      let dump = out
       include TLSSocket
     end in
     return (module TLS_module : XMPPClient.Socket)

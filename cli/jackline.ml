@@ -22,7 +22,18 @@ let start_client cfgdir debug () =
   let session = User.ensure_session config.Config.jid config.Config.otr_config user in
   let state = Cli_state.empty_ui_state user session users in
   let n, s_n = S.create (Unix.localtime (Unix.time ()), "nobody", "nothing") in
-  Cli_client.loop debug config term history state None n s_n >>= fun state ->
+  ( if debug then
+      let f = Filename.concat (Unix.getenv "PWD") "out.txt" in
+      Lwt.catch (fun () ->
+          Lwt_unix.openfile f Unix.([O_WRONLY ; O_CREAT ; O_APPEND ]) 0o600 >|= fun fd ->
+          Some fd)
+        (fun _ -> return None)
+    else
+      return None ) >>= fun out ->
+  Cli_client.loop ?out config term history state None n s_n >>= fun state ->
+  ( match out with
+    | None -> return_unit
+    | Some fd -> Lwt_unix.close fd ) >>= fun () ->
   Xmpp_callbacks.dump_users cfgdir state.Cli_state.users
 
 

@@ -116,7 +116,7 @@ let completion input =
 
 open Lwt
 
-let exec input state config session_data log redraw =
+let exec ?out input state config session_data log redraw =
   let now = Unix.localtime (Unix.time ()) in
   let msg, err =
     let msg from m = log (now, from, m) ; return_unit in
@@ -156,7 +156,7 @@ let exec input state config session_data log redraw =
            notify ;
          }) in
        (* TODO: I'd like to catch tls and auth failures here, but neither try_lwt nor Lwt.catch seem to do that *)
-       (Xmpp_callbacks.connect config user_data () >|= fun s -> Some s) >>= fun session_data ->
+       (Xmpp_callbacks.connect ?out config user_data () >|= fun s -> Some s) >>= fun session_data ->
        (match session_data with
         | None -> return None
         | Some s ->
