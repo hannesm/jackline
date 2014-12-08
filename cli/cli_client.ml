@@ -324,7 +324,7 @@ class read_line ~term ~network ~history ~state = object(self)
                        self#size time network redraw)
 end
 
-let rec loop (config : Config.t) term hist state session_data network s_n =
+let rec loop debug (config : Config.t) term hist state session_data network s_n =
   let history = LTerm_history.contents hist in
   match_lwt
     try_lwt
@@ -338,7 +338,7 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
       LTerm_history.add hist command;
       Cli_commands.exec command state config session_data s_n force_redraw >>= fun (cont, session_data) ->
       if cont then
-        loop config term hist state session_data network s_n
+        loop debug config term hist state session_data network s_n
       else
         (match session_data with
          | None -> return_unit
@@ -383,7 +383,7 @@ let rec loop (config : Config.t) term hist state session_data network s_n =
              ~jid_to:(JID.of_string user.User.jid)
              ?body:out ()
          | _, None -> err "no active session, try to connect first" ) >>= fun () ->
-       loop config term hist state session_data network s_n
-     | Some message -> loop config term hist state session_data network s_n
-     | None -> loop config term hist state session_data network s_n
+       loop debug config term hist state session_data network s_n
+     | Some message -> loop debug config term hist state session_data network s_n
+     | None -> loop debug config term hist state session_data network s_n
 
