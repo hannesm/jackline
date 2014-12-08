@@ -1,7 +1,7 @@
 open Cli_state
 
 let string_normalize_fingerprint fpstr =
-  let fpstr = String.lowercase (String.trim fpstr) in
+  let fpstr = String.lowercase fpstr in
   let rec worker ~fpstr ~acclst = function
   | -1 -> String.concat "" acclst
   | i -> worker ~fpstr ~acclst:(
@@ -14,8 +14,9 @@ let string_normalize_fingerprint fpstr =
 
 type command = {
   name : string ;
+  command_line : string ;
   documentation : string ;
-  completion : string -> string list ;
+  subcommands : string list ;
 }
 
 module StringHash =
@@ -31,52 +32,47 @@ let commands = Commands.create 10
 
 let keys () = List.sort compare (Commands.fold (fun k _ acc -> k :: acc) commands [])
 
-let new_command name documentation completion =
-  Commands.add commands name { name ; documentation ; completion }
+let new_command name command_line documentation subcommands =
+  Commands.add commands name { name ; command_line ; documentation ; subcommands }
 
 let _ =
   new_command
-    "add" "[/add jid] adds jid to your contact list, and sends a subscription request"
-    (fun _ -> []) ;
+    "add" "/add jid"
+    "adds jid to your contact list, and sends a subscription request" [] ;
   new_command
-    "authorization" "[/authorization new] changes presence subscription of the current contact to new -- one of 'allow', 'cancel', 'request', 'request_unsubscribe'"
-    (fun arg ->
-       let subcommands = [ "allow" ; "cancel" ; "request" ; "request_unsubscribe" ] in
-       List.filter (fun f -> Zed_utf8.starts_with f arg) subcommands) ;
+    "authorization" "/authorization sub"
+    "changes presence subscription of the current contact to sub -- one of 'allow', 'cancel', 'request', 'request_unsubscribe'"
+    [ "allow" ; "cancel" ; "request" ; "request_unsubscribe" ] ;
   new_command
-    "connect" "[/connect] connects to the server"
-    (fun _ -> []) ;
+    "connect" "/connect" "connects to the server" [] ;
   new_command
-    "fingerprint" "[/fingerprint fingerprint] verifies the current contact's OTR fingerprint (fingerprint must match the one used in the currently established session)"
-    (fun arg -> []);
+    "fingerprint" "/fingerprint fp"
+    "verifies the current contact's OTR fingerprint (fp must match the one used in the currently established session)" [] ;
   new_command
-    "status" "[/status presence message] sets your presence [one of 'free' 'away' 'dnd' 'xa' 'offline' or 'online'] and status message"
-    (fun arg ->
-       let subcmds = [ "free" ; "away" ; "dnd" ; "xa" ; "offline" ; "online" ] in
-       List.filter (fun f -> Zed_utf8.starts_with f arg) subcmds) ;
+    "status" "/status presence message"
+    "sets your presence [one of 'free' 'away' 'dnd' 'xa' 'offline' or 'online'] and status message"
+    [ "free" ; "away" ; "dnd" ; "xa" ; "offline" ; "online" ] ;
   new_command
-    "quit" "[/quit] exits this client"
-    (fun _ -> []) ;
+    "quit" "/quit" "exits this client" [] ;
   new_command
-    "info" "[/info] displays information about the current session"
-    (fun _ -> []) ;
+    "info" "/info" "displays information about the current session" [] ;
   new_command
-    "otr" "[/otr arg] manages OTR session (arg is one of 'start' 'stop' or 'info'"
-    (fun _ -> [ "start" ; "stop" ; "info" ]) ;
+    "otr" "/otr sub" "manages OTR session [sub is one of 'start' 'stop' or 'info']"
+    [ "start" ; "stop" ; "info" ] ;
   new_command
-    "help" "[/help [cmd]] shows available commands or detailed help for cmd"
-    (fun arg ->
-       let cmds = keys () in
-       List.filter (fun f -> Zed_utf8.starts_with f arg) cmds)
+    "help" "/help [cmd]" "shows available commands or detailed help for cmd"
+    (keys ())
 
 let split_ws s =
   let l = String.length s in
   let ws = try String.index s ' ' with Not_found -> l in
-  let arg = if ws = l then None
+  let arg =
+    if ws = l then
+      None
     else
       let ws' = succ ws in
       let str = String.sub s ws' (l - ws') in
-      Some str
+      Some (String.trim str)
   in
   (String.sub s 0 ws, arg)
 
@@ -87,21 +83,36 @@ let cmd_arg input =
   assert (get input 0 = '/') ;
   split_ws (sub input 1 (pred l))
 
-let topcompletion input =
+let might_match cmd prefix =
+  let upper = min (String.length cmd) (String.length prefix) in
+  let rec cmp_i idx =
+    if idx < upper then
+      if String.get cmd idx = String.get prefix idx then
+        cmp_i (succ idx)
+      else
+        false
+    else
+      (String.length prefix <= String.length cmd)
+  in
+  cmp_i 0
+
+let completion input =
   if String.(length input > 0 && get input 0 = '/') then
     match cmd_arg input with
     | (cmd, None) when Commands.mem commands cmd ->
       let command = Commands.find commands cmd in
-      List.map (fun f -> cmd ^ " " ^ f) (command.completion "")
+      List.map (fun x -> ("/" ^ x, " ")) command.subcommands
     | (cmd, None) ->
       let cmds = keys () in
-      List.filter (fun f -> Zed_utf8.starts_with f cmd) cmds
+      List.map (fun x -> ("/" ^ x, " "))
+        (List.filter (fun f -> might_match f cmd) cmds)
     | (cmd, Some arg) when Commands.mem commands cmd ->
       let command = Commands.find commands cmd in
-      List.map (fun f -> cmd ^ " " ^ f) (command.completion arg)
-    | (cmd, Some arg) -> [cmd ^ " " ^ arg]
+      List.map (fun x -> "/" ^ cmd ^ " " ^ x, "")
+        (List.filter (fun f -> might_match f arg) command.subcommands)
+    | _ -> [(input, "")]
   else
-    [input]
+    [(input, "")]
 
 open Lwt
 
@@ -113,10 +124,9 @@ let exec input state config session_data log redraw =
     (msg, err)
   in
   match cmd_arg input with
-  | ("help", Some arg) when Commands.mem commands (String.trim arg) ->
-    let a = String.trim arg in
-    let cmd = Commands.find commands a in
-    msg ("help for " ^ a) cmd.documentation >|= fun () ->
+  | ("help", Some arg) when Commands.mem commands arg ->
+    let cmd = Commands.find commands arg in
+    msg cmd.command_line cmd.documentation >|= fun () ->
     (true, session_data)
   | ("help", _) ->
     let cmds = String.concat " " (keys ()) in
@@ -203,7 +213,7 @@ let exec input state config session_data log redraw =
          send_presence s ~jid_to:(JID.of_string jid) ~kind () >>= fun () ->
          msg jid m >|= fun () -> session_data
        in
-       ( match String.trim arg with
+       ( match arg with
          | "allow" -> doit Subscribed "is allowed to receive your presence updates"
          | "cancel" -> doit Unsubscribed "won't receive your presence updates"
          | "request" -> doit Subscribe "has been asked to sent presence updates to you"
@@ -214,4 +224,4 @@ let exec input state config session_data log redraw =
      | Some s, ("otr", arg) ->
        msg "OTR bla" "NYI" >|= fun () -> session_data
      | Some _, ("connect", _) -> err "already connected"
-     | _ -> err "unknown command or not connected" ) >|= fun s -> (true, s)
+     | _ -> err "unknown command or not connected, try /help" ) >|= fun s -> (true, s)

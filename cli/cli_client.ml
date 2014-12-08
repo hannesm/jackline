@@ -293,8 +293,12 @@ class read_line ~term ~network ~history ~state = object(self)
 
   method completion =
     let prefix  = Zed_rope.to_string self#input_prev in
-    let completions = Cli_commands.topcompletion prefix in
-    self#set_completion 0 (List.map (fun f -> ("/" ^ f, " ")) completions)
+    let completions = Cli_commands.completion prefix in
+    self#set_completion 0 completions
+
+  method complete =
+    try super#complete with
+    | _ -> ()
 
   method show_box = false
 
