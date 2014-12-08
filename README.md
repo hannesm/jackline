@@ -1,8 +1,6 @@
 [![Build Status](https://travis-ci.org/hannesm/jackline.svg?branch=master)](https://travis-ci.org/hannesm/jackline)
 
-
-Jackline
-========
+### [Jackline](https://en.wikipedia.org/wiki/Jackline)
 
 This is unreleased alpha software... Testers and feedback welcome!
 
@@ -37,8 +35,7 @@ OCaml is (compared to C) a game changer: no manual memory management, I stick to
 
 OPAM is the OCaml package manager, and not directly needed, but very convenient for installation and updating. [It lacks package signing](https://github.com/ocaml/opam/issues/423)!
 
-How to build
-============
+### How to build
 
 First be aware that this is unreleased alpha software. Bug reports are welcome (pull requests as well).
 
@@ -52,8 +49,7 @@ Run the following commands:
 
 Now you should have a `~/.opam/system/bin/jackline` (or `~/.opam/4.02.1/bin/jackline`) in your `PATH`... interactive configuration will appear if you don't have a `~/.config/ocaml-xmpp-client/config.sexp` (and don't pass a `-f` argument to the configuration directory).
 
-Using it
-========
+### Using it
 
 Left is the buddy list, in the middle the chat window, below the log buffer. The last line is a prompt.
 
