@@ -201,14 +201,22 @@ let make_prompt size time network state redraw =
     let jid = User.userid state.user mysession in
     let time = Printf.sprintf "%02d:%02d" tm.Unix.tm_hour tm.Unix.tm_min in
 
-    let leftover = size.cols - (String.length jid) - 5 in
+    let first =
+      if List.length state.notifications > 0 then
+        [ B_blink true ; B_fg blue ; S "#" ; E_fg ; E_blink ]
+      else
+        [ B_fg fg_color ; S (Zed_utf8.make 1 (UChar.of_int 0x2500)) ; E_fg ]
+    in
+
+
+    let leftover = size.cols - (String.length jid) - 6 in
     let jid, left =
       if leftover > 0 then
         ([ S "< "; B_fg lblue; S jid; E_fg; S" >─" ], leftover)
       else if (size.cols > String.length jid) then
         ([ B_fg blue ; S jid ; E_fg ], size.cols - String.length jid)
       else
-        ([ B_fg blue ; S (String.sub jid 0 size.cols) ; E_fg ], 0)
+        ([ B_fg blue ; S (String.sub jid 0 (pred size.cols)) ; E_fg ], 0)
     in
 
     let leftover' = left - (String.length status) - 5 in
@@ -240,10 +248,11 @@ let make_prompt size time network state redraw =
       else
         ""
     in
-    [ B_bold true; B_fg fg_color ] @
-    time @ jid @
-    [ S redraw ; S fill ] @
-    status @
+    [ B_bold true ] @ first @
+    [ B_fg fg_color ] @
+      time @ jid @
+      [ S redraw ; S fill ] @
+      status @
     [ E_fg; S"\n"; E_bold ]
   in
 
