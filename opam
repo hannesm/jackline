@@ -1,5 +1,5 @@
 opam-version: "1.2"
-name:         "xmpp_client"
+name:         "jackline"
 version:      "0.1.0"
 homepage:     "https://github.com/hannesm/jackline"
 dev-repo:     "https://github.com/hannesm/jackline.git"
@@ -16,7 +16,7 @@ install: ["ocaml" "setup.ml" "-install"]
 remove: [
   ["ocamlfind" "remove" "xmpp_client"]
   ["ocamlfind" "remove" "xmpp_client_cli"]
-  ["rm" "-f" "%{bin}%/cli_client"]
+  ["rm" "-f" "%{bin}%/jackline"]
 ]
 depends: [
   "ocamlfind"
