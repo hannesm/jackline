@@ -6,9 +6,6 @@ XMPP-Client
 
 This is unreleased alpha software... Testers and feedback welcome!
 
-(active: grey bg, encrypted OTR session: green fg, subscription status via `?` (not for specific side), `[`, `]` (subscribed), `{}` (self-contact))
-![screenshot](http://berlin.ccc.de/~hannes/cli8b.png)
-
 The goal is a minimalistic graphical user interface for a secure (fail hard!) and trustworthy XMPP client.
 
 This goal is achieved with clean-slate libraries (OCaml-TLS, OCaml-OTR) and few features: no support for HTML/avatars/which music you're playing/...
@@ -54,3 +51,22 @@ Run the following commands:
 - `opam install xmpp_client`
 
 Now you should have a `~/.opam/system/bin/cli_client` (or `~/.opam/4.02.1/bin/cli_client`) living in your `PATH`... interactive configuration will appear if you don't have a `~/.config/ocaml-xmpp-client/config.sexp`
+
+Using it
+========
+
+Left is the buddy list, in the middle the chat window, below the log buffer. The last line is a prompt.
+
+In the buddy list, presence subscription information is indicated by `[` and `]` (`?` means that no presence subscription exists for that side). The presence is indicated by a single character (o = online, f = free, a = away, d = do not disturb, x = extended away, _ = offline). One buddy is in focus (indicated by a grey background). Red foreground color means no active OTR session, green that an OTR session is active. Blinking indicates that a new message arrived. The self-contact is surrounded by curly braces.
+
+PgUp/PgDown navigates through the buddy list, F5 toggles display of offline buddies.
+
+Tab completion is available for the prompt. Tab completion completes the largest prefix.
+
+`/help` prints the available commands, `/help command` more detailed help of the given command.
+
+Sending a message is done by just typing the message followed by return.
+
+In the chat window, each message is prefixed with 3 characters: `***` is a local message, `<O-` is an incoming message (`O` indicates OTR encryption), `rO>` is an outgoing message (`r` indicates that receive notification has not yet arrived).
+
+Depending on the active chat the frame colors switch to red or green - indicating whether this chat is secured with OTR or not.
