@@ -43,20 +43,24 @@ let t_of_sexp t =
         | Sexp.List [ Sexp.Atom "trust_anchor" ; trust_anchor ] ->
           (match t.version with
            | 0 -> { t with authenticator = `Trust_anchor (string_of_sexp trust_anchor) }
-           | _ -> ( match option_of_sexp string_of_sexp trust_anchor with
+           | 1 -> ( match option_of_sexp string_of_sexp trust_anchor with
                | None -> t
-               | Some x -> { t with authenticator = `Trust_anchor x } ) )
+               | Some x -> { t with authenticator = `Trust_anchor x } )
+           | _ -> raise (Invalid_argument "unexpected element: trust_anchor") )
         | Sexp.List [ Sexp.Atom "tls_fingerprint" ; tls_fp ] ->
-          ( match option_of_sexp string_of_sexp tls_fp with
-            | None -> t
-            | Some x -> { t with authenticator = `Fingerprint x } )
+          if t.version = 1 then
+            ( match option_of_sexp string_of_sexp tls_fp with
+              | None -> t
+              | Some x -> { t with authenticator = `Fingerprint x } )
+          else
+            raise (Invalid_argument "unexpected element: tls_fingerprint")
         | Sexp.List [ Sexp.Atom "authenticator" ; auth ] ->
           { t with authenticator = auth_of_sexp auth }
         | Sexp.List [ Sexp.Atom "otr_config" ; v ] ->
           { t with otr_config = Otr.State.config_of_sexp v }
         | _ -> assert false)
         empty l
-  | _ -> Printf.printf "unknown t\n" ; raise (Invalid_argument "broken config")
+  | _ -> raise (Invalid_argument "broken config")
 
 let record kvs =
   Sexp.List List.(map (fun (k, v) -> (Sexp.List [Sexp.Atom k; v])) kvs)
@@ -72,7 +76,7 @@ let sexp_of_t t =
   ]
 
 let load_config bytes =
-  try Some (t_of_sexp (Sexp.of_string bytes)) with _ -> None
+  t_of_sexp (Sexp.of_string bytes)
 
 let store_config t =
   Sexp.to_string_mach (sexp_of_t t)

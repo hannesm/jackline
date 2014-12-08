@@ -37,8 +37,8 @@ let read dir file =
       Lwt_unix.read fd buf 0 size >>= fun s ->
       Lwt_unix.close fd >|= fun () ->
       assert (s = size) ;
-      String.trim buf)
-    (fun _ -> return "")
+      Some (String.trim buf))
+    (fun _ -> return None)
 
 let write dir filename buf =
   Lwt.catch (fun () -> Lwt_unix.access dir [ Unix.F_OK ; Unix.X_OK ])
@@ -70,13 +70,14 @@ let dump_users cfgdir data =
   write cfgdir users (User.store_users data)
 
 let load_config cfg =
-  read cfg config >|= fun cfgdata ->
-  Config.load_config cfgdata
+  read cfg config >|= function
+  | Some x ->  Some (Config.load_config x)
+  | None   -> None
 
 let load_users cfg =
-  read cfg users >|= fun userdata ->
-  let users = try User.load_users userdata with _ -> User.Users.create 100 in
-  users
+  read cfg users >|= function
+  | Some x ->  (try User.load_users x with _ -> User.Users.create 100)
+  | None -> User.Users.create 100
 
 let user_session stanza user_data =
   match stanza.jid_from with
