@@ -8,22 +8,16 @@ let () =
 
     Lazy.force LTerm.stdout >>= fun term ->
 
-    let cfgdir () =
-       Lwt_unix.getlogin () >>= fun user ->
-       Lwt_unix.getpwnam user >|= fun pw_ent ->
-       let cfgdir =
-         let home = pw_ent.Lwt_unix.pw_dir in
-         Filename.concat home ".config"
-       in
-       Xmpp_callbacks.xmpp_config cfgdir
+    let cfgdir =
+      let home = Unix.getenv "HOME" in
+      let cfgdir = Filename.concat home ".config" in
+      Xmpp_callbacks.xmpp_config cfgdir
     in
 
     (match Sys.argv with
      | [| _ ; "-f" ; dir |] -> return dir
-     | [| _ |] -> cfgdir ()
-     | _ ->
-       cfgdir () >>= fun dir ->
-       fail (Invalid_argument ("Usage: " ^ Sys.argv.(0) ^ " [-f dir (defaults to " ^ dir ^ ")]"))
+     | [| _ |] -> return cfgdir
+     | _ -> fail (Invalid_argument ("Usage: " ^ Sys.argv.(0) ^ " [-f config_directory (defaults to " ^ cfgdir ^ ")]"))
     ) >>= fun cfgdir ->
 
     Xmpp_callbacks.load_config cfgdir >>= ( function
