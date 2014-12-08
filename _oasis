@@ -1,10 +1,10 @@
 OASISFormat: 0.4
-Name:        xmpp_client
+Name:        jackline
 Version:     0.1.0
 Synopsis:    XMPP Client
 Authors:     Hannes Mehnert <hannes@mehnert.org>
 Maintainers: Hannes Mehnert <hannes@mehnert.org>
-Homepage:    https://github.com/hannesm/xmpp-client
+Homepage:    https://github.com/hannesm/jackline
 License:     FreeBSD
 Plugins:     META (0.4), DevFiles (0.4)
 BuildTools:  ocamlbuild
