@@ -29,7 +29,7 @@ Trusted code base is at the moment:
 - [XML](https://github.com/ermine/xml)
 - [OCaml compiler](http://ocaml.org/) (and runtime thereof)
 
-Security audits are needed, please contact me if you plan to do some. Transitive dependencies are only partially listed. For a more complete list, use ``opam list --required-by=xmpp_client``.
+Security audits are needed, please contact me if you plan to do some. Transitive dependencies are only partially listed. For a more complete list, use ``opam list --required-by=xmpp_client --recursive``.
 
 Why should you trust this? Well, first of all whom do you trust? And why? Did you read through your libc and malloc implementation? What about OpenSSL? libotr? libpurple (or whatever XMPP implementation you use)?
 
