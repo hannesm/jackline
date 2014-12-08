@@ -99,31 +99,30 @@ let message_callback (t : user_data session_data) stanza =
     msg `Local false "**empty message**" ;
     return_unit
   | Some v ->
-    let ctx, out, user_data, received = Otr.Handshake.handle session.User.otr v in
-    (match user_data with
-     | None -> msg `Local false "empty OTR message"
-     | Some w when w = "encrypted OTR connection established" ->
-       msg `Local false w ;
-       ( match User.find_fp user ctx with
-         | fp, Some fps ->
-           let verified_key = List.exists (fun x -> x.User.verified) user.User.otr_fingerprints in
-           let verify = "verify over secondary channel (and type /fingerprint fp)" in
-           let otrmsg =
-             match verified_key, fps.User.verified, fps.User.session_count with
-             | _, true, _ -> "verified OTR fingerprint"
-             | true, false, 0 -> "POSSIBLE BREAKIN ATTEMPT! new unverified OTR fingerprint, verified fingerprint present for contact! " ^ verify
-             | true, false, n -> "unverified OTR fingerprint (used " ^ (string_of_int n) ^ " times), verified fingerprint present for contact! please " ^ verify
-             | false, false, 0 -> "new unverified key! please " ^ verify
-             | false, false, n -> "unverified key (used " ^ (string_of_int n) ^ " times). please " ^ verify
-           in
-           msg `Local false otrmsg ;
-           User.insert_inc user session.User.resource fps ;
-         | fp, None ->
-           msg `Local false "shouldn't happen - OTR established but couldn't find fingerprint" )
-     | Some w -> msg `Local false w);
-    (match received with
-     | None -> ()
-     | Some c -> msg `From true c) ;
+    let ctx, out, ret = Otr.Handshake.handle session.User.otr v in
+    List.iter (function
+        | `Established_encrypted_session ->
+          msg `Local false "encrypted OTR connection established" ;
+          ( match User.find_fp user ctx with
+            | fp, Some fps ->
+              let verified_key = List.exists (fun x -> x.User.verified) user.User.otr_fingerprints in
+              let verify = "verify over secondary channel (and type /fingerprint fp)" in
+              let otrmsg =
+                match verified_key, fps.User.verified, fps.User.session_count with
+                | _, true, _ -> "verified OTR fingerprint"
+                | true, false, 0 -> "POSSIBLE BREAKIN ATTEMPT! new unverified OTR fingerprint, verified fingerprint present for contact! " ^ verify
+                | true, false, n -> "unverified OTR fingerprint (used " ^ (string_of_int n) ^ " times), verified fingerprint present for contact! please " ^ verify
+                | false, false, 0 -> "new unverified key! please " ^ verify
+                | false, false, n -> "unverified key (used " ^ (string_of_int n) ^ " times). please " ^ verify
+              in
+              msg `Local false otrmsg ;
+              User.insert_inc user session.User.resource fps ;
+            | fp, None ->
+              msg `Local false "shouldn't happen - OTR established but couldn't find fingerprint" )
+        | `Warning w -> msg `Local false w
+        | `Received m -> msg `From false m
+        | `Received_encrypted e -> msg `From true e)
+      ret ;
     session.User.otr <- ctx ;
     match out with
     | None -> return ()

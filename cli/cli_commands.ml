@@ -222,6 +222,46 @@ let exec input state config session_data log redraw =
      | Some s, ("info", _) ->
        msg "info bla" "NYI" >|= fun () -> session_data
      | Some s, ("otr", arg) ->
-       msg "OTR bla" "NYI" >|= fun () -> session_data
+       let user = fst state.active_chat in
+       let send_over body =
+         let jid_to = JID.of_string user.User.jid in
+         Xmpp_callbacks.XMPPClient.send_message s ~jid_to ?body () >|= fun () ->
+         session_data
+       in
+       let add_msg session data =
+         let msg =
+           let now = Unix.localtime (Unix.time ()) in
+           (`Local, false, false, now, data)
+         in
+         session.User.messages <- msg :: session.User.messages
+       in
+       ( match state.active_chat, arg with
+         | (user, Some session), Some "start" ->
+           let ctx, out = Otr.Handshake.start_otr session.User.otr in
+           session.User.otr <- ctx ;
+           send_over (Some out)
+         | (user, Some session), Some "stop" ->
+           let ctx, out = Otr.Handshake.end_otr session.User.otr in
+           session.User.otr <- ctx ;
+           add_msg session "finished OTR session" ;
+           send_over out
+         | (user, Some session), Some "info" ->
+           msg "OTR" "info session" >|= fun () ->
+           session_data
+         | (user, None), Some "info" ->
+           msg "OTR" "info no session" >|= fun () ->
+           session_data
+         | (user, None), Some "start" ->
+           let session =
+             User.ensure_session
+               (JID.of_string (user.User.jid ^ "/none"))
+               s.Xmpp_callbacks.XMPPClient.user_data.Xmpp_callbacks.otr_config user
+           in
+           let ctx, out = Otr.Handshake.start_otr session.User.otr in
+           session.User.otr <- ctx ;
+           send_over (Some out)
+         | (user, None), Some "stop" -> err "no active session"
+         |  _ -> err "unknown argument (/otr [start|stop|info])"
+       )
      | Some _, ("connect", _) -> err "already connected"
      | _ -> err "unknown command or not connected, try /help" ) >|= fun s -> (true, s)
