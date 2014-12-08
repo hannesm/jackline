@@ -124,17 +124,21 @@ let exec ?out input state config session_data log redraw =
     (msg, err)
   in
   match cmd_arg input with
+
   | ("help", Some arg) when Commands.mem commands arg ->
     let cmd = Commands.find commands arg in
     msg cmd.command_line cmd.documentation >|= fun () ->
     (true, session_data)
+
   | ("help", _) ->
     let cmds = String.concat " " (keys ()) in
     msg "available commands (try [/help cmd])" cmds >|= fun () ->
     (true, session_data)
+
   | ("quit", _) ->
     msg "self-destruction mechanism initiated" "have a nice day" >|= fun () ->
     (false, session_data)
+
   | x ->
     (match session_data, x with
      | None, ("connect", _) ->
@@ -162,6 +166,7 @@ let exec ?out input state config session_data log redraw =
         | Some s ->
           Lwt.async (fun () -> Xmpp_callbacks.parse_loop s) ;
           return (Some s))
+
      | Some s, ("status", Some arg) ->
        let open Xmpp_callbacks.XMPPClient in
        let kindshow p = match User.string_to_presence p with
@@ -176,6 +181,7 @@ let exec ?out input state config session_data log redraw =
        let kind, show = kindshow p in
        send_presence s ?kind ?show ?status () >|= fun () ->
        session_data
+
      | Some s, ("add", Some arg) ->
        (try
           let jid_to = JID.of_string arg in
@@ -183,6 +189,7 @@ let exec ?out input state config session_data log redraw =
           msg arg "has been asked to sent presence updates to you" >|= fun () ->
           session_data
         with _ -> err "parse of jid failed")
+
      | Some s, ("fingerprint", Some arg) ->
        begin
          match state.active_chat with
@@ -205,6 +212,7 @@ let exec ?out input state config session_data log redraw =
              | _ -> err "provided fingerprint does not match the one of this active session" )
          | _ -> err "no active OTR session"
        end
+
      | Some s, ("authorization", Some arg) ->
        let open Xmpp_callbacks.XMPPClient in
        let user = fst state.active_chat in
@@ -219,8 +227,10 @@ let exec ?out input state config session_data log redraw =
          | "request" -> doit Subscribe "has been asked to sent presence updates to you"
          | "request_unsubscribe" -> doit Unsubscribe "has been asked to no longer sent presence updates to you"
          | _ -> err "don't know what you want" )
+
      | Some s, ("info", _) ->
        msg "info bla" "NYI" >|= fun () -> session_data
+
      | Some s, ("otr", arg) ->
        let user = fst state.active_chat in
        let send_over body =
@@ -263,5 +273,7 @@ let exec ?out input state config session_data log redraw =
          | (user, None), Some "stop" -> err "no active session"
          |  _ -> err "unknown argument (/otr [start|stop|info])"
        )
+
      | Some _, ("connect", _) -> err "already connected"
+
      | _ -> err "unknown command or not connected, try /help" ) >|= fun s -> (true, s)
