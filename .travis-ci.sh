@@ -16,4 +16,4 @@ opam repo add xmpp-dev git://github.com/hannesm/xmpp-opam > /dev/null 2>&1
 
 opam update -u
 
-opam install xmpp_client
+opam install jackline
