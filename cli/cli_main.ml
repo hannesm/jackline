@@ -26,8 +26,7 @@ let () =
        fail (Invalid_argument ("Usage: " ^ Sys.argv.(0) ^ " [-f dir (defaults to " ^ dir ^ ")]"))
     ) >>= fun cfgdir ->
 
-    Xmpp_callbacks.load_config cfgdir >>= fun (config) ->
-    (match config with
+    Xmpp_callbacks.load_config cfgdir >>= ( function
      | None ->
        Cli_config.configure term () >>= fun config ->
        Xmpp_callbacks.dump_config cfgdir config >|= fun () ->
