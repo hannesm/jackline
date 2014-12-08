@@ -67,6 +67,6 @@ Tab completion is available for the prompt. Tab completion completes the largest
 
 Sending a message is done by just typing the message followed by return.
 
-In the chat window, each message is prefixed with 3 characters: `***` is a local message, `<O-` is an incoming message (`O` indicates OTR encryption), `rO>` is an outgoing message (`r` indicates that receive notification has not yet arrived).
+In the chat window, each message is prefixed with 3 characters: `***` is a local message, `<O-` is an incoming message (`O` indicates OTR encryption), `rO>` is an outgoing message (`r` indicates that message delivery request was not yet answered (NYI)).
 
 Depending on the active chat the frame colors switch to red or green - indicating whether this chat is secured with OTR or not.
