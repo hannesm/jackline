@@ -96,7 +96,7 @@ let message_callback (t : user_data session_data) stanza =
   in
   match stanza.content.body with
   | None ->
-    msg `Local false "**empty message**" ;
+    (*    msg `Local false "**empty message**" ; *)
     return_unit
   | Some v ->
     let ctx, out, ret = Otr.Handshake.handle session.User.otr v in
