@@ -120,6 +120,7 @@ let message_callback (t : user_data session_data) stanza =
             | fp, None ->
               msg `Local false "shouldn't happen - OTR established but couldn't find fingerprint" )
         | `Warning w -> msg `Local false w
+        | `Received_error e -> msg `From false e
         | `Received m -> msg `From false m
         | `Received_encrypted e -> msg `From true e)
       ret ;
