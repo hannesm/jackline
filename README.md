@@ -46,7 +46,7 @@ Get OCaml (4.02.1 preferred), get opam (1.2!), gmp is also needed
 If you have an older OCaml compiler, get opam and run `opam switch 4.02.1`
 
 Run the following commands:
-- `opam repo add xmpp git://github.com/hannesm/xmpp-opam`
+- `opam repo add xmpp-dev git://github.com/hannesm/xmpp-opam`
 - `opam update -u`
 - `opam install xmpp_client`
 

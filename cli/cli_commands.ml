@@ -58,6 +58,12 @@ let _ =
     "quit" "[/quit] exits this client"
     (fun _ -> []) ;
   new_command
+    "info" "[/info] displays information about the current session"
+    (fun _ -> []) ;
+  new_command
+    "otr" "[/otr arg] manages OTR session (arg is one of 'start' 'stop' or 'info'"
+    (fun _ -> [ "start" ; "stop" ; "info" ]) ;
+  new_command
     "help" "[/help [cmd]] shows available commands or detailed help for cmd"
     (fun arg ->
        let cmds = keys () in
@@ -203,5 +209,9 @@ let exec input state config session_data log redraw =
          | "request" -> doit Subscribe "has been asked to sent presence updates to you"
          | "request_unsubscribe" -> doit Unsubscribe "has been asked to no longer sent presence updates to you"
          | _ -> err "don't know what you want" )
+     | Some s, ("info", _) ->
+       msg "info bla" "NYI" >|= fun () -> session_data
+     | Some s, ("otr", arg) ->
+       msg "OTR bla" "NYI" >|= fun () -> session_data
      | Some _, ("connect", _) -> err "already connected"
      | _ -> err "unknown command or not connected" ) >|= fun s -> (true, s)
