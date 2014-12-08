@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/hannesm/xmpp-client.svg?branch=master)](https://travis-ci.org/hannesm/xmpp-client)
+[![Build Status](https://travis-ci.org/hannesm/jackline.svg?branch=master)](https://travis-ci.org/hannesm/jackline)
 
 
 XMPP-Client
