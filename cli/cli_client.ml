@@ -34,7 +34,7 @@ let pad x s =
   | d (* when d < 0 *) -> String.sub s 0 x
 
 let rec find_index id i = function
-  | [] -> assert false
+  | [] -> 0
   | x::xs when x = id -> i
   | _::xs -> find_index id (succ i) xs
 
@@ -103,8 +103,11 @@ let make_prompt size time network state redraw =
 
   let buddy_width = 24 in
 
+  let buddies = show_buddies state in
+  let active_idx = find_index (fst state.active_chat).User.jid 0 buddies in
+
   let buddies =
-    List.map (fun id ->
+    List.mapi (fun x id ->
         let u = User.Users.find state.users id in
         let session = User.good_session u in
         let presence = match session with
@@ -112,7 +115,7 @@ let make_prompt size time network state redraw =
           | Some s -> s.User.presence
         in
         let fg = color_session u state.user session in
-        let bg = if (fst state.active_chat) = u then 7 else 15 in
+        let bg = if x = active_idx then 7 else 15 in
         let f, t =
           if u = state.user then
             ("{", "}")
@@ -128,7 +131,7 @@ let make_prompt size time network state redraw =
           B_blink true :: show @ [ E_blink ]
         else
           show)
-      (show_buddies state)
+      buddies
   in
 
   let chat =
