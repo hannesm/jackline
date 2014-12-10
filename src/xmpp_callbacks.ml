@@ -145,41 +145,51 @@ let message_error t ?id ?jid_from ?jid_to ?lang error =
 
 let presence_callback t stanza =
   let log = t.user_data.received in
-  let user, session = user_session stanza t.user_data in
-  let id = User.userid user session in
-  (match stanza.content.priority with
-   | None -> ()
-   | Some x -> session.User.priority <- x) ;
-  let open User in
-  let stat = match stanza.content.status with
-    | None -> session.status <- None ; ""
-    | Some x when x = "" -> session.status <- None ; ""
-    | Some x -> session.status <- Some x ; (" - " ^ x)
-  in
-  let old = User.presence_to_char session.presence in
-  let logp () =
-    let n = User.presence_to_char session.presence in
-    let nl = User.presence_to_string session.presence in
-    log id ("presence changed: [" ^ old ^ ">" ^ n ^ "] (now " ^ nl ^ ")" ^ stat)
-  in
-  (match stanza.content.presence_type with
-   | None ->
-     begin
-       match stanza.content.show with
-       | None -> session.presence <- `Online ; logp ()
-       | Some ShowChat -> session.presence <- `Free ; logp ()
-       | Some ShowAway -> session.presence <- `Away ; logp ()
-       | Some ShowDND -> session.presence <- `DoNotDisturb ; logp ()
-       | Some ShowXA -> session.presence <- `ExtendedAway ; logp ()
-     end
-   | Some Probe -> log id ("probed" ^ stat)
-   | Some Subscribe -> log id ("subscription request" ^ stat)
-   | Some Subscribed -> log id ("successfully subscribed" ^ stat)
-   | Some Unsubscribe -> log id ("shouldn't see this unsubscribe" ^ stat)
-   | Some Unsubscribed -> log id ("you're so off my buddy list" ^ stat)
-   | Some Unavailable -> session.presence <- `Offline ; logp ()
-  );
-  return ()
+  (match stanza.jid_from with
+   | None     -> log "error" "presence received without sending jid, ignoring"
+   | Some jid ->
+     let user = User.find_or_add jid t.user_data.users in
+     let stat, statstring = match stanza.content.status with
+       | None -> (None, "")
+       | Some x when x = "" -> (None, "")
+       | Some x -> (Some x, " - " ^ x)
+     in
+     let handle_presence newp () =
+       let open User in
+       let session = ensure_session jid t.user_data.otr_config user in
+       let id = userid user session in
+       let old = presence_to_char session.presence in
+       ( match stanza.content.priority with
+         | None -> ()
+         | Some x -> session.priority <- x) ;
+       session.status <- stat ;
+       session.presence <- newp ;
+       let n = presence_to_char newp in
+       let nl = presence_to_string newp in
+       log id ("presence changed: [" ^ old ^ ">" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring)
+     in
+     let logp txt =
+       let id, _ = User.bare_jid jid in
+       log id (txt ^ statstring)
+     in
+     match stanza.content.presence_type with
+     | None ->
+       begin
+         match stanza.content.show with
+         | None -> handle_presence `Online ()
+         | Some ShowChat -> handle_presence `Free ()
+         | Some ShowAway -> handle_presence `Away ()
+         | Some ShowDND -> handle_presence `DoNotDisturb ()
+         | Some ShowXA -> handle_presence `ExtendedAway ()
+       end
+     | Some Probe -> logp "probed"
+     | Some Subscribe -> logp "subscription request"
+     | Some Subscribed -> logp "successfully subscribed"
+     | Some Unsubscribe -> logp "shouldn't see this unsubscribe"
+     | Some Unsubscribed -> logp "you're so off my buddy list"
+     | Some Unavailable -> handle_presence `Offline ()
+  ) ;
+  return_unit
 
 let presence_error t ?id ?jid_from ?jid_to ?lang error =
   let log = t.user_data.received in
