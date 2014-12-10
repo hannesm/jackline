@@ -312,25 +312,22 @@ type direction = Up | Down
 
 let navigate_buddy_list state direction (* true - up ; false - down *) =
   let userlist = show_buddies state in
-  let active_idx = find_index (fst state.active_chat).User.jid 0 userlist in
-  let user_idx =
-    match
-      direction,
-      List.length userlist > succ active_idx,
-      pred active_idx >= 0
-    with
-    | Down, true, _    -> Some (succ active_idx)
-    | Up  , _   , true -> Some (pred active_idx)
-    | _                -> None
-  in
-  match user_idx with
-  | Some idx ->
+  let set_active idx =
     let user = User.Users.find state.users (List.nth userlist idx) in
     let session = User.good_session user in
     state.active_chat <- (user, session) ;
     state.notifications <- List.filter (fun a -> a <> user) state.notifications ;
     force_redraw ()
-  | None -> ()
+  and active_idx = find_index (fst state.active_chat).User.jid 0 userlist
+  in
+  match
+    direction,
+    List.length userlist > succ active_idx,
+    pred active_idx >= 0
+  with
+  | Down, true, _    -> set_active (succ active_idx)
+  | Up  , _   , true -> set_active (pred active_idx)
+  | _                -> ()
 
 class read_line ~term ~network ~history ~state = object(self)
   inherit LTerm_read_line.read_line ~history () as super
