@@ -261,8 +261,9 @@ let exec ?out input state config session_data log redraw =
          s.User.resource ^ " (" ^ prio ^ "): " ^ pres
        in
        Lwt_list.iteri_s (fun i s ->
-           msg ("session " ^ (string_of_int i)) s)
-         (List.map marshal_session user.User.active_sessions) >|= fun () ->
+           msg ("session " ^ (string_of_int i)) (marshal_session s) >>= fun () ->
+           msg "otr" (Otr.State.session_to_string s.User.otr))
+         user.User.active_sessions >|= fun () ->
        session_data
 
      | Some s, ("otr", arg) ->
@@ -295,7 +296,7 @@ let exec ?out input state config session_data log redraw =
            add_msg session "finished OTR session" ;
            send_over out
          | (user, Some session), Some "info" ->
-           msg "otr session" (Otr.State.session_to_string session.User.otr) >>= fun () ->
+           msg ("otr session " ^ session.User.resource) (Otr.State.session_to_string session.User.otr) >>= fun () ->
            msg "otr fingerprints" (String.concat ", " (List.map marshal_otr user.User.otr_fingerprints)) >|= fun () ->
            session_data
          | (user, None), Some "info" ->
