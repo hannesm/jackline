@@ -55,7 +55,11 @@ Left is the buddy list, in the middle the chat window, below the log buffer. The
 
 In the buddy list, presence subscription information is indicated by `[` and `]` (`?` means that no presence subscription exists for that side). The presence is indicated by a single character (o = online, f = free, a = away, d = do not disturb, x = extended away, _ = offline). One buddy is in focus (indicated by a grey background). Red foreground color means no active OTR session, green that an OTR session is active. Blinking indicates that a new message arrived. The self-contact is surrounded by curly braces.
 
-PgUp/PgDown navigates through the buddy list, F5 toggles display of offline buddies.
+Active keys:
+- PgUp/PgDown navigates through the buddy list
+- Ctrl-q jumps to next notification
+- Ctrl-x jumps to last active user
+- F5 toggles display of offline buddies
 
 Tab completion is available for the prompt. Tab completion completes the largest prefix.
 
