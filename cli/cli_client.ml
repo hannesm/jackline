@@ -310,7 +310,7 @@ let redraw, force_redraw =
 
 type direction = Up | Down
 
-let navigate_buddy_list state direction (* true - up ; false - down *) =
+let navigate_buddy_list state direction =
   let userlist = show_buddies state in
   let set_active idx =
     let user = User.Users.find state.users (List.nth userlist idx) in
