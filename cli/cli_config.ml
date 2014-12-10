@@ -89,6 +89,17 @@ let configure term () =
       if whitespace_starts then [`WHITESPACE_START_AKE] else [] ;
       if error_starts then [`ERROR_START_AKE] else [] ]
   in
-  let otr_config = { Otr.State.versions = versions ; Otr.State.policies = policies ; Otr.State.dsa = dsa } in
-  let config = Config.({ version = empty.version ; jid ; port ; password ; authenticator ; otr_config }) in
+  let otr_config = {
+    Otr.State.versions = versions ;
+    Otr.State.policies = policies ;
+    Otr.State.dsa = dsa
+  } in
+  let config = Config.({
+      version = empty.version ;
+      jid ;
+      port ;
+      password ;
+      authenticator ;
+      otr_config
+    }) in
   return config
