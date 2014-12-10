@@ -308,16 +308,20 @@ let redraw, force_redraw =
   let a, b = S.create "" in
   (a, fun () -> b "bla" ; b "")
 
+type direction = Up | Down
+
 let navigate_buddy_list state direction (* true - up ; false - down *) =
   let userlist = show_buddies state in
   let active_idx = find_index (fst state.active_chat).User.jid 0 userlist in
   let user_idx =
-    if (not direction) && List.length userlist > (succ active_idx) then
-      Some (succ active_idx)
-    else if direction && pred active_idx >= 0 then
-      Some (pred active_idx)
-    else
-      None
+    match
+      direction,
+      List.length userlist > succ active_idx,
+      pred active_idx >= 0
+    with
+    | Down, true, _    -> Some (succ active_idx)
+    | Up  , _   , true -> Some (pred active_idx)
+    | _                -> None
   in
   match user_idx with
   | Some idx ->
@@ -345,9 +349,9 @@ class read_line ~term ~network ~history ~state = object(self)
 
   method send_action = function
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = down ->
-      navigate_buddy_list state false
+      navigate_buddy_list state Down
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = up ->
-      navigate_buddy_list state true
+      navigate_buddy_list state Up
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = f5 ->
       state.show_offline <- not state.show_offline ;
       force_redraw ()
