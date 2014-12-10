@@ -21,6 +21,18 @@ let rec take_fill neutral x l acc =
   | n, x::xs -> take_fill neutral (pred n) xs (x::acc)
   | n, []    -> take_fill neutral (pred n) [] (neutral::acc)
 
+let rec take x l acc =
+  match x, l with
+  | 0, _       -> List.rev acc
+  | n, x :: xs -> take (pred n) xs (x :: acc)
+  | n, _       -> assert false
+
+let rec drop x l =
+  match x, l with
+  | 0, xs      -> xs
+  | n, x :: xs -> drop (pred n) xs
+  | n, []      -> []
+
 let rec pad_l neutral x l =
   match x - (List.length l) with
   | 0 -> l
@@ -154,7 +166,24 @@ let make_prompt size time network state redraw =
   let fg_color = color_session (fst state.active_chat) state.user (snd state.active_chat) in
 
   let buddylist =
-    let buddylst = take_fill [ S (String.make buddy_width ' ') ] main_size buddies [] in
+    let buddylst =
+      let bs = List.length buddies in
+      if main_size >= bs then
+        take_fill [ S (String.make buddy_width ' ') ] main_size buddies []
+      else
+        (* active_idx in the middle *)
+        let up, down = (main_size / 2, (main_size + 1) / 2) in
+        let from =
+          if active_idx - up >= 0 then
+            if active_idx + down > bs then
+              bs - main_size
+            else
+              active_idx - up
+          else
+            0
+        in
+        take main_size (drop from buddies) []
+    in
     let chat_wrap_length = (size.cols - buddy_width - 1 (* hline char *)) in
     let chat = line_wrap ~max_length:chat_wrap_length (List.rev chat) [] in
     let chatlst = List.rev (take_fill "" main_size chat []) in
