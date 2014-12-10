@@ -302,6 +302,8 @@ let up = UChar.of_int 0x2500
 let down = UChar.of_int 0x2501
 let f5 = UChar.of_int 0x2502
 let f12 = UChar.of_int 0x2503
+let ctrlq = UChar.of_int 0x2504
+let ctrlx = UChar.of_int 0x2505
 
 let redraw, force_redraw =
   (* this is just an ugly hack which should be removed *)
@@ -310,14 +312,23 @@ let redraw, force_redraw =
 
 type direction = Up | Down
 
+let activate_user ?session state user =
+  let session = match session with
+    | None   -> User.good_session user
+    | Some x -> Some x
+  in
+  let active = (user, session) in
+  if state.active_chat <> active then
+    (state.last_active_chat <- state.active_chat ;
+     state.active_chat <- active ;
+     state.notifications <- List.filter (fun a -> a <> user) state.notifications ;
+     force_redraw ())
+
 let navigate_buddy_list state direction =
   let userlist = show_buddies state in
   let set_active idx =
     let user = User.Users.find state.users (List.nth userlist idx) in
-    let session = User.good_session user in
-    state.active_chat <- (user, session) ;
-    state.notifications <- List.filter (fun a -> a <> user) state.notifications ;
-    force_redraw ()
+    activate_user state user
   and active_idx = find_index (fst state.active_chat).User.jid 0 userlist
   in
   match
@@ -354,6 +365,12 @@ class read_line ~term ~network ~history ~state = object(self)
       force_redraw ()
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = f12 ->
       ()
+    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrlq ->
+      if List.length state.notifications > 0 then
+        activate_user state (List.hd (List.rev state.notifications))
+    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrlx ->
+      let user, session = state.last_active_chat in
+      activate_user ?session state user
     | action ->
       super#send_action action
 
@@ -362,6 +379,8 @@ class read_line ~term ~network ~history ~state = object(self)
     LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = false; code = Next_page })] [Edit (LTerm_edit.Zed (Zed_edit.Insert down))]);
     LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = false; code = F5 })] [Edit (LTerm_edit.Zed (Zed_edit.Insert f5))]);
     LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = false; code = F12 })] [Edit (LTerm_edit.Zed (Zed_edit.Insert f12))]);
+    LTerm_read_line.(bind [LTerm_key.({ control = true; meta = false; shift = false; code = Char (UChar.of_int 0x71) })] [Edit (LTerm_edit.Zed (Zed_edit.Insert ctrlq))]);
+    LTerm_read_line.(bind [LTerm_key.({ control = true; meta = false; shift = false; code = Char (UChar.of_int 0x78) })] [Edit (LTerm_edit.Zed (Zed_edit.Insert ctrlx))]);
     self#set_prompt (S.l4 (fun size time network redraw -> make_prompt size time network state redraw)
                        self#size time network redraw)
 end
