@@ -229,7 +229,41 @@ let exec ?out input state config session_data log redraw =
          | _ -> err "don't know what you want" )
 
      | Some s, ("info", _) ->
-       msg "info bla" "NYI" >|= fun () -> session_data
+       let user = fst state.active_chat in
+       msg "jid" user.User.jid >>= fun () ->
+       ( match user.User.name with
+         | None -> return_unit
+         | Some x -> msg "name" x ) >>= fun () ->
+       ( match user.User.groups with
+         | [] -> return_unit
+         | xs -> msg "groups" (String.concat ", " xs) ) >>= fun () ->
+       let add =
+         ( if List.mem `Pending user.User.props then
+             "pending "
+           else
+             "" ) ^
+         ( if List.mem `PreApproved user.User.props then
+             "preapproved"
+           else
+             "" )
+       in
+       let add = if String.length add > 0 then " (" ^ (String.trim add) ^ ")" else "" in
+       msg "subscription" ((User.subscription_to_string user.User.subscription) ^ add) >>= fun () ->
+       let marshal_otr fp =
+         let ver = if fp.User.verified then "verified" else "unverified" in
+         let used = string_of_int fp.User.session_count in
+         fp.User.data ^ " " ^ ver ^ " (used in " ^ used ^ " sessions)"
+       in
+       msg "otr fingerprints" (String.concat ", " (List.map marshal_otr user.User.otr_fingerprints)) >>= fun () ->
+       let marshal_session s =
+         let prio = string_of_int s.User.priority in
+         let pres = User.presence_to_string s.User.presence in
+         s.User.resource ^ " (" ^ prio ^ "): " ^ pres
+       in
+       Lwt_list.iteri_s (fun i s ->
+           msg ("session " ^ (string_of_int i)) s)
+         (List.map marshal_session user.User.active_sessions) >|= fun () ->
+       session_data
 
      | Some s, ("otr", arg) ->
        let user = fst state.active_chat in
@@ -245,6 +279,11 @@ let exec ?out input state config session_data log redraw =
          in
          session.User.messages <- msg :: session.User.messages
        in
+       let marshal_otr fp =
+         let ver = if fp.User.verified then "verified" else "unverified" in
+         let used = string_of_int fp.User.session_count in
+         fp.User.data ^ " " ^ ver ^ " (used in " ^ used ^ " sessions)"
+       in
        ( match state.active_chat, arg with
          | (user, Some session), Some "start" ->
            let ctx, out = Otr.Handshake.start_otr session.User.otr in
@@ -256,10 +295,11 @@ let exec ?out input state config session_data log redraw =
            add_msg session "finished OTR session" ;
            send_over out
          | (user, Some session), Some "info" ->
-           msg "OTR" "info session" >|= fun () ->
+           msg "otr session" (Otr.State.session_to_string session.User.otr) >>= fun () ->
+           msg "otr fingerprints" (String.concat ", " (List.map marshal_otr user.User.otr_fingerprints)) >|= fun () ->
            session_data
          | (user, None), Some "info" ->
-           msg "OTR" "info no session" >|= fun () ->
+           msg "(no active session) OTR fingerprints" (String.concat ", " (List.map marshal_otr user.User.otr_fingerprints)) >|= fun () ->
            session_data
          | (user, None), Some "start" ->
            let session =

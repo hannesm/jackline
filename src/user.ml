@@ -65,6 +65,12 @@ type subscription = [
   | `Both
 ] with sexp
 
+let subscription_to_string = function
+  | `Both -> "both"
+  | `From -> "from"
+  | `To -> "to"
+  | `None -> "none"
+
 let subscription_to_chars = function
   | `Both -> ("[", "]")
   | `From -> ("[", "?")
