@@ -73,25 +73,22 @@ let show_buddies state =
     (User.keys state.users) []
 
 let rec line_wrap ~max_length entries acc : string list =
-  let open String in
   match entries with
-  | entry::remaining when contains entry '\n' ->
-    let part1     = sub entry 0 (index entry '\n') in
-    let part1_len = 1 + length part1 in (* +1: account for \n *)
-    let part2     = "  " ^ sub entry part1_len ((length entry) - part1_len) in
+  | entry::remaining when String.contains entry '\n' ->
+    let part1     = String.sub entry 0 (String.index entry '\n') in
+    let part1_len = 1 + String.length part1 in (* +1: account for \n *)
+    let part2     = "  " ^ String.sub entry part1_len ((String.length entry) - part1_len) in
     let remaining =
-      match trim part1 = "", trim part2 = "" with
+      match String.trim part1 = "", String.trim part2 = "" with
       | true , true  -> remaining
       | false, true  -> part1::remaining
       | true , false -> part2::remaining
       | false, false -> part1::part2::remaining
     in
     line_wrap ~max_length remaining acc
-  | entry::remaining when (length entry) > max_length ->
-    let part1 = sub entry 0 max_length
-    and part2 = "  " ^ sub entry max_length ((length entry) - max_length)
-    in
-    line_wrap ~max_length (part2::remaining) (part1::acc)
+  | entry::remaining when (Zed_utf8.length entry) > max_length ->
+    let part1, part2 = Zed_utf8.break entry max_length in
+    line_wrap ~max_length (("  " ^ part2)::remaining) (part1::acc)
   | entry::remaining ->
     line_wrap ~max_length remaining (entry::acc)
   | [] -> acc
@@ -214,24 +211,24 @@ let make_prompt size time network state redraw =
     in
     let pre = (Zed_utf8.make buddy_width (UChar.of_int 0x2500)) ^ (Zed_utf8.singleton (UChar.of_int 0x2534)) in
     let txt = " buddy: " ^ buddy in
-    let leftover = size.cols - (String.length txt) - buddy_width - 1 in
-    if leftover > 0 && (String.length otr) < leftover then
-      let leftover' = leftover - (String.length otr) in
+    let leftover = size.cols - (Zed_utf8.length txt) - buddy_width - 1 in
+    if leftover > 0 && (Zed_utf8.length otr) < leftover then
+      let leftover' = leftover - (Zed_utf8.length otr) in
       let post =
-        if (String.length pres) < leftover' then
-          let pos = Zed_utf8.make (leftover' - (String.length pres) - 1) (UChar.of_int 0x2500) in
+        if (Zed_utf8.length pres) < leftover' then
+          let pos = Zed_utf8.make (leftover' - (Zed_utf8.length pres) - 1) (UChar.of_int 0x2500) in
           [ B_fg fg_color ; S pres ; S " " ; S pos ; E_fg ]
         else
-          [ B_fg fg_color ; S (String.sub pres 0 leftover') ; E_fg ]
+          [ B_fg fg_color ; S (Zed_utf8.sub pres 0 leftover') ; E_fg ]
       in
       [ B_fg fg_color ; S pre ; S txt ; E_fg ; B_fg col ; S otr ; E_fg ] @ post
     else if leftover > 0 then
-      [ B_fg fg_color ; S pre ; S txt ; E_fg ; B_fg col ; S (String.sub otr 0 leftover) ; E_fg ]
-    else if (String.length txt) < size.cols then
-      let pos = Zed_utf8.make (size.cols - (String.length txt) - 1) (UChar.of_int 0x2500) in
+      [ B_fg fg_color ; S pre ; S txt ; E_fg ; B_fg col ; S (Zed_utf8.sub otr 0 leftover) ; E_fg ]
+    else if (Zed_utf8.length txt) < size.cols then
+      let pos = Zed_utf8.make (size.cols - (Zed_utf8.length txt) - 1) (UChar.of_int 0x2500) in
       [ B_fg fg_color ; S txt ; S " " ; S pos ; E_fg ]
     else
-      [ B_fg fg_color ; S (String.sub txt 0 size.cols) ; E_fg ]
+      [ B_fg fg_color ; S (Zed_utf8.sub txt 0 size.cols) ; E_fg ]
   in
 
 
@@ -249,17 +246,17 @@ let make_prompt size time network state redraw =
     in
 
 
-    let leftover = size.cols - (String.length jid) - 6 in
+    let leftover = size.cols - (Zed_utf8.length jid) - 6 in
     let jid, left =
       if leftover > 0 then
         ([ S "< "; B_fg lblue; S jid; E_fg; S" >─" ], leftover)
-      else if (size.cols > String.length jid) then
-        ([ B_fg blue ; S jid ; E_fg ], size.cols - String.length jid)
+      else if (size.cols > Zed_utf8.length jid) then
+        ([ B_fg blue ; S jid ; E_fg ], size.cols - Zed_utf8.length jid)
       else
-        ([ B_fg blue ; S (String.sub jid 0 (pred size.cols)) ; E_fg ], 0)
+        ([ B_fg blue ; S (Zed_utf8.sub jid 0 (pred size.cols)) ; E_fg ], 0)
     in
 
-    let leftover' = left - (String.length status) - 5 in
+    let leftover' = left - (Zed_utf8.length status) - 5 in
     let status, left =
       if leftover' > 0 then
         ([ S "[ " ;
@@ -296,9 +293,12 @@ let make_prompt size time network state redraw =
     [ E_fg; S"\n"; E_bold ]
   in
 
-  eval (
-    List.flatten buddylist @ hline @ [ S "\n" ; S logs ; S "\n" ] @ status
-  )
+  try
+    eval (
+      List.flatten buddylist @ hline @ [ S "\n" ; S logs ; S "\n" ] @ status
+    )
+  with
+    _ -> eval ([ S "error during eval ; please re-run with -debug true and submit a bug with the offending xml part (ctrl-d will close jackline)"])
 
 let time =
   let time, set_time = S.create (Unix.time ()) in
