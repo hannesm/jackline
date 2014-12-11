@@ -157,10 +157,14 @@ let make_prompt size time network state redraw =
       in
       time ^ pre ^ msg
     in
+    (match snd state.active_chat, User.good_session (fst state.active_chat) with
+     | None, Some x -> state.active_chat <- (fst state.active_chat, Some x)
+     | Some x, Some y when x <> y -> state.active_chat <- (fst state.active_chat, Some y)
+     | _ -> () );
     match snd state.active_chat with
-      | None -> []
-      | Some x when x = state.session -> List.map print_log state.log
-      | Some x -> List.map printmsg x.User.messages
+    | None -> []
+    | Some x when x = state.session -> List.map print_log state.log
+    | Some x -> List.map printmsg x.User.messages
   in
 
   let fg_color = color_session (fst state.active_chat) state.user (snd state.active_chat) in
@@ -423,26 +427,31 @@ let rec loop ?out (config : Config.t) term hist state session_data network s_n =
     | Some message when String.length message > 0 ->
        LTerm_history.add hist message;
        let err data = s_n (Unix.localtime (Unix.time ()), "error", data) ; return_unit in
+       let send_msg user session t =
+         let ctx, out, user_out = Otr.Handshake.send_otr session.User.otr message in
+         session.User.otr <- ctx ;
+         let add_msg direction enc data =
+           let msg =
+             let now = Unix.localtime (Unix.time ()) in
+             (direction, enc, false, now, data)
+           in
+           session.User.messages <- msg :: session.User.messages
+         in
+         (match user_out with
+          | `Warning msg      -> add_msg `Local false msg
+          | `Sent m           -> add_msg `To false m
+          | `Sent_encrypted m -> add_msg `To true m ) ;
+         Xmpp_callbacks.XMPPClient.send_message t
+           ~jid_to:(JID.of_string user.User.jid)
+           ?body:out ()
+       in
        ( match state.active_chat, session_data with
          | (user, _), _ when user = state.user -> return_unit
-         | (user, None), _ -> err "no active session, cannot send"
-         | (user, Some session), Some x ->
-           let ctx, out, user_out = Otr.Handshake.send_otr session.User.otr message in
-           session.User.otr <- ctx ;
-           let add_msg direction enc data =
-             let msg =
-               let now = Unix.localtime (Unix.time ()) in
-               (direction, enc, false, now, data)
-             in
-             session.User.messages <- msg :: session.User.messages
-           in
-           (match user_out with
-            | `Warning msg -> add_msg `Local false msg
-            | `Sent m -> add_msg `To false m
-            | `Sent_encrypted m -> add_msg `To true m ) ;
-           Xmpp_callbacks.XMPPClient.send_message x
-             ~jid_to:(JID.of_string user.User.jid)
-             ?body:out ()
+         | (user, None), Some x ->
+           let dummy_session = User.empty_session "/special/" config.Config.otr_config () in
+           user.User.active_sessions <- dummy_session :: user.User.active_sessions ;
+           send_msg user dummy_session x
+         | (user, Some session), Some x -> send_msg user session x
          | _, None -> err "no active session, try to connect first" ) >>= fun () ->
        loop ?out config term hist state session_data network s_n
      | Some message -> loop ?out config term hist state session_data network s_n

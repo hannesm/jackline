@@ -174,13 +174,17 @@ let find_or_add jid users =
 
 let ensure_session jid otr_cfg user =
   let { JID.lresource } = jid in
-  (if not (List.exists
-             (fun s -> s.resource = lresource)
-             user.active_sessions)
-   then
+  let r_matches l s = s.resource = l in
+  (if not (List.exists (r_matches lresource) user.active_sessions) then
      let sess = empty_session lresource otr_cfg () in
+     (if List.exists (r_matches "/special/") user.active_sessions then
+        let dummy = List.find (r_matches "/special/") user.active_sessions in
+        sess.messages <- dummy.messages ;
+        sess.otr <- dummy.otr ;
+        user.active_sessions <-
+          List.filter (fun s -> not (r_matches "/special/" s)) user.active_sessions) ;
      user.active_sessions <- (sess :: user.active_sessions ) );
-  List.find (fun s -> s.resource = lresource) user.active_sessions
+  List.find (r_matches lresource) user.active_sessions
 
 let good_session user =
   if List.length user.active_sessions = 0 then

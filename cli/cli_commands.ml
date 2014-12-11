@@ -305,10 +305,7 @@ let exec ?out input state config session_data log redraw =
          | (user, None), Some "start" ->
            (* no OTR context, but we're sending only an OTR query anyways
               (and if we see a reply, we'll get some resource from the other side) *)
-           let ctx = Otr.State.new_session
-               Xmpp_callbacks.(s.XMPPClient.user_data.otr_config)
-               ()
-           in
+           let ctx = Otr.State.new_session config.Config.otr_config () in
            let _, out = Otr.Handshake.start_otr ctx in
            send_over (Some out)
          | (user, None), Some "stop" -> err "no active session"
