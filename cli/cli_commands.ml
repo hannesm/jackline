@@ -303,13 +303,13 @@ let exec ?out input state config session_data log redraw =
            msg "(no active session) OTR fingerprints" (String.concat ", " (List.map marshal_otr user.User.otr_fingerprints)) >|= fun () ->
            session_data
          | (user, None), Some "start" ->
-           let session =
-             User.ensure_session
-               (JID.of_string (user.User.jid ^ "/none"))
-               s.Xmpp_callbacks.XMPPClient.user_data.Xmpp_callbacks.otr_config user
+           (* no OTR context, but we're sending only an OTR query anyways
+              (and if we see a reply, we'll get some resource from the other side) *)
+           let ctx = Otr.State.new_session
+               Xmpp_callbacks.(s.XMPPClient.user_data.otr_config)
+               ()
            in
-           let ctx, out = Otr.Handshake.start_otr session.User.otr in
-           session.User.otr <- ctx ;
+           let _, out = Otr.Handshake.start_otr ctx in
            send_over (Some out)
          | (user, None), Some "stop" -> err "no active session"
          |  _ -> err "unknown argument (/otr [start|stop|info])"
