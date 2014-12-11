@@ -8,6 +8,7 @@ type ui_state = {
   users : User.users ; (* extended by xmpp callbacks *)
   mutable notifications : User.user list ;
   mutable show_offline : bool ;
+  mutable scrollback : int ;
 }
 
 let empty_ui_state user session users = {
@@ -19,4 +20,5 @@ let empty_ui_state user session users = {
   users ;
   notifications = [] ;
   show_offline = true ;
+  scrollback = 0 ;
 }

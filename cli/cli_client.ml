@@ -15,6 +15,12 @@ let rec take_rev x l acc =
   | n, [] -> acc
   | n, x :: xs -> take_rev (pred n) xs (x :: acc)
 
+let rec skip n l =
+  match n, l with
+  | 0, x-> x
+  | _, []-> []
+  | n, _::xs -> skip (n -1) xs
+
 let rec take_fill neutral x l acc =
   match x, l with
   | 0, _     -> List.rev acc
@@ -190,7 +196,8 @@ let make_prompt size time network state redraw =
         take main_size (drop from buddies) []
     in
     let chat_wrap_length = (size.cols - buddy_width - 1 (* hline char *)) in
-    let chat = line_wrap ~max_length:chat_wrap_length (List.rev chat) [] in
+    let chat1 = line_wrap ~max_length:chat_wrap_length (List.rev chat) [] in
+    let chat = skip (state.scrollback * 16) chat1 in
     let chatlst = List.rev (take_fill "" main_size chat []) in
     let comb = List.combine buddylst chatlst in
     List.map (fun (b, c) -> b @ [ B_fg fg_color ; S (Zed_utf8.singleton (UChar.of_int 0x2502)) ; E_fg ; S c ; S "\n" ]) comb
@@ -212,7 +219,12 @@ let make_prompt size time network state redraw =
       | u, None -> (u.User.jid, "", black, "")
     in
     let pre = (Zed_utf8.make buddy_width (UChar.of_int 0x2500)) ^ (Zed_utf8.singleton (UChar.of_int 0x2534)) in
-    let txt = " buddy: " ^ buddy in
+    let txt =
+      if state.scrollback = 0 then
+	" buddy: " ^ buddy
+      else
+	"*scroll*" ^ buddy
+    in
     let leftover = size.cols - (Zed_utf8.length txt) - buddy_width - 1 in
     if leftover > 0 && (Zed_utf8.length otr) < leftover then
       let leftover' = leftover - (Zed_utf8.length otr) in
@@ -314,6 +326,9 @@ let f5 = UChar.of_int 0x2502
 let f12 = UChar.of_int 0x2503
 let ctrlq = UChar.of_int 0x2504
 let ctrlx = UChar.of_int 0x2505
+let ctrlup = UChar.of_int 0x2506
+let ctrldown = UChar.of_int 0x2507
+
 
 let redraw, force_redraw =
   (* this is just an ugly hack which should be removed *)
@@ -331,8 +346,18 @@ let activate_user ?session state user =
   if state.active_chat <> active then
     (state.last_active_chat <- state.active_chat ;
      state.active_chat <- active ;
+     state.scrollback <- 0 ;
      state.notifications <- List.filter (fun a -> a <> user) state.notifications ;
      force_redraw ())
+
+let navigate_message_buffer state direction =
+  match
+    direction,
+    state.scrollback
+  with
+  | Down, 0 -> ()
+  | Down, n -> state.scrollback <- n - 1 ; force_redraw ()
+  | Up, n -> state.scrollback <- n + 1; force_redraw ()
 
 let navigate_buddy_list state direction =
   let userlist = show_buddies state in
@@ -370,6 +395,10 @@ class read_line ~term ~network ~history ~state = object(self)
       navigate_buddy_list state Down
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = up ->
       navigate_buddy_list state Up
+    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrldown ->
+      navigate_message_buffer state Down
+    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrlup ->
+      navigate_message_buffer state Up
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = f5 ->
       state.show_offline <- not state.show_offline ;
       force_redraw ()
@@ -387,6 +416,8 @@ class read_line ~term ~network ~history ~state = object(self)
   initializer
     LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = false; code = Prev_page })] [Edit (LTerm_edit.Zed (Zed_edit.Insert up))]);
     LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = false; code = Next_page })] [Edit (LTerm_edit.Zed (Zed_edit.Insert down))]);
+    LTerm_read_line.(bind [LTerm_key.({ control = true; meta = false; shift = false; code = Prev_page })] [Edit (LTerm_edit.Zed (Zed_edit.Insert ctrlup))]);
+    LTerm_read_line.(bind [LTerm_key.({ control = true; meta = false; shift = false; code = Next_page })] [Edit (LTerm_edit.Zed (Zed_edit.Insert ctrldown))]);
     LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = false; code = F5 })] [Edit (LTerm_edit.Zed (Zed_edit.Insert f5))]);
     LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = false; code = F12 })] [Edit (LTerm_edit.Zed (Zed_edit.Insert f12))]);
     LTerm_read_line.(bind [LTerm_key.({ control = true; meta = false; shift = false; code = Char (UChar.of_int 0x71) })] [Edit (LTerm_edit.Zed (Zed_edit.Insert ctrlq))]);
