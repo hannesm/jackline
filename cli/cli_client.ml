@@ -15,12 +15,6 @@ let rec take_rev x l acc =
   | n, [] -> acc
   | n, x :: xs -> take_rev (pred n) xs (x :: acc)
 
-let rec skip n l =
-  match n, l with
-  | 0, x-> x
-  | _, []-> []
-  | n, _::xs -> skip (n -1) xs
-
 let rec take_fill neutral x l acc =
   match x, l with
   | 0, _     -> List.rev acc
@@ -36,7 +30,7 @@ let rec take x l acc =
 let rec drop x l =
   match x, l with
   | 0, xs      -> xs
-  | n, x :: xs -> drop (pred n) xs
+  | n, _ :: xs -> drop (pred n) xs
   | n, []      -> []
 
 let rec pad_l neutral x l =
@@ -197,7 +191,7 @@ let make_prompt size time network state redraw =
     in
     let chat_wrap_length = (size.cols - buddy_width - 1 (* hline char *)) in
     let chat1 = line_wrap ~max_length:chat_wrap_length (List.rev chat) [] in
-    let chat = skip (state.scrollback * 16) chat1 in
+    let chat = drop (state.scrollback * main_size) chat1 in
     let chatlst = List.rev (take_fill "" main_size chat []) in
     let comb = List.combine buddylst chatlst in
     List.map (fun (b, c) -> b @ [ B_fg fg_color ; S (Zed_utf8.singleton (UChar.of_int 0x2502)) ; E_fg ; S c ; S "\n" ]) comb
