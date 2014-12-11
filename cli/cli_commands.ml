@@ -261,7 +261,11 @@ let exec ?out input state config session_data log redraw =
          s.User.resource ^ " (" ^ prio ^ "): " ^ pres
        in
        Lwt_list.iteri_s (fun i s ->
-           msg ("session " ^ (string_of_int i)) (marshal_session s) >>= fun () ->
+           let act = match snd state.active_chat with
+             | Some x when x = s -> " (active)"
+             | _ -> ""
+           in
+           msg ("session " ^ (string_of_int i) ^ act) (marshal_session s) >>= fun () ->
            msg "otr" (Otr.State.session_to_string s.User.otr))
          user.User.active_sessions >|= fun () ->
        session_data
