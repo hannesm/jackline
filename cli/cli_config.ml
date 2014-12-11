@@ -71,24 +71,29 @@ let configure term () =
       end ) >>= fun authenticator ->
   (* otr config *)
   LTerm.fprintl term "OTR config" >>= fun () ->
-  read_yes_no term "Protocol version 2 support (recommended)" >>= fun v2 ->
-  read_yes_no term "Protocol version 3 support (recommended)" >>= fun v3 ->
-  read_yes_no term "Require OTR encryption (recommended)" >>= fun require ->
-  read_yes_no term "Send whitespace tag (recommended)" >>= fun send_whitespace ->
-  read_yes_no term "Whitespaces starts key exchange (recommended)" >>= fun whitespace_starts ->
-  read_yes_no term "Error starts key exchange (recommended)" >>= fun error_starts ->
-  let dsa = Nocrypto.Dsa.generate `Fips1024 in
-  (match v2, v3 with
-   | true, true -> return [`V3 ; `V2 ]
-   | true, false -> return [ `V2 ]
-   | false, true -> return [ `V3 ]
-   | false, false -> fail (Invalid_argument "no OTR version selected") ) >>= fun versions ->
-  let policies = List.flatten [
-      if require then [`REQUIRE_ENCRYPTION] else [] ;
-      if send_whitespace then [`SEND_WHITESPACE_TAG] else [] ;
-      if whitespace_starts then [`WHITESPACE_START_AKE] else [] ;
-      if error_starts then [`ERROR_START_AKE] else [] ]
+  let ask_list xs to_string prefix suffix =
+    Lwt_list.fold_right_s (fun v acc ->
+      read_yes_no term (prefix ^ (to_string v) ^ suffix) >|= function
+      | true -> v :: acc
+      | false -> acc)
+      xs []
   in
+  ask_list
+    Otr.State.versions
+    Otr.State.version_to_string
+    "Protocol "
+    " support (recommended)" >>= fun versions ->
+  ( if List.length versions = 0 then
+      fail (Invalid_argument "no OTR version selected")
+    else
+      return versions ) >>= fun versions ->
+
+  ask_list
+    Otr.State.policies
+    Otr.State.policy_to_string
+    ""
+    " (recommended)" >|= fun policies ->
+  let dsa = Nocrypto.Dsa.generate `Fips1024 in
   let otr_config = {
     Otr.State.versions = versions ;
     Otr.State.policies = policies ;
@@ -102,4 +107,4 @@ let configure term () =
       authenticator ;
       otr_config
     }) in
-  return config
+  config
