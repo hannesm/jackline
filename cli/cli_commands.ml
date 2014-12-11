@@ -272,9 +272,12 @@ let exec ?out input state config session_data log redraw =
 
      | Some s, ("otr", arg) ->
        let user = fst state.active_chat in
-       let send_over body =
-         let jid_to = JID.of_string user.User.jid in
-         Xmpp_callbacks.XMPPClient.send_message s ~jid_to ?body () >|= fun () ->
+       let send_over resource body =
+         let jid_to =
+           let r = if resource = "" then "" else "/" ^ resource in
+           JID.of_string (user.User.jid ^ r)
+         in
+         Xmpp_callbacks.XMPPClient.(send_message s ~kind:Chat ~jid_to ?body ()) >|= fun () ->
          session_data
        in
        let add_msg session data =
@@ -293,12 +296,12 @@ let exec ?out input state config session_data log redraw =
          | (user, Some session), Some "start" ->
            let ctx, out = Otr.Handshake.start_otr session.User.otr in
            session.User.otr <- ctx ;
-           send_over (Some out)
+           send_over session.User.resource (Some out)
          | (user, Some session), Some "stop" ->
            let ctx, out = Otr.Handshake.end_otr session.User.otr in
            session.User.otr <- ctx ;
            add_msg session "finished OTR session" ;
-           send_over out
+           send_over session.User.resource out
          | (user, Some session), Some "info" ->
            msg ("otr session " ^ session.User.resource) (Otr.State.session_to_string session.User.otr) >>= fun () ->
            msg "otr fingerprints" (String.concat ", " (List.map marshal_otr user.User.otr_fingerprints)) >|= fun () ->
@@ -311,7 +314,7 @@ let exec ?out input state config session_data log redraw =
               (and if we see a reply, we'll get some resource from the other side) *)
            let ctx = Otr.State.new_session config.Config.otr_config () in
            let _, out = Otr.Handshake.start_otr ctx in
-           send_over (Some out)
+           send_over "" (Some out)
          | (user, None), Some "stop" -> err "no active session"
          |  _ -> err "unknown argument (/otr [start|stop|info])"
        )

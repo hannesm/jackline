@@ -420,7 +420,10 @@ let rec loop ?out (config : Config.t) term hist state session_data network s_n =
            Lwt_list.iter_s
              (fun (jid_to, ctx) ->
                 let _, out = Otr.Handshake.end_otr ctx in
-                Xmpp_callbacks.XMPPClient.send_message x ~jid_to:(JID.of_string jid_to) ?body:out ())
+                Xmpp_callbacks.XMPPClient.(send_message x
+                                             ~kind:Chat
+                                             ~jid_to:(JID.of_string jid_to)
+                                             ?body:out ()))
              otr_sessions
              (* close connection! *)
         ) >|= fun () -> state
@@ -441,9 +444,15 @@ let rec loop ?out (config : Config.t) term hist state session_data network s_n =
           | `Warning msg      -> add_msg `Local false msg
           | `Sent m           -> add_msg `To false m
           | `Sent_encrypted m -> add_msg `To true m ) ;
-         Xmpp_callbacks.XMPPClient.send_message t
-           ~jid_to:(JID.of_string user.User.jid)
-           ?body:out ()
+         let jid_to = if session.User.resource = "/special/" then
+             user.User.jid
+           else
+             user.User.jid ^ "/" ^ session.User.resource
+         in
+         Xmpp_callbacks.XMPPClient.(send_message t
+                                      ~kind:Chat
+                                      ~jid_to:(JID.of_string jid_to)
+                                      ?body:out ())
        in
        ( match state.active_chat, session_data with
          | (user, _), _ when user = state.user -> return_unit

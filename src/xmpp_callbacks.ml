@@ -128,10 +128,9 @@ let message_callback (t : user_data session_data) stanza =
     match out with
     | None -> return ()
     | Some _ ->
-      send_message t ?jid_to:stanza.jid_from
-        ?id:stanza.id
-        ?kind:stanza.content.message_type
-        ?lang:stanza.lang
+      send_message t
+        ?jid_to:stanza.jid_from
+        ~kind:Chat
         ?body:out ()
 
 let message_error t ?id ?jid_from ?jid_to ?lang error =
