@@ -258,7 +258,11 @@ let exec ?out input state config session_data log redraw =
        let marshal_session s =
          let prio = string_of_int s.User.priority in
          let pres = User.presence_to_string s.User.presence in
-         s.User.resource ^ " (" ^ prio ^ "): " ^ pres
+         let status = match s.User.status with
+           | None -> ""
+           | Some x -> " - " ^ x
+         in
+         s.User.resource ^ " (" ^ prio ^ "): " ^ pres ^ status
        in
        Lwt_list.iteri_s (fun i s ->
            let act = match snd state.active_chat with
