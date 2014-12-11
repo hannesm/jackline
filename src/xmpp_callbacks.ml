@@ -201,29 +201,36 @@ let presence_error t ?id ?jid_from ?jid_to ?lang error =
 
 
 let roster_callback users item =
-  let user = User.find_or_add item.Roster.jid users in
-  let subscription =
-    match item.Roster.subscription with
-    | Roster.SubscriptionRemove -> assert false
-    | Roster.SubscriptionBoth -> `Both
-    | Roster.SubscriptionNone -> `None
-    | Roster.SubscriptionFrom -> `From
-    | Roster.SubscriptionTo -> `To
-  in
-  let props =
-    let app = if item.Roster.approved then [`PreApproved ] else [] in
-    let ask = match item.Roster.ask with | Some _ -> [ `Pending ] | None -> [] in
-    app @ ask
-  in
-  let name = if item.Roster.name = "" then None else Some item.Roster.name in
-  let t = { user with
-            User.name = name ;
-            User.groups = item.Roster.group ;
-            subscription ; props }
-  in
-  User.(Users.replace users t.jid t)
+  try
+    let user = User.find_or_add item.Roster.jid users in
+    let subscription =
+      match item.Roster.subscription with
+      | Roster.SubscriptionRemove -> assert false
+      | Roster.SubscriptionBoth -> `Both
+      | Roster.SubscriptionNone -> `None
+      | Roster.SubscriptionFrom -> `From
+      | Roster.SubscriptionTo -> `To
+    in
+    let props =
+      let app = if item.Roster.approved then [`PreApproved ] else [] in
+      let ask = match item.Roster.ask with | Some _ -> [ `Pending ] | None -> [] in
+      app @ ask
+    in
+    let name = if item.Roster.name = "" then None else Some item.Roster.name in
+    let t = { user with
+              User.name = name ;
+              User.groups = item.Roster.group ;
+              subscription ; props }
+    in
+    User.(Users.replace users t.jid t)
+  with
+  _ -> ()
 
 let session_callback t =
+  let err txt =
+    let f = t.user_data.received in
+    f "handling error" txt
+  in
   register_iq_request_handler t Version.ns_version
     (fun ev _jid_from _jid_to _lang () ->
       match ev with
@@ -235,8 +242,8 @@ let session_callback t =
           in
           return (IQResult (Some el))
         | IQSet _el ->
-          fail BadRequest
-    );
+          fail BadRequest );
+
   register_iq_request_handler t Roster.ns_roster
     (fun ev jid_from jid_to lang () ->
        match ev with
@@ -245,33 +252,50 @@ let session_callback t =
          ( match jid_from, jid_to with
            | None, _        -> return ()
            | Some x, Some y ->
-             let from_jid = JID.of_string x
-             and to_jid   = JID.of_string y
-             in
-             if JID.is_bare from_jid && JID.equal (JID.bare_jid to_jid) from_jid then
-               return ()
-             else
-               fail BadRequest
+             ( try
+                 let from_jid = JID.of_string x
+                 and to_jid   = JID.of_string y
+                 in
+                 if JID.is_bare from_jid && JID.equal (JID.bare_jid to_jid) from_jid then
+                   return ()
+                 else
+                   fail BadRequest
+               with _ -> fail BadRequest )
            | _ -> fail BadRequest ) >>= fun () ->
-           match el with
-           | Xml.Xmlelement ((ns_roster, "query"), attrs, els) ->
-             (* assert single item! *)
-             let ver, items = Roster.decode attrs els in
-             if List.length items = 1 then
-               let users = t.user_data.users in
-               List.iter (roster_callback users) items ;
-               return (IQResult None)
-             else
-               fail BadRequest
-           | _ -> fail BadRequest ) ;
+         match el with
+         | Xml.Xmlelement ((ns_roster, "query"), attrs, els) ->
+           let ver, items = Roster.decode attrs els in
+           if List.length items = 1 then
+             let users = t.user_data.users in
+             List.iter (roster_callback users) items ;
+             return (IQResult None)
+           else
+             fail BadRequest
+         | _ -> fail BadRequest ) ;
+
   register_stanza_handler t (ns_client, "message")
-    (parse_message ~callback:message_callback ~callback_error:message_error);
+    (fun t attrs eles ->
+       (try
+          parse_message
+            ~callback:message_callback
+            ~callback_error:message_error
+            t attrs eles
+        with _ -> err "during message parsing, ignoring" ; return_unit ));
+
   register_stanza_handler t (ns_client, "presence")
-    (parse_presence ~callback:presence_callback ~callback_error:presence_error);
+    (fun t attrs eles ->
+       (try
+          parse_presence
+            ~callback:presence_callback
+            ~callback_error:presence_error
+            t attrs eles
+        with _ -> err "during presence parsing, ignoring" ; return_unit ));
+
   Roster.get t (fun ?jid_from ?jid_to ?lang ?ver items ->
       let users = t.user_data.users in
       List.iter (roster_callback users) items ;
       return () ) >>= fun () ->
+
   send_presence t () >>= fun () ->
   return ()
 
