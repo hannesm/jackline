@@ -79,8 +79,12 @@ let rec line_wrap ~max_length entries acc : string list =
     let part1     = sub entry 0 (index entry '\n') in
     let part1_len = 1 + length part1 in (* +1: account for \n *)
     let part2     = "  " ^ sub entry part1_len ((length entry) - part1_len) in
-    let acc       = if 0 <> length (trim part1) then part1::acc else acc
-    and remaining = if 0 <> length (trim part2) then part2::remaining else remaining
+    let remaining =
+      match trim part1 = "", trim part2 = "" with
+      | true , true  -> remaining
+      | false, true  -> part1::remaining
+      | true , false -> part2::remaining
+      | false, false -> part1::part2::remaining
     in
     line_wrap ~max_length remaining acc
   | entry::remaining when (length entry) > max_length ->
