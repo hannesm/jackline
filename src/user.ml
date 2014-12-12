@@ -4,6 +4,32 @@ type presence = [
   | `Online | `Free | `Away | `DoNotDisturb | `ExtendedAway | `Offline
 ]
 
+let compare_presence a b =
+  (* ordering:
+     - free and online are best
+     - followed by away
+     - followed by extendedaway and do no disturb
+     - offline is last *)
+  match a, b with
+  | `Free, `Free -> 0
+  | `Free, `Online -> 0
+  | `Online, `Online -> 0
+  | `Online, `Free -> 0
+  | `Away, `Away -> 0
+  | `Away, _ -> 1
+  | _, `Away -> -1
+  | `DoNotDisturb, `DoNotDisturb -> 0
+  | `ExtendedAway, `ExtendedAway -> 0
+  | `ExtendedAway, `DoNotDisturb -> 0
+  | `DoNotDisturb, `ExtendedAway -> 0
+  | `DoNotDisturb, _ -> 1
+  | _, `DoNotDisturb -> -1
+  | `ExtendedAway, _ -> 1
+  | _, `ExtendedAway -> -1
+  | `Offline, `Offline -> 0
+  | `Offline, _ -> 1
+  | _, `Offline -> -1
+
 let presence_to_string = function
   | `Online -> "online"
   | `Free -> "free"
@@ -215,7 +241,13 @@ let good_session user =
     if List.length s = 0 then
       Some (List.hd user.active_sessions)
     else
-      Some (List.hd (List.sort (fun a b -> compare b.priority a.priority) s))
+      let ss =
+        let prios = List.sort (fun a b -> compare b.priority a.priority) s in
+        let top = List.hd prios in
+        let best = List.filter (fun x -> x.priority = top.priority) prios in
+        List.sort (fun a b -> compare_presence a.presence b.presence) best
+      in
+      Some (List.hd ss)
 
 let t_of_sexp t version =
   match t with
