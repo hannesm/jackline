@@ -1,5 +1,6 @@
 
 type ui_state = {
+  config_directory : string ;
   user : User.user ; (* set initially *)
   session : User.session ; (* set initially *)
   mutable log : (Unix.tm * string * string) list ; (* set by xmpp callbacks -- should be time * string list *)
@@ -11,7 +12,8 @@ type ui_state = {
   mutable scrollback : int ;
 }
 
-let empty_ui_state user session users = {
+let empty_ui_state config_directory user session users = {
+  config_directory ;
   user ;
   session ;
   log = [] ;
