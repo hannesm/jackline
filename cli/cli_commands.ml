@@ -60,6 +60,8 @@ let _ =
     "otr" "/otr sub" "manages OTR session [sub is one of 'start' 'stop' or 'info']"
     [ "start" ; "stop" ; "info" ] ;
   new_command
+    "log" "/log on|off" "enable or disable logging for current contact" [ "on" ; "off" ] ;
+  new_command
     "help" "/help [cmd]" "shows available commands or detailed help for cmd"
     (keys ())
 
@@ -123,6 +125,8 @@ let exec ?out input state config session_data log redraw =
     let err m = msg "error" m >|= fun () -> session_data in
     (msg, err)
   in
+  let dump data = User.new_message (fst state.active_chat) `Local false false data in
+
   match cmd_arg input with
 
   | ("help", Some arg) when Commands.mem commands arg ->
@@ -207,19 +211,31 @@ let exec ?out input state config session_data log redraw =
                  | None -> err "fingerprint didn't match"
                  | Some x ->
                    User.replace user { x with User.verified = true } ;
-                   msg user.User.jid "fingerprint is now verified" >|= fun () ->
-                   session_data)
+                   dump "fingerprint is now verified" ;
+                   return session_data)
              | _ -> err "provided fingerprint does not match the one of this active session" )
          | _ -> err "no active OTR session"
        end
+
+     | Some s, ("log", Some arg) ->
+       let doit n =
+         dump ("logging turned " ^ arg) ;
+         (fst state.active_chat).User.preserve_history <- n ;
+         return session_data
+       in
+       ( match arg with
+         | "on"  -> doit true
+         | "off" -> doit false
+         | _ -> err "don't know what you want" )
 
      | Some s, ("authorization", Some arg) ->
        let open Xmpp_callbacks.XMPPClient in
        let user = fst state.active_chat in
        let jid = user.User.jid in
        let doit kind m =
-         send_presence s ~jid_to:(JID.of_string jid) ~kind () >>= fun () ->
-         msg jid m >|= fun () -> session_data
+         send_presence s ~jid_to:(JID.of_string jid) ~kind () >|= fun () ->
+         dump m ;
+         session_data
        in
        ( match arg with
          | "allow" -> doit Subscribed "is allowed to receive your presence updates"
@@ -230,34 +246,33 @@ let exec ?out input state config session_data log redraw =
 
      | Some s, ("info", _) ->
        let user = fst state.active_chat in
-       msg "jid" user.User.jid >>= fun () ->
+       let dump a b = dump (a ^ ": " ^ b) in
+       dump "jid" user.User.jid ;
        ( match user.User.name with
-         | None -> return_unit
-         | Some x -> msg "name" x ) >>= fun () ->
-       ( match user.User.h_file with
-	 | None -> return_unit
-	 | Some x -> msg "history file" x) >>= fun () ->
+         | None -> ()
+         | Some x -> dump "name" x ) ;
+       ( if user.User.preserve_history then
+           let histo =
+             let dir = Persistency.history_dir state.config_directory in
+             Filename.concat dir user.User.jid
+           in
+	   dump "persistent history in " histo ) ;
        ( match user.User.groups with
-         | [] -> return_unit
-         | xs -> msg "groups" (String.concat ", " xs) ) >>= fun () ->
+         | [] -> ()
+         | xs -> dump "groups" (String.concat ", " xs) ) ;
        let add =
-         ( if List.mem `Pending user.User.props then
-             "pending "
-           else
-             "" ) ^
-         ( if List.mem `PreApproved user.User.props then
-             "preapproved"
-           else
-             "" )
+         let ps x = List.mem x user.User.properties in
+         ( if ps `Pending then "pending " else "" ) ^
+         ( if ps `PreApproved then "preapproved" else "" )
        in
        let add = if String.length add > 0 then " (" ^ (String.trim add) ^ ")" else "" in
-       msg "subscription" ((User.subscription_to_string user.User.subscription) ^ add) >>= fun () ->
+       dump "subscription" ((User.subscription_to_string user.User.subscription) ^ add) ;
        let marshal_otr fp =
          let ver = if fp.User.verified then "verified" else "unverified" in
          let used = string_of_int fp.User.session_count in
          fp.User.data ^ " " ^ ver ^ " (used in " ^ used ^ " sessions)"
        in
-       msg "otr fingerprints" (String.concat ", " (List.map marshal_otr user.User.otr_fingerprints)) >>= fun () ->
+       dump "otr fingerprints" (String.concat ", " (List.map marshal_otr user.User.otr_fingerprints)) ;
        let marshal_session s =
          let prio = string_of_int s.User.priority in
          let pres = User.presence_to_string s.User.presence in
@@ -267,15 +282,15 @@ let exec ?out input state config session_data log redraw =
          in
          s.User.resource ^ " (" ^ prio ^ "): " ^ pres ^ status
        in
-       Lwt_list.iteri_s (fun i s ->
+       List.iteri (fun i s ->
            let act = match snd state.active_chat with
              | Some x when x = s -> " (active)"
              | _ -> ""
            in
-           msg ("session " ^ (string_of_int i) ^ act) (marshal_session s) >>= fun () ->
-           msg "otr" (Otr.State.session_to_string s.User.otr))
-         user.User.active_sessions >|= fun () ->
-       session_data
+           dump ("session " ^ (string_of_int i) ^ act) (marshal_session s) ;
+           dump "otr" (Otr.State.session_to_string s.User.otr))
+         user.User.active_sessions ;
+       return session_data
 
      | Some s, ("otr", arg) ->
        let user = fst state.active_chat in
@@ -287,13 +302,6 @@ let exec ?out input state config session_data log redraw =
          Xmpp_callbacks.XMPPClient.(send_message s ~kind:Chat ~jid_to ?body ()) >|= fun () ->
          session_data
        in
-       let add_msg session data =
-         let msg =
-           let now = Unix.time () in
-           (`Local, false, false, now, data)
-         in
-         session.User.messages <- msg :: session.User.messages
-       in
        let marshal_otr fp =
          let ver = if fp.User.verified then "verified" else "unverified" in
          let used = string_of_int fp.User.session_count in
@@ -303,24 +311,26 @@ let exec ?out input state config session_data log redraw =
          | (user, Some session), Some "start" ->
            let ctx, out = Otr.Handshake.start_otr session.User.otr in
            session.User.otr <- ctx ;
+           dump "starting OTR session" ;
            send_over session.User.resource (Some out)
          | (user, Some session), Some "stop" ->
            let ctx, out = Otr.Handshake.end_otr session.User.otr in
            session.User.otr <- ctx ;
-           add_msg session "finished OTR session" ;
+           dump "finished OTR session" ;
            send_over session.User.resource out
          | (user, Some session), Some "info" ->
-           msg ("otr session " ^ session.User.resource) (Otr.State.session_to_string session.User.otr) >>= fun () ->
-           msg "otr fingerprints" (String.concat ", " (List.map marshal_otr user.User.otr_fingerprints)) >|= fun () ->
-           session_data
+           dump ("otr session " ^ session.User.resource ^ ": " ^ Otr.State.session_to_string session.User.otr) ;
+           dump ("otr fingerprints: " ^ String.concat ", " (List.map marshal_otr user.User.otr_fingerprints)) ;
+           return session_data
          | (user, None), Some "info" ->
-           msg "(no active session) OTR fingerprints" (String.concat ", " (List.map marshal_otr user.User.otr_fingerprints)) >|= fun () ->
-           session_data
+           dump ("(no active session) OTR fingerprints: " ^ String.concat ", " (List.map marshal_otr user.User.otr_fingerprints)) ;
+           return session_data
          | (user, None), Some "start" ->
            (* no OTR context, but we're sending only an OTR query anyways
               (and if we see a reply, we'll get some resource from the other side) *)
            let ctx = Otr.State.new_session config.Config.otr_config () in
            let _, out = Otr.Handshake.start_otr ctx in
+           dump "starting OTR session" ;
            send_over "" (Some out)
          | (user, None), Some "stop" -> err "no active session"
          |  _ -> err "unknown argument (/otr [start|stop|info])"
