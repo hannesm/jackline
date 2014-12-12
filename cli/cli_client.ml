@@ -254,15 +254,16 @@ let make_prompt size time network state redraw =
         [ B_fg fg_color ; S (Zed_utf8.make 1 (UChar.of_int 0x2500)) ; E_fg ]
     in
 
+    let log = if (fst state.active_chat).User.preserve_history then B_fg red else B_fg lblue in
 
     let leftover = size.cols - (Zed_utf8.length jid) - 6 in
     let jid, left =
       if leftover > 0 then
-        ([ S "< "; B_fg lblue; S jid; E_fg; S" >─" ], leftover)
+        (S "< " :: log :: [ S jid; E_fg; S" >─" ], leftover)
       else if (size.cols > Zed_utf8.length jid) then
-        ([ B_fg blue ; S jid ; E_fg ], size.cols - Zed_utf8.length jid)
+        (log :: [ S jid ; E_fg ], size.cols - Zed_utf8.length jid)
       else
-        ([ B_fg blue ; S (Zed_utf8.sub jid 0 (pred size.cols)) ; E_fg ], 0)
+        (log :: [ S (Zed_utf8.sub jid 0 (pred size.cols)) ; E_fg ], 0)
     in
 
     let leftover' = left - (Zed_utf8.length status) - 5 in
