@@ -67,12 +67,12 @@ let record kvs =
 
 let sexp_of_t t =
   record [
-    "version", sexp_of_int t.version ;
-    "jid" , sexp_of_string (JID.string_of_jid t.jid) ;
-    "port" , sexp_of_int t.port ;
-    "password" , sexp_of_string t.password ;
+    "version"       , sexp_of_int t.version ;
+    "jid"           , sexp_of_string (JID.string_of_jid t.jid) ;
+    "port"          , sexp_of_int t.port ;
+    "password"      , sexp_of_string t.password ;
     "authenticator" , sexp_of_auth t.authenticator ;
-    "otr_config" , Otr.State.sexp_of_config t.otr_config ;
+    "otr_config"    , Otr.State.sexp_of_config t.otr_config ;
   ]
 
 let load_config bytes =
