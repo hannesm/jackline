@@ -7,33 +7,34 @@ let start_client cfgdir debug () =
 
   Lazy.force LTerm.stdout >>= fun term ->
 
-  Xmpp_callbacks.load_config cfgdir >>= ( function
+  Persistency.load_config cfgdir >>= ( function
       | None ->
         Cli_config.configure term () >>= fun config ->
-        Xmpp_callbacks.dump_config cfgdir config >|= fun () ->
+        Persistency.dump_config cfgdir config >|= fun () ->
         config
       | Some cfg -> return cfg ) >>= fun config ->
 
-  Xmpp_callbacks.load_users cfgdir >>= fun (users) ->
+  Persistency.load_users cfgdir >>= fun (users) ->
 
   let history = LTerm_history.create [] in
   let user = User.find_or_add config.Config.jid users in
   let session = User.ensure_session config.Config.jid config.Config.otr_config user in
   let state = Cli_state.empty_ui_state user session users in
   let n, s_n = S.create (Unix.localtime (Unix.time ()), "nobody", "nothing") in
+
   ( if debug then
-      let f = Filename.concat (Unix.getenv "PWD") "out.txt" in
-      Lwt.catch (fun () ->
-          Lwt_unix.openfile f Unix.([O_WRONLY ; O_CREAT ; O_APPEND ]) 0o600 >|= fun fd ->
-          Some fd)
-        (fun _ -> return None)
+      Persistency.open_append (Unix.getenv "PWD") "out.txt" >|= fun fd ->
+      Some fd
     else
       return None ) >>= fun out ->
+
   Cli_client.loop ?out config term history state None n s_n >>= fun state ->
+
   ( match out with
     | None -> return_unit
     | Some fd -> Lwt_unix.close fd ) >>= fun () ->
-  Xmpp_callbacks.dump_users cfgdir state.Cli_state.users
+
+  Persistency.dump_users cfgdir state.Cli_state.users
 
 
 let config_dir = ref ""
@@ -43,7 +44,7 @@ let rest = ref []
 let _ =
   let home = Unix.getenv "HOME" in
   let cfgdir = Filename.concat home ".config" in
-  config_dir := Xmpp_callbacks.xmpp_config cfgdir
+  config_dir := Filename.concat cfgdir "ocaml-xmpp-client"
 
 let usage = "usage " ^ Sys.argv.(0)
 
