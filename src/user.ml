@@ -28,20 +28,11 @@ let presence_to_char = function
   | `ExtendedAway -> "x"
   | `Offline -> "_"
 
-open Sexplib
-open Sexplib.Conv
-
-type direction = [ `From | `To | `Local ] with sexp
-
-(* direction, encryption, received, timestamp, msg *)
-type message = (direction * bool * bool * float * string) with sexp
-
 type session = {
   resource : string ;
   mutable presence : presence ;
   mutable status : string option ;
   mutable priority : int ;
-  mutable messages : message list ;
   mutable otr : Otr.State.session
 }
 
@@ -50,10 +41,11 @@ let empty_session resource config () = {
   presence = `Offline ;
   status = None ;
   priority = 0 ;
-  messages = [] ;
   otr = Otr.State.new_session config ()
 }
 
+open Sexplib
+open Sexplib.Conv
 
 type fingerprint = {
   data : string ;
@@ -81,21 +73,43 @@ let subscription_to_chars = function
   | `To   -> ("?", "]")
   | `None -> ("?", "?")
 
-type props = [
+type property = [
   | `Pending | `PreApproved
-]
+] with sexp
+
+type direction = [
+  | `From of string (* full jid *)
+  | `To of string (* id *)
+  | `Local
+] with sexp
+
+type message = {
+  direction  : direction ;
+  encrypted  : bool ;
+  received   : bool ;
+  timestamp  : float ;
+  message    : string ;
+  persistent : bool ; (* internal use only (mark whether this needs to be written) *)
+} with sexp
+
+let message direction encrypted received message =
+  { direction ; encrypted ; received ;
+    timestamp = Unix.time () ; message ; persistent = false }
 
 type user = {
-  name : string option ;
-  jid : string ; (* user@domain, unique key *)
-  groups : string list ;
-  subscription : subscription ;
-  props : props list ; (* not persistent *)
-  mutable h_file : string option ;
-  mutable history : message list ; (* not persistent *)
+  jid                      : string ; (* user@domain, unique key *)
+  name                     : string option ;
+  groups                   : string list ;
+  subscription             : subscription ;
+  properties               : property list ;
+  mutable preserve_history : bool ;
+  mutable history          : message list ; (* persistent if preserve_history is true *)
   mutable otr_fingerprints : fingerprint list ;
-  mutable active_sessions : session list (* not persistent *)
+  mutable active_sessions  : session list (* not persistent *)
 }
+
+let new_message u dir enc rcvd msg =
+  u.history <- (message dir enc rcvd msg) :: u.history
 
 let encrypted ctx =
   match Otr.State.(ctx.state.message_state) with
@@ -142,15 +156,15 @@ let verified_fp u raw =
 
 
 let empty = {
-  name = None ;
-  jid = "a@b" ;
-  groups = [] ;
-  subscription = `None ;
-  props = [] ;
-  history = [] ;
-  h_file = None ;
+  name             = None ;
+  jid              = "a@b" ;
+  groups           = [] ;
+  subscription     = `None ;
+  properties       = [] ;
+  history          = [] ;
+  preserve_history = false ;
   otr_fingerprints = [] ;
-  active_sessions = []
+  active_sessions  = []
 }
 
 module StringHash =
@@ -187,7 +201,6 @@ let ensure_session jid otr_cfg user =
      let sess = empty_session lresource otr_cfg () in
      (if List.exists (r_matches "/special/") user.active_sessions then
         let dummy = List.find (r_matches "/special/") user.active_sessions in
-        sess.messages <- dummy.messages ;
         sess.otr <- dummy.otr ;
         user.active_sessions <-
           List.filter (fun s -> not (r_matches "/special/" s)) user.active_sessions) ;
@@ -219,11 +232,12 @@ let t_of_sexp t version =
           { t with jid }
         | Sexp.List [ Sexp.Atom "groups" ; gps ] ->
           { t with groups = list_of_sexp string_of_sexp gps }
-	| Sexp.List [ Sexp.Atom "h_file"; hf ] ->
-	   { t with h_file = option_of_sexp string_of_sexp hf}
+	| Sexp.List [ Sexp.Atom "preserve_history"; hf ] ->
+          { t with preserve_history = bool_of_sexp hf}
+        | Sexp.List [ Sexp.Atom "properties" ; p ] ->
+          { t with properties = list_of_sexp property_of_sexp p }
         | Sexp.List [ Sexp.Atom "subscription" ; s ] ->
-          let subscription = subscription_of_sexp s in
-          { t with subscription }
+          { t with subscription = subscription_of_sexp s }
         | Sexp.List [ Sexp.Atom "otr_fingerprints" ; fps ] ->
           { t with otr_fingerprints = list_of_sexp fingerprint_of_sexp fps }
         | _ -> assert false)
@@ -234,32 +248,33 @@ let t_of_sexp t version =
 
 
 let record kvs =
-  Sexp.List List.(map (fun (k, v) -> (Sexp.List [Sexp.Atom k; v])) kvs)
+  Sexp.List (List.map (fun (k, v) -> (Sexp.List [Sexp.Atom k; v])) kvs)
 
 let sexp_of_t t =
   record [
-    "name" , sexp_of_option sexp_of_string t.name ;
-    "jid" , sexp_of_string t.jid ;
-    "groups", sexp_of_list sexp_of_string t.groups ;
-    "h_file", sexp_of_option sexp_of_string t.h_file;
-    "subscription", sexp_of_subscription t.subscription ;
+    "name"            , sexp_of_option sexp_of_string t.name ;
+    "jid"             , sexp_of_string t.jid ;
+    "groups"          , sexp_of_list sexp_of_string t.groups ;
+    "preserve_history", sexp_of_bool t.preserve_history ;
+    "properties"      , sexp_of_list sexp_of_property t.properties ;
+    "subscription"    , sexp_of_subscription t.subscription ;
     "otr_fingerprints", sexp_of_list sexp_of_fingerprint t.otr_fingerprints ;
   ]
 
-let maybe_load_history user =
-  let history_from_file fn =
-    try
-      let l = Sexp.load_rev_sexps fn in
-      let conv x = list_of_sexp message_of_sexp x in
-      List.concat (List.map conv l)
-    with _ -> [] in
-  match user.h_file with
-  | None -> ()
-  | Some fn ->
-     if List.length user.history = 0 then
-       user.history <- history_from_file fn; ()
+let load_history file =
+  let load_h = function
+    | Sexp.List [ ver ; Sexp.List msgs ] ->
+      let version = int_of_sexp ver in
+      ( match version with
+        | 0 -> List.map message_of_sexp msgs
+        | _ -> Printf.printf "unknown message format" ; [] )
+    | _ -> Printf.printf "parsing history failed" ; []
+  in
+  match (try Some (Sexp.load_rev_sexps file) with _ -> None) with
+    | Some hists -> List.flatten (List.map load_h hists)
+    | _ -> Printf.printf "parsing histories failed" ; []
 
-let load_users bytes =
+let load_users hist_dir bytes =
   let table = Users.create 100 in
   ( try (match Sexp.of_string bytes with
        | Sexp.List [ ver ; Sexp.List users ] ->
@@ -272,28 +287,44 @@ let load_users bytes =
                  if Users.mem table id then
                    Printf.printf "key %s already present in table, ignoring\n%!" id
                  else
-		   maybe_load_history u;
-                   Users.add table id u)
+                   (u.history <-
+                      if u.preserve_history then
+                        load_history (Filename.concat hist_dir id)
+                      else
+                        [] ;
+                    Users.add table id u) )
            users
        | _ -> Printf.printf "parse failed while parsing db\n")
     with _ -> () ) ;
   table
 
-let store_users users =
-  let users = Users.fold (fun _ s acc -> (sexp_of_t s) :: acc) users [] in
-  Sexp.to_string_mach (Sexp.List [ sexp_of_int 1 ; Sexp.List users ])
+let marshal_history user =
+  if user.preserve_history then
+    let new_msgs =
+      List.filter (fun m ->
+          match m.direction, m.persistent with
+          | `Local, _    -> false
+          | _     , true -> false
+          | _            -> true)
+        user.history
+    in
+    let new_msgs = List.map (fun x -> { x with persistent = true }) new_msgs in
+    if List.length new_msgs > 0 then
+      Some (user.jid, List.map sexp_of_message new_msgs)
+    else
+      None
+  else
+    None
 
-let rec store_history users append =
-  let fltr m =
-    match m with
-    | (`Local, _, _, _, _) -> false
-    | _ -> true in
-  let st _ u =
-    match u.h_file with
-    | Some fname ->
-       (try let ms = List.filter fltr (List.hd u.active_sessions).messages in
-	    append fname (Sexp.to_string_mach
-			    (Sexp.List (List.map sexp_of_message ms))); ()
-	with _ -> () )
-    | _ -> () in
-  Users.iter st users
+let store_users users =
+  let data = Users.fold (fun _ s acc -> (sexp_of_t s, marshal_history s) :: acc) users [] in
+  let users, histories = List.split data in
+  let hist_version = sexp_of_int 0 in
+  Sexp.(to_string_mach (List [ sexp_of_int 1 ; List users ]),
+        List.fold_left (fun acc v ->
+            match v with
+            | None -> acc
+            | Some (u, history) ->
+              (u, to_string_mach (List [ hist_version ; List history ])) :: acc)
+          []
+          histories)
