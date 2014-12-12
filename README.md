@@ -53,7 +53,7 @@ Now you should have a `~/.opam/system/bin/jackline` (or `~/.opam/4.02.1/bin/jack
 
 Left is the contact list, in the middle the chat window, below the log buffer. The last line is a prompt.
 
-In the contact list, presence subscription information is indicated by `[` and `]` (`?` means that no presence subscription exists for that side). The presence is indicated by a single character (o = online, f = free, a = away, d = do not disturb, x = extended away, _ = offline). One contact is in focus (indicated by a grey background). Red foreground color means no active OTR session, green that an OTR session is active. Blinking indicates that a new message arrived. The self-contact is surrounded by curly braces.
+In the contact list, presence subscription information is indicated by `[` and `]` (`?` means that no presence subscription exists for that side). The presence is indicated by a single character (o = online, f = free, a = away, d = do not disturb, x = extended away, _ = offline). The focussed contact is marked by a grey background. Blinking indicates that a new message arrived (blue # on the left bottom also blinks). The self-contact is surrounded by curly braces.
 
 Active keys:
 - PgUp/PgDown navigates through the contact list
@@ -74,5 +74,6 @@ Colors:
 - green frame and contact: OTR session established
 - red frame and contact: no OTR session
 - red OTR fingerprint: not verified (use a second channel and `/fingerprint FP`)
+- black: no active session exists
 - red your jabber id: logging is enabled for this contact
 - blue your jabber id: logging is disabled for this contact
