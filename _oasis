@@ -13,7 +13,7 @@ Description:
 
 Library "xmpp_client"
   Path            : src/
-  Modules         : Config, Xmpp_connection, Xmpp_callbacks, User
+  Modules         : Config, User, Persistency, Xmpp_connection, Xmpp_callbacks
   Pack            : true
   BuildDepends    : erm_xmpp, otr, tls, tls.lwt, lwt, sexplib, sexplib.syntax, hex, nocrypto
 
