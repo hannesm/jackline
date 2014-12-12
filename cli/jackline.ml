@@ -7,7 +7,6 @@ let start_client cfgdir debug () =
 
   Lazy.force LTerm.stdout >>= fun term ->
 
-
   Xmpp_callbacks.load_config cfgdir >>= ( function
       | None ->
         Cli_config.configure term () >>= fun config ->
@@ -35,6 +34,7 @@ let start_client cfgdir debug () =
     | None -> return_unit
     | Some fd -> Lwt_unix.close fd ) >>= fun () ->
   Xmpp_callbacks.dump_users cfgdir state.Cli_state.users
+
 
 let config_dir = ref ""
 let debug = ref false
