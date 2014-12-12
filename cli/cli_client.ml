@@ -148,26 +148,25 @@ let make_prompt size time network state redraw =
   in
 
   let chat =
-    let printmsg (dir, enc, received, lt1, msg) =
-      let lt = Unix.localtime lt1 in
+    let open User in
+    let printmsg { direction ; encrypted ; received ; timestamp ; message } =
+      let lt = Unix.localtime timestamp in
       let time = Printf.sprintf "%02d-%02d %02d:%02d " lt.Unix.tm_mon lt.Unix.tm_mday lt.Unix.tm_hour lt.Unix.tm_min in
-      let en = if enc then "O" else "-" in
-      let pre = match dir with
-        | `From -> "<" ^ en ^ "- "
-        | `To -> (if received then "-" else "r") ^ en ^ "> "
+      let en = if encrypted then "O" else "-" in
+      let pre = match direction with
+        | `From _ -> "<" ^ en ^ "- "
+        | `To _ -> (if received then "-" else "r") ^ en ^ "> "
         | `Local -> "*** "
       in
-      time ^ pre ^ msg
+      time ^ pre ^ message
     in
-    (match snd state.active_chat, User.good_session (fst state.active_chat) with
+    (match snd state.active_chat, good_session (fst state.active_chat) with
      | None, Some x -> state.active_chat <- (fst state.active_chat, Some x)
      | Some x, Some y when x <> y -> state.active_chat <- (fst state.active_chat, Some y)
      | _ -> () );
-    match state.active_chat with
-    | (u, None) -> List.map printmsg u.User.history
-    | (u,Some x) when x = state.session && List.length u.User.history = 0 ->
-					    List.map print_log state.log
-    | (u,Some x) -> List.map printmsg (x.User.messages @ u.User.history)
+    match fst state.active_chat with
+    | x when x = state.user -> List.map print_log state.log
+    | x -> List.map printmsg x.history
   in
 
   let fg_color = color_session (fst state.active_chat) state.user (snd state.active_chat) in
@@ -467,16 +466,12 @@ let rec loop ?out (config : Config.t) term hist state session_data network s_n =
          let ctx, out, user_out = Otr.Handshake.send_otr session.User.otr message in
          session.User.otr <- ctx ;
          let add_msg direction enc data =
-           let msg =
-             let now = Unix.time () in
-             (direction, enc, false, now, data)
-           in
-           session.User.messages <- msg :: session.User.messages
+           User.new_message user direction enc false data
          in
          (match user_out with
           | `Warning msg      -> add_msg `Local false msg
-          | `Sent m           -> add_msg `To false m
-          | `Sent_encrypted m -> add_msg `To true m ) ;
+          | `Sent m           -> add_msg (`To "") false m
+          | `Sent_encrypted m -> add_msg (`To "") true m ) ;
          let jid_to = if session.User.resource = "/special/" then
              user.User.jid
            else
