@@ -36,8 +36,6 @@ let start_client cfgdir debug () =
     | Some fd -> Lwt_unix.close fd ) >>= fun () ->
   Xmpp_callbacks.dump_users cfgdir state.Cli_state.users
 
-
-
 let config_dir = ref ""
 let debug = ref false
 let rest = ref []

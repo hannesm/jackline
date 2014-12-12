@@ -234,6 +234,9 @@ let exec ?out input state config session_data log redraw =
        ( match user.User.name with
          | None -> return_unit
          | Some x -> msg "name" x ) >>= fun () ->
+       ( match user.User.h_file with
+	 | None -> return_unit
+	 | Some x -> msg "history file" x) >>= fun () ->
        ( match user.User.groups with
          | [] -> return_unit
          | xs -> msg "groups" (String.concat ", " xs) ) >>= fun () ->
@@ -286,7 +289,7 @@ let exec ?out input state config session_data log redraw =
        in
        let add_msg session data =
          let msg =
-           let now = Unix.localtime (Unix.time ()) in
+           let now = Unix.time () in
            (`Local, false, false, now, data)
          in
          session.User.messages <- msg :: session.User.messages

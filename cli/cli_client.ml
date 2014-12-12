@@ -148,8 +148,9 @@ let make_prompt size time network state redraw =
   in
 
   let chat =
-    let printmsg (dir, enc, received, lt, msg) =
-      let time = Printf.sprintf "[%02d:%02d:%02d] " lt.Unix.tm_hour lt.Unix.tm_min lt.Unix.tm_sec in
+    let printmsg (dir, enc, received, lt1, msg) =
+      let lt = Unix.localtime lt1 in
+      let time = Printf.sprintf "%02d-%02d %02d:%02d " lt.Unix.tm_mon lt.Unix.tm_mday lt.Unix.tm_hour lt.Unix.tm_min in
       let en = if enc then "O" else "-" in
       let pre = match dir with
         | `From -> "<" ^ en ^ "- "
@@ -162,10 +163,11 @@ let make_prompt size time network state redraw =
      | None, Some x -> state.active_chat <- (fst state.active_chat, Some x)
      | Some x, Some y when x <> y -> state.active_chat <- (fst state.active_chat, Some y)
      | _ -> () );
-    match snd state.active_chat with
-    | None -> []
-    | Some x when x = state.session -> List.map print_log state.log
-    | Some x -> List.map printmsg x.User.messages
+    match state.active_chat with
+    | (u, None) -> List.map printmsg u.User.history
+    | (u,Some x) when x = state.session && List.length u.User.history = 0 ->
+					    List.map print_log state.log
+    | (u,Some x) -> List.map printmsg (x.User.messages @ u.User.history)
   in
 
   let fg_color = color_session (fst state.active_chat) state.user (snd state.active_chat) in
@@ -466,7 +468,7 @@ let rec loop ?out (config : Config.t) term hist state session_data network s_n =
          session.User.otr <- ctx ;
          let add_msg direction enc data =
            let msg =
-             let now = Unix.localtime (Unix.time ()) in
+             let now = Unix.time () in
              (direction, enc, false, now, data)
            in
            session.User.messages <- msg :: session.User.messages
