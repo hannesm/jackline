@@ -232,8 +232,8 @@ let t_of_sexp t version =
           { t with jid }
         | Sexp.List [ Sexp.Atom "groups" ; gps ] ->
           { t with groups = list_of_sexp string_of_sexp gps }
-	| Sexp.List [ Sexp.Atom "preserve_history"; hf ] ->
-          { t with preserve_history = bool_of_sexp hf}
+        | Sexp.List [ Sexp.Atom "preserve_history" ; hf ] ->
+          { t with preserve_history = bool_of_sexp hf }
         | Sexp.List [ Sexp.Atom "properties" ; p ] ->
           { t with properties = list_of_sexp property_of_sexp p }
         | Sexp.List [ Sexp.Atom "subscription" ; s ] ->

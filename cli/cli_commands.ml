@@ -256,7 +256,7 @@ let exec ?out input state config session_data log redraw =
              let dir = Persistency.history_dir state.config_directory in
              Filename.concat dir user.User.jid
            in
-	   dump "persistent history in " histo ) ;
+           dump "persistent history in " histo ) ;
        ( match user.User.groups with
          | [] -> ()
          | xs -> dump "groups" (String.concat ", " xs) ) ;

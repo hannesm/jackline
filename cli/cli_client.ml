@@ -203,8 +203,8 @@ let make_prompt size time network state redraw =
       | u, Some s ->
         let p = User.presence_to_string s.User.presence in
         let status = match s.User.status with
-	  | None -> ""
-	  | Some x -> " - " ^ (try String.sub x 0 (String.index x '\n') with Not_found -> x) in
+          | None -> ""
+          | Some x -> " - " ^ (try String.sub x 0 (String.index x '\n') with Not_found -> x) in
         let otr, col = match User.fingerprint s.User.otr with
           | fp, Some raw when User.verified_fp u raw -> (" - OTR verified", fg_color)
           | fp, Some raw -> (" - unverified OTR: " ^ fp, red)
@@ -216,9 +216,9 @@ let make_prompt size time network state redraw =
     let pre = (Zed_utf8.make buddy_width (UChar.of_int 0x2500)) ^ (Zed_utf8.singleton (UChar.of_int 0x2534)) in
     let txt =
       if state.scrollback = 0 then
-	" buddy: " ^ buddy
+        " buddy: " ^ buddy
       else
-	"*scroll*" ^ buddy
+        "*scroll*" ^ buddy
     in
     let leftover = size.cols - (Zed_utf8.length txt) - buddy_width - 1 in
     if leftover > 0 && (Zed_utf8.length otr) < leftover then
