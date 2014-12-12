@@ -40,6 +40,12 @@ let read dir file =
       Some (String.trim buf))
     (fun _ -> return None)
 
+let append file buf =
+  Lwt_unix.openfile file [Unix.O_WRONLY ; Unix.O_APPEND; Unix.O_CREAT] 0o600 >>= fun fd ->
+  Lwt_unix.write fd buf 0 (Bytes.length buf) >>= fun s ->
+  Lwt_unix.close fd >>= fun () ->
+  return ()
+
 let write dir filename buf =
   Lwt.catch (fun () -> Lwt_unix.access dir [ Unix.F_OK ; Unix.X_OK ])
     (fun _ -> Lwt_unix.mkdir dir 0o700) >>= fun () ->
@@ -67,6 +73,7 @@ let dump_config cfgdir cfg =
   write cfgdir config (Config.store_config cfg)
 
 let dump_users cfgdir data =
+  User.store_history data append;
   write cfgdir users (User.store_users data)
 
 let load_config cfg =
@@ -90,7 +97,7 @@ let user_session stanza user_data =
 let message_callback (t : user_data session_data) stanza =
   let user, session = user_session stanza t.user_data in
   let msg dir enc txt =
-    let message = (dir, enc, true, Unix.localtime (Unix.time ()), txt) in
+    let message = (dir, enc, true, Unix.time (), txt) in
     session.User.messages <- message :: session.User.messages ;
     t.user_data.notify user
   in

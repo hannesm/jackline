@@ -28,14 +28,20 @@ let presence_to_char = function
   | `ExtendedAway -> "x"
   | `Offline -> "_"
 
-type direction = [ `From | `To | `Local ]
+open Sexplib
+open Sexplib.Conv
+
+type direction = [ `From | `To | `Local ] with sexp
+
+(* direction, encryption, received, timestamp, msg *)
+type message = (direction * bool * bool * float * string) with sexp
 
 type session = {
   resource : string ;
   mutable presence : presence ;
   mutable status : string option ;
   mutable priority : int ;
-  mutable messages : (direction * bool * bool * Unix.tm * string) list ;   (* direction, encryption, received, timestamp, msg *)
+  mutable messages : message list ;
   mutable otr : Otr.State.session
 }
 
@@ -48,8 +54,6 @@ let empty_session resource config () = {
   otr = Otr.State.new_session config ()
 }
 
-open Sexplib
-open Sexplib.Conv
 
 type fingerprint = {
   data : string ;
@@ -87,6 +91,8 @@ type user = {
   groups : string list ;
   subscription : subscription ;
   props : props list ; (* not persistent *)
+  mutable h_file : string option ;
+  mutable history : message list ; (* not persistent *)
   mutable otr_fingerprints : fingerprint list ;
   mutable active_sessions : session list (* not persistent *)
 }
@@ -141,6 +147,8 @@ let empty = {
   groups = [] ;
   subscription = `None ;
   props = [] ;
+  history = [] ;
+  h_file = None ;
   otr_fingerprints = [] ;
   active_sessions = []
 }
@@ -211,6 +219,8 @@ let t_of_sexp t version =
           { t with jid }
         | Sexp.List [ Sexp.Atom "groups" ; gps ] ->
           { t with groups = list_of_sexp string_of_sexp gps }
+	| Sexp.List [ Sexp.Atom "h_file"; hf ] ->
+	   { t with h_file = option_of_sexp string_of_sexp hf}
         | Sexp.List [ Sexp.Atom "subscription" ; s ] ->
           let subscription = subscription_of_sexp s in
           { t with subscription }
@@ -231,9 +241,23 @@ let sexp_of_t t =
     "name" , sexp_of_option sexp_of_string t.name ;
     "jid" , sexp_of_string t.jid ;
     "groups", sexp_of_list sexp_of_string t.groups ;
+    "h_file", sexp_of_option sexp_of_string t.h_file;
     "subscription", sexp_of_subscription t.subscription ;
     "otr_fingerprints", sexp_of_list sexp_of_fingerprint t.otr_fingerprints ;
   ]
+
+let maybe_load_history user =
+  let history_from_file fn =
+    try
+      let l = Sexp.load_rev_sexps fn in
+      let conv x = list_of_sexp message_of_sexp x in
+      List.concat (List.map conv l)
+    with _ -> [] in
+  match user.h_file with
+  | None -> ()
+  | Some fn ->
+     if List.length user.history = 0 then
+       user.history <- history_from_file fn; ()
 
 let load_users bytes =
   let table = Users.create 100 in
@@ -248,6 +272,7 @@ let load_users bytes =
                  if Users.mem table id then
                    Printf.printf "key %s already present in table, ignoring\n%!" id
                  else
+		   maybe_load_history u;
                    Users.add table id u)
            users
        | _ -> Printf.printf "parse failed while parsing db\n")
@@ -257,3 +282,18 @@ let load_users bytes =
 let store_users users =
   let users = Users.fold (fun _ s acc -> (sexp_of_t s) :: acc) users [] in
   Sexp.to_string_mach (Sexp.List [ sexp_of_int 1 ; Sexp.List users ])
+
+let rec store_history users append =
+  let fltr m =
+    match m with
+    | (`Local, _, _, _, _) -> false
+    | _ -> true in
+  let st _ u =
+    match u.h_file with
+    | Some fname ->
+       (try let ms = List.filter fltr (List.hd u.active_sessions).messages in
+	    append fname (Sexp.to_string_mach
+			    (Sexp.List (List.map sexp_of_message ms))); ()
+	with _ -> () )
+    | _ -> () in
+  Users.iter st users
