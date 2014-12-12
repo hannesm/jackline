@@ -66,7 +66,15 @@ let configure term () =
       end
     else
       begin
-        (new read_inputline ~term ~prompt:("enter server certificate fingerprint (by running for example `openssl s_client -connect " ^ ldomain ^ ":" ^ (string_of_int port) ^ " -starttls xmpp | openssl x509 -sha256 -fingerprint -noout`): ") ())#run >|= fun fp ->
+        (new read_inputline ~term ~prompt:("enter server certificate fingerprint (by running for example `openssl s_client -connect " ^ ldomain ^ ":" ^ (string_of_int port) ^ " -starttls xmpp | openssl x509 -sha256 -fingerprint -noout`): ") ())#run >>= fun fp ->
+        (try
+           let binary = X509.Cs.dotted_hex_to_cs fp in
+           if Cstruct.len binary <> 32 then
+             fail (Invalid_argument "fingerprint is either too short or too long")
+           else
+             return fp
+         with _ ->
+           fail (Invalid_argument "please provide only hex characters (or whitespace or colon)") ) >|= fun fp ->
         `Fingerprint fp
       end ) >>= fun authenticator ->
   (* otr config *)
