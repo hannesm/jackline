@@ -422,7 +422,7 @@ class read_line ~term ~network ~history ~state = object(self)
                        self#size time network redraw)
 end
 
-let rec loop ?out (config : Config.t) term hist state session_data network s_n =
+let rec loop ?out (config : Config.t) term hist state session_data network log =
   let history = LTerm_history.contents hist in
   match_lwt
     try_lwt
@@ -434,9 +434,9 @@ let rec loop ?out (config : Config.t) term hist state session_data network s_n =
   with
    | Some command when (String.length command > 0) && String.get command 0 = '/' ->
       LTerm_history.add hist command;
-      Cli_commands.exec ?out command state config session_data s_n force_redraw >>= fun (cont, session_data) ->
+      Cli_commands.exec ?out command state config session_data log force_redraw >>= fun (cont, session_data) ->
       if cont then
-        loop ?out config term hist state session_data network s_n
+        loop ?out config term hist state session_data network log
       else
         (match session_data with
          | None -> return_unit
@@ -462,7 +462,7 @@ let rec loop ?out (config : Config.t) term hist state session_data network s_n =
         ) >|= fun () -> state
     | Some message when String.length message > 0 ->
        LTerm_history.add hist message;
-       let err data = s_n (Unix.localtime (Unix.time ()), "error", data) ; return_unit in
+       let err data = log (Unix.localtime (Unix.time ()), "error", data) ; return_unit in
        let send_msg user session t =
          let ctx, out, user_out = Otr.Handshake.send_otr session.User.otr message in
          session.User.otr <- ctx ;
@@ -491,7 +491,7 @@ let rec loop ?out (config : Config.t) term hist state session_data network s_n =
            send_msg user dummy_session x
          | (user, Some session), Some x -> send_msg user session x
          | _, None -> err "no active session, try to connect first" ) >>= fun () ->
-       loop ?out config term hist state session_data network s_n
-     | Some message -> loop ?out config term hist state session_data network s_n
-     | None -> loop ?out config term hist state session_data network s_n
+       loop ?out config term hist state session_data network log
+     | Some message -> loop ?out config term hist state session_data network log
+     | None -> loop ?out config term hist state session_data network log
 
