@@ -165,9 +165,9 @@ let presence_callback t stanza =
        let session = ensure_session jid t.user_data.otr_config user in
        let id = userid user session in
        let old = presence_to_char session.presence in
-       ( match stanza.content.priority with
-         | None -> ()
-         | Some x -> session.priority <- x) ;
+       session.priority <- ( match stanza.content.priority with
+           | None -> 0
+           | Some x -> x ) ;
        session.status <- stat ;
        session.presence <- newp ;
        let n = presence_to_char newp in
