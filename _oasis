@@ -15,7 +15,7 @@ Library "xmpp_client"
   Path            : src/
   Modules         : Config, User, Persistency, Xmpp_connection, Xmpp_callbacks
   Pack            : true
-  BuildDepends    : erm_xmpp, otr, tls, tls.lwt, lwt, sexplib, sexplib.syntax, hex, nocrypto
+  BuildDepends    : erm_xmpp, otr, tls, tls.lwt, lwt, sexplib, sexplib.syntax, hex, nocrypto, lwt.syntax
 
 Library "xmpp_client_cli"
   Path            : cli/
