@@ -102,7 +102,7 @@ let make_prompt size time network state redraw =
       with _ -> None),
      !xmpp_session
    with
-   | (Some x, None) when x = "async error" ->
+   | (Some x, None) when x = "async error" || x = "session err" ->
      state.session.User.presence <- `Offline ;
      state.session.User.status <- None ;
      User.Users.iter (fun _ u ->

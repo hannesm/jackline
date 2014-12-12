@@ -23,6 +23,7 @@ type user_data = {
   users : User.users ;
   received : string -> string -> unit ;
   notify : User.user -> unit ;
+  failure : exn -> unit Lwt.t ;
 }
 
 let message_callback (t : user_data session_data) stanza =
@@ -69,11 +70,13 @@ let message_callback (t : user_data session_data) stanza =
       session.User.otr <- ctx ;
       match out with
       | None -> return ()
-      | Some _ ->
-        send_message t
-          ?jid_to:stanza.jid_from
-          ~kind:Chat
-          ?body:out ()
+      | Some body ->
+        try_lwt
+          send_message t
+            ?jid_to:stanza.jid_from
+            ~kind:Chat
+            ~body ()
+        with e -> t.user_data.failure e
 
 let message_error t ?id ?jid_from ?jid_to ?lang error =
   let log = t.user_data.received in
@@ -238,8 +241,8 @@ let session_callback t =
       List.iter (roster_callback users) items ;
       return () ) >>= fun () ->
 
-  send_presence t () >>= fun () ->
-  return ()
+  try_lwt send_presence t ()
+  with e -> t.user_data.failure e
 
 let tls_epoch_to_line t =
   let open Tls in

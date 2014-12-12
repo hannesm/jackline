@@ -125,6 +125,10 @@ let exec ?out input state config log redraw =
     let err m = msg "error" m in
     (msg, err)
   in
+  let failure reason =
+    xmpp_session := None ;
+    msg "session error" (Printexc.to_string reason)
+  in
   let dump data = User.new_message (fst state.active_chat) `Local false false data in
 
   match cmd_arg input with
@@ -162,6 +166,7 @@ let exec ?out input state config log redraw =
            users = state.users ;
            received ;
            notify ;
+           failure ;
          }) in
        Xmpp_callbacks.connect ?out config user_data () >|= (function
            | None -> ()
@@ -181,13 +186,16 @@ let exec ?out input state config log redraw =
        in
        let p, status = split_ws arg in
        let kind, show = kindshow p in
-       send_presence s ?kind ?show ?status ()
+       (try_lwt send_presence s ?kind ?show ?status ()
+        with e -> failure e)
 
      | Some s, ("add", Some arg) ->
        (try
           let jid_to = JID.of_string arg in
-          Xmpp_callbacks.XMPPClient.(send_presence s ~jid_to ~kind:Subscribe ()) >>= fun () ->
-          msg arg "has been asked to sent presence updates to you"
+          (try_lwt
+             (Xmpp_callbacks.XMPPClient.(send_presence s ~jid_to ~kind:Subscribe ()) >>= fun () ->
+              msg arg "has been asked to sent presence updates to you")
+           with e -> failure e)
         with _ -> err "parse of jid failed")
 
      | Some s, ("fingerprint", Some arg) ->
@@ -229,7 +237,8 @@ let exec ?out input state config log redraw =
        let user = fst state.active_chat in
        let jid = user.User.jid in
        let doit kind m =
-         send_presence s ~jid_to:(JID.of_string jid) ~kind () >|= fun () ->
+         (try_lwt send_presence s ~jid_to:(JID.of_string jid) ~kind ()
+          with e -> failure e) >|= fun () ->
          dump m
        in
        ( match arg with
@@ -294,7 +303,8 @@ let exec ?out input state config log redraw =
            let r = if resource = "" then "" else "/" ^ resource in
            JID.of_string (user.User.jid ^ r)
          in
-         Xmpp_callbacks.XMPPClient.(send_message s ~kind:Chat ~jid_to ?body ())
+         (try_lwt Xmpp_callbacks.XMPPClient.(send_message s ~kind:Chat ~jid_to ?body ())
+          with e -> failure e)
        in
        let marshal_otr fp =
          let ver = if fp.User.verified then "verified" else "unverified" in
