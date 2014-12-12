@@ -51,15 +51,16 @@ Now you should have a `~/.opam/system/bin/jackline` (or `~/.opam/4.02.1/bin/jack
 
 ### Using it
 
-Left is the buddy list, in the middle the chat window, below the log buffer. The last line is a prompt.
+Left is the contact list, in the middle the chat window, below the log buffer. The last line is a prompt.
 
-In the buddy list, presence subscription information is indicated by `[` and `]` (`?` means that no presence subscription exists for that side). The presence is indicated by a single character (o = online, f = free, a = away, d = do not disturb, x = extended away, _ = offline). One buddy is in focus (indicated by a grey background). Red foreground color means no active OTR session, green that an OTR session is active. Blinking indicates that a new message arrived. The self-contact is surrounded by curly braces.
+In the contact list, presence subscription information is indicated by `[` and `]` (`?` means that no presence subscription exists for that side). The presence is indicated by a single character (o = online, f = free, a = away, d = do not disturb, x = extended away, _ = offline). One contact is in focus (indicated by a grey background). Red foreground color means no active OTR session, green that an OTR session is active. Blinking indicates that a new message arrived. The self-contact is surrounded by curly braces.
 
 Active keys:
-- PgUp/PgDown navigates through the buddy list
+- PgUp/PgDown navigates through the contact list
 - Ctrl-q jumps to next notification
 - Ctrl-x jumps to last active user
-- F5 toggles display of offline buddies
+- F5 toggles display of offline contacts
+- Ctrl PgUp/PgDown scrolls chat
 
 Tab completion is available for the prompt. Tab completion completes the largest prefix.
 
@@ -69,4 +70,9 @@ Sending a message is done by just typing the message followed by return.
 
 In the chat window, each message is prefixed with 3 characters: `***` is a local message, `<O-` is an incoming message (`O` indicates OTR encryption), `rO>` is an outgoing message (`r` indicates that message delivery request was not yet answered (NYI)).
 
-Depending on the active chat the frame colors switch to red or green - indicating whether this chat is secured with OTR or not.
+Colors:
+- green frame and contact: OTR session established
+- red frame and contact: no OTR session
+- red OTR fingerprint: not verified (use a second channel and `/fingerprint FP`)
+- red your jabber id: logging is enabled for this contact
+- blue your jabber id: logging is disabled for this contact
