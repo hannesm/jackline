@@ -12,12 +12,7 @@ let dbg data =
       Printf.sprintf "[%02d:%02d:%02d] %s\n"
         now.Unix.tm_hour now.Unix.tm_min now.Unix.tm_sec data
     in
-    let rec w st =
-      Lwt_unix.write x msg st ((Bytes.length msg) - st) >>= function
-      | 0 -> return ()
-      | n -> w (st + n)
-    in
-    w 0
+    Persistency.write_data x msg
 
 module PlainSocket =
 struct
