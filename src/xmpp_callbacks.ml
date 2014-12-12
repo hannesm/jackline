@@ -25,67 +25,6 @@ type user_data = {
   notify : User.user -> unit ;
 }
 
-let read dir file =
-  Lwt.catch (fun () ->
-      Lwt_unix.access dir [ Unix.F_OK ; Unix.X_OK ] >>= fun () ->
-      let f = Filename.concat dir file in
-      Lwt_unix.access f [ Unix.F_OK ; Unix.R_OK ] >>= fun () ->
-      Lwt_unix.openfile f [Unix.O_RDONLY] 0 >>= fun fd ->
-      Lwt_unix.fstat fd >>= fun stats ->
-      let size = stats.Lwt_unix.st_size in
-      let buf = Bytes.create size in
-      Lwt_unix.read fd buf 0 size >>= fun s ->
-      Lwt_unix.close fd >|= fun () ->
-      assert (s = size) ;
-      Some (String.trim buf))
-    (fun _ -> return None)
-
-let append file buf =
-  Lwt_unix.openfile file [Unix.O_WRONLY ; Unix.O_APPEND; Unix.O_CREAT] 0o600 >>= fun fd ->
-  Lwt_unix.write fd buf 0 (Bytes.length buf) >>= fun s ->
-  Lwt_unix.close fd >>= fun () ->
-  return ()
-
-let write dir filename buf =
-  Lwt.catch (fun () -> Lwt_unix.access dir [ Unix.F_OK ; Unix.X_OK ])
-    (fun _ -> Lwt_unix.mkdir dir 0o700) >>= fun () ->
-  let f = Filename.concat dir filename in
-  let file = f ^ ".tmp" in
-  Lwt.catch (fun () ->
-      Lwt_unix.access file [ Unix.F_OK ; Unix.W_OK ] >>= fun () ->
-      Lwt_unix.unlink file)
-    (fun _ -> return ()) >>= fun () ->
-  Lwt_unix.openfile file [Unix.O_WRONLY ; Unix.O_EXCL ; Unix.O_CREAT] 0o600 >>= fun fd ->
-  Lwt_unix.write fd buf 0 (Bytes.length buf) >>= fun s ->
-  Lwt_unix.close fd >>= fun () ->
-  assert (s = Bytes.length buf) ;
-  Lwt_unix.rename file f >>= fun () ->
-  return ()
-
-let config = "config.sexp"
-let users = "users.sexp"
-
-open Sexplib
-
-let xmpp_config dir = Filename.concat dir "ocaml-xmpp-client"
-
-let dump_config cfgdir cfg =
-  write cfgdir config (Config.store_config cfg)
-
-let dump_users cfgdir data =
-  User.store_history data append;
-  write cfgdir users (User.store_users data)
-
-let load_config cfg =
-  read cfg config >|= function
-  | Some x ->  Some (Config.load_config x)
-  | None   -> None
-
-let load_users cfg =
-  read cfg users >|= function
-  | Some x ->  (try User.load_users x with _ -> User.Users.create 100)
-  | None -> User.Users.create 100
-
 let user_session stanza user_data =
   match stanza.jid_from with
     | None -> assert false
