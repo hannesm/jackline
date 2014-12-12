@@ -241,43 +241,66 @@ let session_callback t =
   send_presence t () >>= fun () ->
   return ()
 
+let tls_epoch_to_line t =
+  let open Tls in
+  match Tls_lwt.Unix.epoch t with
+  | `Ok epoch ->
+    let version = epoch.Engine.protocol_version
+    and cipher = epoch.Engine.ciphersuite
+    in
+    Sexplib.Sexp.(to_string_hum (List [
+        Core.sexp_of_tls_version version ;
+        Ciphersuite.sexp_of_ciphersuite cipher ]))
+  | `Error -> "error while fetching TLS parameters"
+
 let connect ?out config user_data _ =
   debug_out := out ;
   let open Config in
   let server = JID.to_idn config.jid
   and port = config.port
   in
-  let inet_addr =
-    try Unix.inet_addr_of_string server
-    with Failure("inet_addr_of_string") ->
-      (Unix.gethostbyname server).Unix.h_addr_list.(0) in
-  let sockaddr = Unix.ADDR_INET (inet_addr, port) in
 
-  PlainSocket.open_connection sockaddr >>= fun socket_data ->
-  let module Socket_module = struct type t = PlainSocket.socket
-    let socket = socket_data
-    include PlainSocket
-  end in
-  let make_tls () =
-    (match config.authenticator with
-     | `Trust_anchor x  -> X509_lwt.authenticator (`Ca_file x)
-     | `Fingerprint fp -> X509_lwt.authenticator (`Hex_fingerprints (`SHA256, [(server, fp)]))
-     | `None -> fail (Invalid_argument "Specify a TLS authentication method: Fingerprint or path to trust anchors") ) >>= fun authenticator ->
-    TLSSocket.switch (PlainSocket.get_fd socket_data) server authenticator >>= fun socket_data ->
-    let module TLS_module = struct type t = Tls_lwt.Unix.t
-      let socket = socket_data
-      let dump = out
-      include TLSSocket
-    end in
-    return (module TLS_module : XMPPClient.Socket)
-  in
-  XMPPClient.setup_session
-    ~user_data
-    ~myjid:config.jid
-    ~plain_socket:(module Socket_module : XMPPClient.Socket)
-    ~tls_socket:make_tls
-    ~password:config.password
-    session_callback
+  match
+    ( try Some ((Unix.gethostbyname server).Unix.h_addr_list.(0))
+      with _ -> None )
+  with
+  | None -> user_data.received "couldn't resolve hostname" server ; return None
+  | Some inet_addr ->
+    user_data.received "resolved hostname" server ;
+    let sockaddr = Unix.ADDR_INET (inet_addr, port) in
+    (try_lwt PlainSocket.open_connection sockaddr >>= fun s -> return (Some s)
+     with _ -> return None ) >>= fun socket ->
+    let txt = server ^ " on port " ^ (string_of_int port) in
+    match socket with
+    | None -> user_data.received "failed to open a connection to" txt ; return None
+    | Some socket_data ->
+        user_data.received "opened connection to" txt ;
+        let module Socket_module = struct type t = PlainSocket.socket
+          let socket = socket_data
+          include PlainSocket
+        end in
+        let make_tls () =
+          (match config.authenticator with
+           | `Trust_anchor x  -> X509_lwt.authenticator (`Ca_file x)
+           | `Fingerprint fp -> X509_lwt.authenticator (`Hex_fingerprints (`SHA256, [(server, fp)]))
+           | `None -> fail (Invalid_argument "Specify a TLS authentication method: Fingerprint or path to trust anchors") ) >>= fun authenticator ->
+          TLSSocket.switch (PlainSocket.get_fd socket_data) server authenticator >>= fun socket_data ->
+          user_data.received "started TLS connection to" server ;
+          user_data.received "TLS info" (tls_epoch_to_line socket_data) ;
+          let module TLS_module = struct type t = Tls_lwt.Unix.t
+            let socket = socket_data
+            include TLSSocket
+          end in
+          return (module TLS_module : XMPPClient.Socket)
+        in
+        XMPPClient.setup_session
+          ~user_data
+          ~myjid:config.jid
+          ~plain_socket:(module Socket_module : XMPPClient.Socket)
+          ~tls_socket:make_tls
+          ~password:config.password
+          session_callback >|= fun s ->
+        Some s
 
 let parse_loop session_data =
   XMPPClient.parse session_data >>= fun () ->

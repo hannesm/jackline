@@ -164,12 +164,11 @@ let exec ?out input state config session_data log redraw =
            notify ;
          }) in
        (* TODO: I'd like to catch tls and auth failures here, but neither try_lwt nor Lwt.catch seem to do that *)
-       (Xmpp_callbacks.connect ?out config user_data () >|= fun s -> Some s) >>= fun session_data ->
-       (match session_data with
-        | None -> return None
-        | Some s ->
-          Lwt.async (fun () -> Xmpp_callbacks.parse_loop s) ;
-          return (Some s))
+       Xmpp_callbacks.connect ?out config user_data () >>= (function
+           | None -> return None
+           | Some s ->
+             Lwt.async (fun () -> Xmpp_callbacks.parse_loop s) ;
+             return (Some s))
 
      | Some s, ("status", Some arg) ->
        let open Xmpp_callbacks.XMPPClient in
