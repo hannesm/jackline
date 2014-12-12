@@ -24,3 +24,5 @@ let empty_ui_state config_directory user session users = {
   show_offline = true ;
   scrollback = 0 ;
 }
+
+let (xmpp_session : Xmpp_callbacks.user_data Xmpp_callbacks.XMPPClient.session_data option ref) = ref None

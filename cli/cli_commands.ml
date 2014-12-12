@@ -118,11 +118,11 @@ let completion input =
 
 open Lwt
 
-let exec ?out input state config session_data log redraw =
+let exec ?out input state config log redraw =
   let now = Unix.localtime (Unix.time ()) in
   let msg, err =
     let msg from m = log (now, from, m) ; return_unit in
-    let err m = msg "error" m >|= fun () -> session_data in
+    let err m = msg "error" m in
     (msg, err)
   in
   let dump data = User.new_message (fst state.active_chat) `Local false false data in
@@ -132,19 +132,19 @@ let exec ?out input state config session_data log redraw =
   | ("help", Some arg) when Commands.mem commands arg ->
     let cmd = Commands.find commands arg in
     msg cmd.command_line cmd.documentation >|= fun () ->
-    (true, session_data)
+    true
 
   | ("help", _) ->
     let cmds = String.concat " " (keys ()) in
     msg "available commands (try [/help cmd])" cmds >|= fun () ->
-    (true, session_data)
+    true
 
   | ("quit", _) ->
     msg "self-destruction mechanism initiated" "have a nice day" >|= fun () ->
-    (false, session_data)
+    false
 
   | x ->
-    (match session_data, x with
+    (match !xmpp_session, x with
      | None, ("connect", _) ->
        let otr_config = config.Config.otr_config in
        let received jid msg =
@@ -163,12 +163,11 @@ let exec ?out input state config session_data log redraw =
            received ;
            notify ;
          }) in
-       (* TODO: I'd like to catch tls and auth failures here, but neither try_lwt nor Lwt.catch seem to do that *)
-       Xmpp_callbacks.connect ?out config user_data () >>= (function
-           | None -> return None
+       Xmpp_callbacks.connect ?out config user_data () >|= (function
+           | None -> ()
            | Some s ->
-             Lwt.async (fun () -> Xmpp_callbacks.parse_loop s) ;
-             return (Some s))
+             xmpp_session := Some s ;
+             Lwt.async (fun () -> Xmpp_callbacks.parse_loop s))
 
      | Some s, ("status", Some arg) ->
        let open Xmpp_callbacks.XMPPClient in
@@ -182,15 +181,13 @@ let exec ?out input state config session_data log redraw =
        in
        let p, status = split_ws arg in
        let kind, show = kindshow p in
-       send_presence s ?kind ?show ?status () >|= fun () ->
-       session_data
+       send_presence s ?kind ?show ?status ()
 
      | Some s, ("add", Some arg) ->
        (try
           let jid_to = JID.of_string arg in
           Xmpp_callbacks.XMPPClient.(send_presence s ~jid_to ~kind:Subscribe ()) >>= fun () ->
-          msg arg "has been asked to sent presence updates to you" >|= fun () ->
-          session_data
+          msg arg "has been asked to sent presence updates to you"
         with _ -> err "parse of jid failed")
 
      | Some s, ("fingerprint", Some arg) ->
@@ -211,7 +208,7 @@ let exec ?out input state config session_data log redraw =
                  | Some x ->
                    User.replace user { x with User.verified = true } ;
                    dump "fingerprint is now verified" ;
-                   return session_data)
+                   return_unit)
              | _ -> err "provided fingerprint does not match the one of this active session" )
          | _ -> err "no active OTR session"
        end
@@ -220,7 +217,7 @@ let exec ?out input state config session_data log redraw =
        let doit n =
          dump ("logging turned " ^ arg) ;
          (fst state.active_chat).User.preserve_history <- n ;
-         return session_data
+         return_unit
        in
        ( match arg with
          | "on"  -> doit true
@@ -233,8 +230,7 @@ let exec ?out input state config session_data log redraw =
        let jid = user.User.jid in
        let doit kind m =
          send_presence s ~jid_to:(JID.of_string jid) ~kind () >|= fun () ->
-         dump m ;
-         session_data
+         dump m
        in
        ( match arg with
          | "allow" -> doit Subscribed "is allowed to receive your presence updates"
@@ -289,7 +285,7 @@ let exec ?out input state config session_data log redraw =
            dump ("session " ^ (string_of_int i) ^ act) (marshal_session s) ;
            dump "otr" (Otr.State.session_to_string s.User.otr))
          user.User.active_sessions ;
-       return session_data
+       return_unit
 
      | Some s, ("otr", arg) ->
        let user = fst state.active_chat in
@@ -298,8 +294,7 @@ let exec ?out input state config session_data log redraw =
            let r = if resource = "" then "" else "/" ^ resource in
            JID.of_string (user.User.jid ^ r)
          in
-         Xmpp_callbacks.XMPPClient.(send_message s ~kind:Chat ~jid_to ?body ()) >|= fun () ->
-         session_data
+         Xmpp_callbacks.XMPPClient.(send_message s ~kind:Chat ~jid_to ?body ())
        in
        let marshal_otr fp =
          let ver = if fp.User.verified then "verified" else "unverified" in
@@ -320,10 +315,10 @@ let exec ?out input state config session_data log redraw =
          | (user, Some session), Some "info" ->
            dump ("otr session " ^ session.User.resource ^ ": " ^ Otr.State.session_to_string session.User.otr) ;
            dump ("otr fingerprints: " ^ String.concat ", " (List.map marshal_otr user.User.otr_fingerprints)) ;
-           return session_data
+           return_unit
          | (user, None), Some "info" ->
            dump ("(no active session) OTR fingerprints: " ^ String.concat ", " (List.map marshal_otr user.User.otr_fingerprints)) ;
-           return session_data
+           return_unit
          | (user, None), Some "start" ->
            (* no OTR context, but we're sending only an OTR query anyways
               (and if we see a reply, we'll get some resource from the other side) *)
@@ -337,4 +332,5 @@ let exec ?out input state config session_data log redraw =
 
      | Some _, ("connect", _) -> err "already connected"
 
-     | _ -> err "unknown command or not connected, try /help" ) >|= fun s -> (true, s)
+     | _ -> err "unknown command or not connected, try /help" ) >|= fun () ->
+    true

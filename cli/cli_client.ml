@@ -96,6 +96,20 @@ let rec line_wrap ~max_length entries acc : string list =
 let make_prompt size time network state redraw =
   let tm = Unix.localtime time in
 
+  (let _, err, _ = network in
+   match
+     (try Some (String.sub err 0 11)
+      with _ -> None),
+     !xmpp_session
+   with
+   | (Some x, None) when x = "async error" ->
+     state.session.User.presence <- `Offline ;
+     state.session.User.status <- None ;
+     User.Users.iter (fun _ u ->
+         List.iter (fun s -> s.User.presence <- `Offline) u.User.active_sessions)
+       state.users ;
+   | _ -> () ) ;
+
   (* network should be an event, then I wouldn't need a check here *)
   (if List.length state.log = 0 || List.hd state.log <> network then
      state.log <- (network :: state.log)) ;
@@ -422,7 +436,7 @@ class read_line ~term ~network ~history ~state = object(self)
                        self#size time network redraw)
 end
 
-let rec loop ?out (config : Config.t) term hist state session_data network log =
+let rec loop ?out (config : Config.t) term hist state network log =
   let history = LTerm_history.contents hist in
   match_lwt
     try_lwt
@@ -434,32 +448,31 @@ let rec loop ?out (config : Config.t) term hist state session_data network log =
   with
    | Some command when (String.length command > 0) && String.get command 0 = '/' ->
       LTerm_history.add hist command;
-      Cli_commands.exec ?out command state config session_data log force_redraw >>= fun (cont, session_data) ->
-      if cont then
-        loop ?out config term hist state session_data network log
-      else
-        (match session_data with
-         | None -> return_unit
-         | Some x ->
-           let otr_sessions = User.Users.fold (fun _ u acc ->
-               List.fold_left (fun acc s ->
-                   if User.encrypted s.User.otr then
-                     ((User.userid u s), s.User.otr) :: acc
-                   else acc)
-                 acc
-                 u.User.active_sessions)
-               state.users []
-           in
-           Lwt_list.iter_s
-             (fun (jid_to, ctx) ->
-                let _, out = Otr.Handshake.end_otr ctx in
-                Xmpp_callbacks.XMPPClient.(send_message x
-                                             ~kind:Chat
-                                             ~jid_to:(JID.of_string jid_to)
-                                             ?body:out ()))
-             otr_sessions
-             (* close connection! *)
-        ) >|= fun () -> state
+      Cli_commands.exec ?out command state config log force_redraw >>= (function
+        | true -> loop ?out config term hist state network log
+        | false ->
+          (match !xmpp_session with
+           | None -> return_unit
+           | Some x ->
+             let otr_sessions = User.Users.fold (fun _ u acc ->
+                 List.fold_left (fun acc s ->
+                     if User.encrypted s.User.otr then
+                       ((User.userid u s), s.User.otr) :: acc
+                     else acc)
+                   acc
+                   u.User.active_sessions)
+                 state.users []
+             in
+             Lwt_list.iter_s
+               (fun (jid_to, ctx) ->
+                  let _, out = Otr.Handshake.end_otr ctx in
+                  Xmpp_callbacks.XMPPClient.(send_message x
+                                               ~kind:Chat
+                                               ~jid_to:(JID.of_string jid_to)
+                                               ?body:out ()))
+               otr_sessions
+               (* close connection! *)
+          ) >|= fun () -> state)
     | Some message when String.length message > 0 ->
        LTerm_history.add hist message;
        let err data = log (Unix.localtime (Unix.time ()), "error", data) ; return_unit in
@@ -483,7 +496,7 @@ let rec loop ?out (config : Config.t) term hist state session_data network log =
                                       ~jid_to:(JID.of_string jid_to)
                                       ?body:out ())
        in
-       ( match state.active_chat, session_data with
+       ( match state.active_chat, !xmpp_session with
          | (user, _), _ when user = state.user -> return_unit
          | (user, None), Some x ->
            let dummy_session = User.empty_session "/special/" config.Config.otr_config () in
@@ -491,7 +504,18 @@ let rec loop ?out (config : Config.t) term hist state session_data network log =
            send_msg user dummy_session x
          | (user, Some session), Some x -> send_msg user session x
          | _, None -> err "no active session, try to connect first" ) >>= fun () ->
-       loop ?out config term hist state session_data network log
-     | Some message -> loop ?out config term hist state session_data network log
-     | None -> loop ?out config term hist state session_data network log
+       loop ?out config term hist state network log
+     | Some message -> loop ?out config term hist state network log
+     | None -> loop ?out config term hist state network log
+
+let init_system log =
+  Lwt.async_exception_hook := (
+    fun exn ->
+      let now = Unix.localtime (Unix.time ()) in
+      let err m = log (now, "async error", m) in
+
+      xmpp_session := None ;
+
+      err (Printexc.to_string exn)
+  )
 

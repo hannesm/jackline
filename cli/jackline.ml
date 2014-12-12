@@ -20,7 +20,7 @@ let start_client cfgdir debug () =
   let user = User.find_or_add config.Config.jid users in
   let session = User.ensure_session config.Config.jid config.Config.otr_config user in
   let state = Cli_state.empty_ui_state cfgdir user session users in
-  let n, s_n = S.create (Unix.localtime (Unix.time ()), "nobody", "nothing") in
+  let n, log = S.create (Unix.localtime (Unix.time ()), "nobody", "nothing") in
 
   ( if debug then
       Persistency.open_append (Unix.getenv "PWD") "out.txt" >|= fun fd ->
@@ -28,7 +28,9 @@ let start_client cfgdir debug () =
     else
       return None ) >>= fun out ->
 
-  Cli_client.loop ?out config term history state None n s_n >>= fun state ->
+  Cli_client.init_system log ;
+
+  Cli_client.loop ?out config term history state n log >>= fun state ->
 
   ( match out with
     | None -> return_unit
