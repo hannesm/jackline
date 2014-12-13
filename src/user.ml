@@ -39,12 +39,13 @@ let presence_to_string = function
   | `Offline -> "offline"
 
 let string_to_presence = function
-  | "free" | "f" -> `Free
-  | "away" | "a" -> `Away
-  | "dnd" | "d" -> `DoNotDisturb
-  | "xa" | "x" -> `ExtendedAway
-  | "offline" | "_" -> `Offline
-  | "online" | "o" | _ -> `Online
+  | "free" | "f"    -> Some `Free
+  | "away" | "a"    -> Some `Away
+  | "dnd" | "d"     -> Some `DoNotDisturb
+  | "xa" | "x"      -> Some `ExtendedAway
+  | "offline" | "_" -> Some `Offline
+  | "online" | "o"  -> Some `Online
+  | _               -> None
 
 let presence_to_char = function
   | `Online -> "o"
