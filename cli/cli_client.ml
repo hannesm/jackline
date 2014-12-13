@@ -170,10 +170,103 @@ let buddy_list state length width =
     in
     take length (drop from formatted_buddies) []
 
+let maybe_trim str left =
+  if left > 0 then
+    if Zed_utf8.length str < left then
+      ([ S str ], left - Zed_utf8.length str)
+    else
+      ([ S (Zed_utf8.sub str 0 left) ], 0)
+  else
+    ([], 0)
+
+let horizontal_line (user, session) fg_color buddy_width scrollback width =
+  let open User in
+  let buddy, presence, status, otr, otrcolor = match session with
+    | Some s ->
+      let presence = User.presence_to_string s.User.presence in
+      let status = match s.status with
+        | None   -> ""
+        | Some x ->
+          let stripped =
+            try String.sub x 0 (String.index x '\n')
+            with Not_found -> x
+          in
+          " - " ^ stripped
+      in
+      let otrcolor, otr = match fingerprint s.otr with
+        | fp, Some raw when verified_fp user raw -> (fg_color, " - OTR verified")
+        | fp, Some raw                           -> (red, " - unverified OTR: " ^ fp)
+        | fp, None                               -> (red, " - no OTR")
+      in
+      (userid user s, " -- " ^ presence, status, otr, otrcolor)
+    | None -> (user.jid, "", "", "", black)
+  in
+  let pre =
+    (Zed_utf8.make buddy_width (UChar.of_int 0x2500)) ^
+    (Zed_utf8.singleton (UChar.of_int 0x2534))
+  in
+  let txt =
+    match scrollback with
+    | 0 -> " buddy: " ^ buddy
+    | _ -> "*scroll*" ^ buddy
+  in
+  (* now we have the building blocks and might need to cut some of them down *)
+  let buddy, left = maybe_trim txt width in
+  let otr, left = maybe_trim otr left in
+  let presence, left = maybe_trim presence left in
+  let status, left = maybe_trim status left in
+  let pre, left = maybe_trim pre left in
+  let post = if left > 0 then [S (Zed_utf8.make left (UChar.of_int 0x2500))] else [] in
+  B_fg fg_color :: pre @ buddy @ [ E_fg ; B_fg otrcolor ] @ otr @ [ E_fg ; B_fg fg_color ] @ presence @ status @ post @ [ E_fg ]
+
+let status_line user session notify log redraw fg_color width =
+  let status = User.presence_to_string session.User.presence in
+  let jid = User.userid user session in
+  let time =
+    let now = Unix.localtime (Unix.time ()) in
+    Printf.sprintf "%02d:%02d" now.Unix.tm_hour now.Unix.tm_min
+  in
+
+  let jid_color = if log then red else lblue in
+
+  let status_color =
+    if session.User.presence = `Offline then
+      lred
+    else
+      lgreen
+  in
+
+  let first =
+    if notify then
+      [ B_blink true ; B_fg blue ; S "#" ; E_fg ; E_blink ]
+    else
+      [ B_fg fg_color ; S (Zed_utf8.make 1 (UChar.of_int 0x2500)) ; E_fg ]
+  in
+
+  let jid, left = maybe_trim jid (pred width) in
+  let jid_pre, left = maybe_trim "< " left in
+  let jid_post, left = maybe_trim " >─" left in
+
+  let status, left = maybe_trim status left in
+  let status_pre, left = maybe_trim "[ " left in
+  let status_post, left = maybe_trim " ]─" left in
+
+  let time, left = maybe_trim time left in
+  let time_pre, left = maybe_trim "─( " left in
+  let time_post, left = maybe_trim " )─" left in
+
+  let fill = if left > 0 then [S (Zed_utf8.make left (UChar.of_int 0x2500))] else [] in
+
+  [ B_bold true ] @
+  first @ [ S redraw ] @
+  [ B_fg fg_color ] @ time_pre @ time @ time_post @
+  jid_pre @ [ E_fg ; B_fg jid_color ] @ jid @ [ E_fg ; B_fg fg_color ] @ jid_post @
+  fill @
+  status_pre @ [ E_fg ; B_fg status_color ] @ status @ [ E_fg ; B_fg fg_color ] @ status_post @
+  [ E_fg ; E_bold ]
 
 let make_prompt size time network state redraw =
-  let tm = Unix.localtime time in
-
+  (* we might have gotten a connection termination - if so mark everything offline *)
   (let _, err, _ = network in
    match
      (try Some (String.sub err 0 11)
@@ -200,147 +293,52 @@ let make_prompt size time network state redraw =
 
   let log_size = 6 in
   let main_size = size.rows - log_size - 3 (* status + hline + readline *) in
-  assert (main_size > 0) ;
   let buddy_width = 24 in
   let chat_width = size.cols - buddy_width - 1 in
 
-  let logs =
-    let entries = log_buffer state.log log_size size.cols in
-    String.concat "\n" (take_fill_rev "" log_size entries [])
-  in
-
-  let buddies = buddy_list state main_size buddy_width in
-
-  let chat =
-    let data = match fst state.active_chat with
-      | x when x = state.user -> log_buffer state.log (List.length state.log) chat_width
-      | x                     -> List.rev (message_buffer x.User.history chat_width)
-    in
-    let elements = drop (state.scrollback * main_size) data in
-    take_fill_rev "" main_size elements []
-  in
-
-  let fg_color = color_session (fst state.active_chat) state.user (snd state.active_chat) in
-
-  let buddylist =
-    let comb = List.combine buddies chat in
-    let pipe = S (Zed_utf8.singleton (UChar.of_int 0x2502)) in
-    List.map (fun (buddy, chat) ->
-        buddy @ [ B_fg fg_color ; pipe ; E_fg ; S chat ; S "\n" ])
-      comb
-  in
-
-  let hline =
-    let buddy, pres, col, otr = match state.active_chat with
-      | u, Some s ->
-        let p = User.presence_to_string s.User.presence in
-        let status = match s.User.status with
-          | None -> ""
-          | Some x -> " - " ^ (try String.sub x 0 (String.index x '\n') with Not_found -> x) in
-        let otr, col = match User.fingerprint s.User.otr with
-          | fp, Some raw when User.verified_fp u raw -> (" - OTR verified", fg_color)
-          | fp, Some raw -> (" - unverified OTR: " ^ fp, red)
-          | fp, None -> (" - no OTR", red)
-        in
-        (User.userid u s, " -- " ^ p ^ status, col, otr)
-      | u, None -> (u.User.jid, "", black, "")
-    in
-    let pre = (Zed_utf8.make buddy_width (UChar.of_int 0x2500)) ^ (Zed_utf8.singleton (UChar.of_int 0x2534)) in
-    let txt =
-      if state.scrollback = 0 then
-        " buddy: " ^ buddy
-      else
-        "*scroll*" ^ buddy
-    in
-    let leftover = size.cols - (Zed_utf8.length txt) - buddy_width - 1 in
-    if leftover > 0 && (Zed_utf8.length otr) < leftover then
-      let leftover' = leftover - (Zed_utf8.length otr) in
-      let post =
-        if (Zed_utf8.length pres) < leftover' then
-          let pos = Zed_utf8.make (leftover' - (Zed_utf8.length pres) - 1) (UChar.of_int 0x2500) in
-          [ B_fg fg_color ; S pres ; S " " ; S pos ; E_fg ]
-        else
-          [ B_fg fg_color ; S (Zed_utf8.sub pres 0 leftover') ; E_fg ]
+  if main_size < 0 || chat_width < 0 then
+    eval ([S "window too small, please increase its size"])
+  else
+    begin
+      let logs =
+        let entries = log_buffer state.log log_size size.cols in
+        String.concat "\n" (take_fill_rev "" log_size entries [])
       in
-      [ B_fg fg_color ; S pre ; S txt ; E_fg ; B_fg col ; S otr ; E_fg ] @ post
-    else if leftover > 0 then
-      [ B_fg fg_color ; S pre ; S txt ; E_fg ; B_fg col ; S (Zed_utf8.sub otr 0 leftover) ; E_fg ]
-    else if (Zed_utf8.length txt) < size.cols then
-      let pos = Zed_utf8.make (size.cols - (Zed_utf8.length txt) - 1) (UChar.of_int 0x2500) in
-      [ B_fg fg_color ; S txt ; S " " ; S pos ; E_fg ]
-    else
-      [ B_fg fg_color ; S (Zed_utf8.sub txt 0 size.cols) ; E_fg ]
-  in
 
+      let buddies = buddy_list state main_size buddy_width in
 
-  let status =
-    let mysession = state.session in
-    let status = User.presence_to_string mysession.User.presence in
-    let jid = User.userid state.user mysession in
-    let time = Printf.sprintf "%02d:%02d" tm.Unix.tm_hour tm.Unix.tm_min in
+      let chat =
+        let data = match fst state.active_chat with
+          | x when x = state.user -> log_buffer state.log (List.length state.log) chat_width
+          | x                     -> List.rev (message_buffer x.User.history chat_width)
+        in
+        let elements = drop (state.scrollback * main_size) data in
+        take_fill_rev "" main_size elements []
+      in
 
-    let first =
-      if List.length state.notifications > 0 then
-        [ B_blink true ; B_fg blue ; S "#" ; E_fg ; E_blink ]
-      else
-        [ B_fg fg_color ; S (Zed_utf8.make 1 (UChar.of_int 0x2500)) ; E_fg ]
-    in
+      let fg_color = color_session (fst state.active_chat) state.user (snd state.active_chat) in
 
-    let log = if (fst state.active_chat).User.preserve_history then B_fg red else B_fg lblue in
+      let main_window =
+        let comb = List.combine buddies chat in
+        let pipe = S (Zed_utf8.singleton (UChar.of_int 0x2502)) in
+        List.map (fun (buddy, chat) ->
+            buddy @ [ B_fg fg_color ; pipe ; E_fg ; S chat ; S "\n" ])
+          comb
+      in
 
-    let leftover = size.cols - (Zed_utf8.length jid) - 6 in
-    let jid, left =
-      if leftover > 0 then
-        (S "< " :: log :: [ S jid; E_fg; S" >─" ], leftover)
-      else if (size.cols > Zed_utf8.length jid) then
-        (log :: [ S jid ; E_fg ], size.cols - Zed_utf8.length jid)
-      else
-        (log :: [ S (Zed_utf8.sub jid 0 (pred size.cols)) ; E_fg ], 0)
-    in
+      let hline = horizontal_line state.active_chat fg_color buddy_width state.scrollback size.cols in
 
-    let leftover' = left - (Zed_utf8.length status) - 5 in
-    let status, left =
-      if leftover' > 0 then
-        ([ S "[ " ;
-           B_fg (if mysession.User.presence = `Offline then lred else lgreen);
-           S status;
-           E_fg ;
-           S" ]─" ],
-         leftover')
-      else
-        ([], left)
-    in
+      let notify = List.length state.notifications > 0 in
+      let log = (fst state.active_chat).User.preserve_history in
+      let status = status_line state.user state.session notify log redraw fg_color size.cols in
 
-    let left = left - (String.length redraw) in
-
-    let leftover''' = left - 11 in
-    let time, left =
-      if leftover''' > 0 then
-        ([ S "─( " ; S time ; S " )─" ], leftover''')
-      else
-        ([], left)
-    in
-
-    let fill =
-      if left > 0 then
-        Zed_utf8.make left (UChar.of_int 0x2500)
-      else
-        ""
-    in
-    [ B_bold true ] @ first @
-    [ B_fg fg_color ] @
-      time @ jid @
-      [ S redraw ; S fill ] @
-      status @
-    [ E_fg; S"\n"; E_bold ]
-  in
-
-  try
-    eval (
-      List.flatten buddylist @ hline @ [ S "\n" ; S logs ; S "\n" ] @ status
-    )
-  with
-    _ -> eval ([ S "error during eval ; please re-run with -debug true and submit a bug with the offending xml part (ctrl-d will close jackline)"])
+      try
+        eval (
+          List.flatten main_window @ hline @ [ S "\n" ; S logs ; S "\n" ] @ status @ [ S "\n" ]
+        )
+      with
+        _ -> eval ([ S "error during evaluating layout"])
+    end
 
 let time =
   let time, set_time = S.create (Unix.time ()) in
