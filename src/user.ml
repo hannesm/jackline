@@ -89,14 +89,14 @@ type subscription = [
 
 let subscription_to_string = function
   | `Both -> "both"
-  | `From -> "from"
-  | `To -> "to"
+  | `From -> "from (they see your presence updates)"
+  | `To -> "to (you see their presence updates)"
   | `None -> "none"
 
 let subscription_to_chars = function
   | `Both -> ("[", "]")
-  | `From -> ("[", "?")
-  | `To   -> ("?", "]")
+  | `From -> ("F", "F")
+  | `To   -> ("T", "T")
   | `None -> ("?", "?")
 
 type property = [
