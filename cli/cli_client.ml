@@ -11,15 +11,15 @@ open Cli_state
 
 let rec take_rev x l acc =
   match x, l with
-  | 0, _ -> acc
-  | n, [] -> acc
+  | 0, _       -> acc
+  | n, []      -> acc
   | n, x :: xs -> take_rev (pred n) xs (x :: acc)
 
-let rec take_fill neutral x l acc =
+let rec take_fill_rev neutral x l acc =
   match x, l with
-  | 0, _     -> List.rev acc
-  | n, x::xs -> take_fill neutral (pred n) xs (x::acc)
-  | n, []    -> take_fill neutral (pred n) [] (neutral::acc)
+  | 0, _     -> acc
+  | n, x::xs -> take_fill_rev neutral (pred n) xs (x::acc)
+  | n, []    -> take_fill_rev neutral (pred n) [] (neutral::acc)
 
 let rec take x l acc =
   match x, l with
@@ -41,16 +41,16 @@ let rec pad_l neutral x l =
 
 let pad x s =
   match x - (String.length s) with
-  | 0 -> s
-  | d when d > 0 -> s ^ (String.make d ' ')
+  | 0                  -> s
+  | d when d > 0       -> s ^ (String.make d ' ')
   | d (* when d < 0 *) -> String.sub s 0 x
 
 let rec find_index id i = function
-  | [] -> 0
+  | []                -> 0
   | x::xs when x = id -> i
-  | _::xs -> find_index id (succ i) xs
+  | _::xs             -> find_index id (succ i) xs
 
-let color_session u su= function
+let color_session u su = function
   | Some x when User.(encrypted x.otr) -> green
   | Some _ when u = su -> black
   | Some _ -> red
@@ -93,6 +93,84 @@ let rec line_wrap ~max_length entries acc : string list =
     line_wrap ~max_length remaining (entry::acc)
   | [] -> acc
 
+let log_buffer log length width =
+  let print_log (lt, from, msg) =
+    let time = Printf.sprintf "[%02d:%02d:%02d] " lt.Unix.tm_hour lt.Unix.tm_min lt.Unix.tm_sec in
+    time ^ from ^ ": " ^ msg
+  in
+  let entries = take_rev length log [] in
+  let entries = List.map print_log entries in
+  line_wrap ~max_length:width entries []
+
+let format_buddies buddies users active self notifications width =
+  List.map (fun id ->
+      let u = User.Users.find users id in
+      let session = User.good_session u in
+      let presence = match session with
+        | None -> `Offline
+        | Some s -> s.User.presence
+      in
+      let fg = color_session u self session in
+      let bg = if u = active then 7 else 15 in
+      let f, t =
+        if u = self then
+          ("{", "}")
+        else
+          User.subscription_to_chars u.User.subscription
+      in
+      let item =
+        let data = Printf.sprintf " %s%s%s %s" f (User.presence_to_char presence) t id in
+        pad width data
+      in
+      let show = [B_fg fg ; B_bg(index bg) ; S item ; E_bg ; E_fg ] in
+      if List.mem u notifications then
+        B_blink true :: show @ [ E_blink ]
+      else
+        show)
+    buddies
+
+let format_messages msgs =
+  let open User in
+  let printmsg { direction ; encrypted ; received ; timestamp ; message } =
+    let lt = Unix.localtime timestamp in
+    let time = Printf.sprintf "%02d-%02d %02d:%02d " lt.Unix.tm_mon lt.Unix.tm_mday lt.Unix.tm_hour lt.Unix.tm_min in
+    let en = if encrypted then "O" else "-" in
+    let pre = match direction with
+      | `From _ -> "<" ^ en ^ "- "
+      | `To _   -> (if received then "-" else "r") ^ en ^ "> "
+      | `Local  -> "*** "
+    in
+    time ^ pre ^ message
+  in
+  List.map printmsg msgs
+
+let message_buffer msgs width =
+  line_wrap ~max_length:width (format_messages msgs) []
+
+let buddy_list state length width =
+  let buddies = show_buddies state in
+  let formatted_buddies = format_buddies buddies state.users (fst state.active_chat) state.user state.notifications width in
+
+  let bs = List.length buddies
+  and up, down = (length / 2, (length + 1) / 2)
+  and active_idx = find_index (fst state.active_chat).User.jid 0 buddies
+  in
+  match length >= bs with
+  | true  -> let pad = [ S (String.make width ' ') ] in
+             List.rev (take_fill_rev pad length formatted_buddies [])
+  | false ->
+    let from =
+      match
+        active_idx - up >= 0,
+        active_idx + down > bs
+      with
+      | true , true  -> bs - length
+      | true , false -> active_idx - up
+      | false, _     -> 0
+    in
+    take length (drop from formatted_buddies) []
+
+
 let make_prompt size time network state redraw =
   let tm = Unix.localtime time in
 
@@ -114,102 +192,42 @@ let make_prompt size time network state redraw =
   (if List.length state.log = 0 || List.hd state.log <> network then
      state.log <- (network :: state.log)) ;
 
-  let print_log (lt, from, msg) =
-    let time = Printf.sprintf "[%02d:%02d:%02d] " lt.Unix.tm_hour lt.Unix.tm_min lt.Unix.tm_sec in
-    time ^ from ^ ": " ^ msg
-  in
-  let logs =
-    let entries = take_rev 6 state.log [] in
-    let entries = List.map print_log entries in
-    let log_entries = line_wrap ~max_length:size.cols entries [] in
-    String.concat "\n" (List.rev (take_fill "" 6 log_entries  []))
-  in
+  (* this isn't good yet, we need to handle sessions properly *)
+  (match snd state.active_chat, User.good_session (fst state.active_chat) with
+   | None, Some x -> state.active_chat <- (fst state.active_chat, Some x)
+   | Some x, Some y when x <> y -> state.active_chat <- (fst state.active_chat, Some y)
+   | _ -> () );
 
-  let main_size = size.rows - 6 (* log *) - 3 (* status + readline *) in
+  let log_size = 6 in
+  let main_size = size.rows - log_size - 3 (* status + hline + readline *) in
   assert (main_size > 0) ;
-
   let buddy_width = 24 in
+  let chat_width = size.cols - buddy_width - 1 in
 
-  let buddies = show_buddies state in
-  let active_idx = find_index (fst state.active_chat).User.jid 0 buddies in
-
-  let buddies =
-    List.mapi (fun x id ->
-        let u = User.Users.find state.users id in
-        let session = User.good_session u in
-        let presence = match session with
-          | None -> `Offline
-          | Some s -> s.User.presence
-        in
-        let fg = color_session u state.user session in
-        let bg = if x = active_idx then 7 else 15 in
-        let f, t =
-          if u = state.user then
-            ("{", "}")
-          else
-            User.subscription_to_chars u.User.subscription
-        in
-        let item =
-          let data = Printf.sprintf " %s%s%s %s" f (User.presence_to_char presence) t id in
-          pad buddy_width data
-        in
-        let show = [B_fg fg ; B_bg(index bg) ; S item ; E_bg ; E_fg ] in
-        if List.mem u state.notifications then
-          B_blink true :: show @ [ E_blink ]
-        else
-          show)
-      buddies
+  let logs =
+    let entries = log_buffer state.log log_size size.cols in
+    String.concat "\n" (take_fill_rev "" log_size entries [])
   in
+
+  let buddies = buddy_list state main_size buddy_width in
 
   let chat =
-    let open User in
-    let printmsg { direction ; encrypted ; received ; timestamp ; message } =
-      let lt = Unix.localtime timestamp in
-      let time = Printf.sprintf "%02d-%02d %02d:%02d " lt.Unix.tm_mon lt.Unix.tm_mday lt.Unix.tm_hour lt.Unix.tm_min in
-      let en = if encrypted then "O" else "-" in
-      let pre = match direction with
-        | `From _ -> "<" ^ en ^ "- "
-        | `To _ -> (if received then "-" else "r") ^ en ^ "> "
-        | `Local -> "*** "
-      in
-      time ^ pre ^ message
+    let data = match fst state.active_chat with
+      | x when x = state.user -> log_buffer state.log (List.length state.log) chat_width
+      | x                     -> List.rev (message_buffer x.User.history chat_width)
     in
-    (match snd state.active_chat, good_session (fst state.active_chat) with
-     | None, Some x -> state.active_chat <- (fst state.active_chat, Some x)
-     | Some x, Some y when x <> y -> state.active_chat <- (fst state.active_chat, Some y)
-     | _ -> () );
-    match fst state.active_chat with
-    | x when x = state.user -> List.map print_log state.log
-    | x -> List.map printmsg x.history
+    let elements = drop (state.scrollback * main_size) data in
+    take_fill_rev "" main_size elements []
   in
 
   let fg_color = color_session (fst state.active_chat) state.user (snd state.active_chat) in
 
   let buddylist =
-    let buddylst =
-      let bs = List.length buddies in
-      if main_size >= bs then
-        take_fill [ S (String.make buddy_width ' ') ] main_size buddies []
-      else
-        (* active_idx in the middle *)
-        let up, down = (main_size / 2, (main_size + 1) / 2) in
-        let from =
-          if active_idx - up >= 0 then
-            if active_idx + down > bs then
-              bs - main_size
-            else
-              active_idx - up
-          else
-            0
-        in
-        take main_size (drop from buddies) []
-    in
-    let chat_wrap_length = (size.cols - buddy_width - 1 (* hline char *)) in
-    let chat1 = line_wrap ~max_length:chat_wrap_length (List.rev chat) [] in
-    let chat = drop (state.scrollback * main_size) chat1 in
-    let chatlst = List.rev (take_fill "" main_size chat []) in
-    let comb = List.combine buddylst chatlst in
-    List.map (fun (b, c) -> b @ [ B_fg fg_color ; S (Zed_utf8.singleton (UChar.of_int 0x2502)) ; E_fg ; S c ; S "\n" ]) comb
+    let comb = List.combine buddies chat in
+    let pipe = S (Zed_utf8.singleton (UChar.of_int 0x2502)) in
+    List.map (fun (buddy, chat) ->
+        buddy @ [ B_fg fg_color ; pipe ; E_fg ; S chat ; S "\n" ])
+      comb
   in
 
   let hline =
