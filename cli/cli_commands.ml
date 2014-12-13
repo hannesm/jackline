@@ -40,7 +40,7 @@ let _ =
     "add" "/add jid"
     "adds jid to your contact list, and sends a subscription request" [] ;
   new_command
-    "authorization" "/authorization sub"
+    "authorization" "/authorization [subscription]"
     "changes presence subscription of the current contact to sub -- one of 'allow', 'cancel', 'request', 'request_unsubscribe'"
     [ "allow" ; "cancel" ; "request" ; "request_unsubscribe" ] ;
   new_command
@@ -225,6 +225,11 @@ let exec ?out input state config log redraw =
          | "on"  -> doit true
          | "off" -> doit false
          | _ -> err "don't know what you want" )
+
+     | Some s, ("authorization", (None | Some "")) ->
+       let cmd = Commands.find commands "authorization" in
+       msg cmd.command_line cmd.documentation;
+       return_unit
 
      | Some s, ("authorization", Some arg) ->
        let open Xmpp_callbacks.XMPPClient in
