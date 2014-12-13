@@ -50,7 +50,7 @@ let _ =
     "verifies the current contact's OTR fingerprint (fp must match the one used in the currently established session)" [] ;
   new_command
     "status" "/status [presence] [message]"
-    "sets your presence [one of 'free' 'away' 'dnd' 'xa' 'offline' or 'online'] and status message"
+    "sets your presence -- one of 'free' 'away' 'dnd' 'xa' 'offline' or 'online' and status message"
     [ "free" ; "away" ; "dnd" ; "xa" ; "offline" ; "online" ] ;
   new_command
     "quit" "/quit" "exits this client" [] ;
@@ -312,7 +312,7 @@ let tell_user (log:(Unix.tm * string * string) -> unit) ?(prefix:string option) 
   let now = Unix.localtime (Unix.time ()) in
   let f = match prefix with
     | None -> from
-    | Some x -> x ^ " " ^ from
+    | Some x -> x ^ "; " ^ from
   in
   log (now, f, msg) ;
   return_unit

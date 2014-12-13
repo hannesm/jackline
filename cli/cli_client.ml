@@ -9,18 +9,6 @@ open React
 
 open Cli_state
 
-let rec take_rev x l acc =
-  match x, l with
-  | 0, _       -> acc
-  | n, []      -> acc
-  | n, x :: xs -> take_rev (pred n) xs (x :: acc)
-
-let rec take_fill_rev neutral x l acc =
-  match x, l with
-  | 0, _     -> acc
-  | n, x::xs -> take_fill_rev neutral (pred n) xs (x::acc)
-  | n, []    -> take_fill_rev neutral (pred n) [] (neutral::acc)
-
 let rec take x l acc =
   match x, l with
   | 0, _       -> List.rev acc
@@ -33,11 +21,17 @@ let rec drop x l =
   | n, _ :: xs -> drop (pred n) xs
   | n, []      -> []
 
-let rec pad_l neutral x l =
-  match x - (List.length l) with
-  | 0 -> l
-  | d when d > 0 ->  pad_l neutral x (neutral :: l)
-  | d -> assert false
+let pad_l_rev neutral x l =
+  let rec doit xs =
+      match x - (List.length xs) with
+      | 0            -> xs
+      | d when d > 0 -> doit (neutral :: xs)
+      | d            -> drop (List.length xs - x) xs
+  in
+  doit l
+
+let pad_l neutral len xs =
+  List.rev (pad_l_rev neutral len (List.rev xs))
 
 let pad x s =
   match x - (String.length s) with
@@ -88,7 +82,7 @@ let rec line_wrap ~max_length entries acc : string list =
     line_wrap ~max_length remaining acc
   | entry::remaining when (Zed_utf8.length entry) > max_length ->
     let part1, part2 = Zed_utf8.break entry max_length in
-    line_wrap ~max_length (("  " ^ part2)::remaining) (part1::acc)
+    line_wrap ~max_length (("  " ^ part2)::part1::remaining) acc
   | entry::remaining ->
     line_wrap ~max_length remaining (entry::acc)
   | [] -> acc
@@ -98,7 +92,12 @@ let log_buffer log length width =
     let time = Printf.sprintf "[%02d:%02d:%02d] " lt.Unix.tm_hour lt.Unix.tm_min lt.Unix.tm_sec in
     time ^ from ^ ": " ^ msg
   in
-  let entries = take_rev length log [] in
+  let entries =
+    if List.length log > length then
+      take length log []
+    else
+      log
+  in
   let entries = List.map print_log entries in
   line_wrap ~max_length:width entries []
 
@@ -157,7 +156,7 @@ let buddy_list state length width =
   in
   match length >= bs with
   | true  -> let pad = [ S (String.make width ' ') ] in
-             List.rev (take_fill_rev pad length formatted_buddies [])
+             pad_l pad length formatted_buddies
   | false ->
     let from =
       match
@@ -302,7 +301,8 @@ let make_prompt size time network state redraw =
     begin
       let logs =
         let entries = log_buffer state.log log_size size.cols in
-        String.concat "\n" (take_fill_rev "" log_size entries [])
+        let data = pad_l_rev "" log_size entries in
+        String.concat "\n" data
       in
 
       let buddies = buddy_list state main_size buddy_width in
@@ -310,10 +310,11 @@ let make_prompt size time network state redraw =
       let chat =
         let data = match fst state.active_chat with
           | x when x = state.user -> log_buffer state.log (List.length state.log) chat_width
-          | x                     -> List.rev (message_buffer x.User.history chat_width)
+          | x                     -> message_buffer x.User.history chat_width
         in
-        let elements = drop (state.scrollback * main_size) data in
-        take_fill_rev "" main_size elements []
+        (* data is already in right order -- but we need to strip scrollback *)
+        let elements = drop (state.scrollback * main_size) (List.rev data) in
+        pad_l_rev "" main_size (List.rev elements)
       in
 
       let fg_color = color_session (fst state.active_chat) state.user (snd state.active_chat) in
