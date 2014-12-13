@@ -87,18 +87,12 @@ let rec line_wrap ~max_length entries acc : string list =
     line_wrap ~max_length remaining (entry::acc)
   | [] -> acc
 
-let log_buffer log length width =
+let log_buffer log width =
   let print_log (lt, from, msg) =
     let time = Printf.sprintf "[%02d:%02d:%02d] " lt.Unix.tm_hour lt.Unix.tm_min lt.Unix.tm_sec in
     time ^ from ^ ": " ^ msg
   in
-  let entries =
-    if List.length log > length then
-      take length log []
-    else
-      log
-  in
-  let entries = List.map print_log entries in
+  let entries = List.map print_log log in
   line_wrap ~max_length:width entries []
 
 let format_buddies buddies users active self notifications width =
@@ -300,7 +294,8 @@ let make_prompt size time network state redraw =
   else
     begin
       let logs =
-        let entries = log_buffer state.log log_size size.cols in
+        let entries = if List.length state.log > log_size then take log_size state.log [] else state.log in
+        let entries = log_buffer entries size.cols in
         let data = pad_l_rev "" log_size entries in
         String.concat "\n" data
       in
@@ -309,7 +304,7 @@ let make_prompt size time network state redraw =
 
       let chat =
         let data = match fst state.active_chat with
-          | x when x = state.user -> log_buffer state.log (List.length state.log) chat_width
+          | x when x = state.user -> log_buffer state.log chat_width
           | x                     -> message_buffer x.User.history chat_width
         in
         (* data is already in right order -- but we need to strip scrollback *)
@@ -332,11 +327,10 @@ let make_prompt size time network state redraw =
       let notify = List.length state.notifications > 0 in
       let log = (fst state.active_chat).User.preserve_history in
       let status = status_line state.user state.session notify log redraw fg_color size.cols in
+      let main = List.flatten main_window in
 
       try
-        eval (
-          List.flatten main_window @ hline @ [ S "\n" ; S logs ; S "\n" ] @ status @ [ S "\n" ]
-        )
+        eval ( main @ hline @ [ S "\n" ; S logs ; S "\n" ] @ status @ [ S "\n" ] )
       with
         _ -> eval ([ S "error during evaluating layout"])
     end
