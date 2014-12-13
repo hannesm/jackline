@@ -62,6 +62,8 @@ let _ =
   new_command
     "log" "/log [on|off]" "enable or disable logging for current contact" [ "on" ; "off" ] ;
   new_command
+    "priority" "/priority [number]" "set your presence priority to number" [ ] ;
+  new_command
     "help" "/help [cmd]" "shows available commands or detailed help for cmd"
     (keys ())
 
@@ -152,9 +154,10 @@ let handle_connect ?out state config log redraw failure =
       | Some s -> xmpp_session := Some s ;
                   Lwt.async (fun () -> Xmpp_callbacks.parse_loop s))
 
-let handle_status s failure a =
+
+
+let send_status s presence status priority failure =
   let open Xmpp_callbacks.XMPPClient in
-  let p, status = split_ws a in
   let user_to_xmpp = function
     | `Offline      -> (Some Unavailable, None)
     | `Online       -> (None            , None)
@@ -163,11 +166,25 @@ let handle_status s failure a =
     | `DoNotDisturb -> (None            , Some ShowDND)
     | `ExtendedAway -> (None            , Some ShowXA)
   in
+  let kind, show = user_to_xmpp presence in
+  let priority = match priority with 0 -> None | x -> Some x in
+  (try_lwt send_presence s ?kind ?show ?status ?priority ()
+   with e -> failure e) >|= fun () -> Some ()
+
+let handle_status s failure session a =
+  let p, status = split_ws a in
   match User.string_to_presence p with
   | None   -> return None
-  | Some x -> let kind, show = user_to_xmpp x in
-              (try_lwt send_presence s ?kind ?show ?status ()
-               with e -> failure e) >|= fun () -> Some ()
+  | Some x -> let priority = session.User.priority in
+              send_status s x status priority failure
+
+let handle_priority s failure session p =
+  try
+    let prio = int_of_string p in
+    assert (prio >= -128 && prio <= 127) ; (* RFC 6121 4.7.2.3 *)
+    send_status s session.User.presence session.User.status prio failure
+  with
+    _ -> return None
 
 let handle_add s failure msg a =
   try
@@ -336,7 +353,7 @@ let exec ?out input state config log redraw =
     ( match !xmpp_session, x with
       | None  , _      -> err "not connected"
       | Some _, None   -> handle_help (msg ~prefix:"argument required") (Some "status")
-      | Some s, Some a -> handle_status s failure a >>= (function
+      | Some s, Some a -> handle_status s failure state.session a >>= (function
           | None   -> handle_help (msg ~prefix:"unknown argument") (Some "status")
           | Some _ -> return_unit ) )
   | ("add", x) ->
@@ -372,4 +389,11 @@ let exec ?out input state config log redraw =
           | Some s when x = "start" -> handle_otr_start s dump failure config.Config.otr_config state.active_chat
           | Some s when x = "stop" -> handle_otr_stop s dump err failure state.active_chat
           | Some _ -> handle_help (msg ~prefix:"unknown argument") (Some "otr") ) )
+  | ("priority", x) ->
+    ( match !xmpp_session, x with
+      | None  , _      -> err "not connected"
+      | Some _, None   -> handle_help (msg ~prefix:"argument required") (Some "priority")
+      | Some s, Some p -> handle_priority s failure state.session p >>= (function
+          | None   -> handle_help (msg ~prefix:"unknown argument") (Some "priority")
+          | Some _ -> return_unit ) )
   | _ -> handle_help (msg ~prefix:"unknown command") None
