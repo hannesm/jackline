@@ -448,31 +448,33 @@ let rec loop ?out (config : Config.t) term hist state network log =
   with
    | Some command when (String.length command > 0) && String.get command 0 = '/' ->
       LTerm_history.add hist command;
-      Cli_commands.exec ?out command state config log force_redraw >>= (function
-        | true -> loop ?out config term hist state network log
-        | false ->
-          (match !xmpp_session with
-           | None -> return_unit
-           | Some x ->
-             let otr_sessions = User.Users.fold (fun _ u acc ->
-                 List.fold_left (fun acc s ->
-                     if User.encrypted s.User.otr then
-                       ((User.userid u s), s.User.otr) :: acc
-                     else acc)
-                   acc
-                   u.User.active_sessions)
-                 state.users []
-             in
-             Lwt_list.iter_s
-               (fun (jid_to, ctx) ->
-                  let _, out = Otr.Handshake.end_otr ctx in
-                  Xmpp_callbacks.XMPPClient.(send_message x
-                                               ~kind:Chat
-                                               ~jid_to:(JID.of_string jid_to)
-                                               ?body:out ()))
-               otr_sessions
-               (* close connection! *)
-          ) >|= fun () -> state)
+      if String.trim command <> "/quit" then
+        Cli_commands.exec ?out command state config log force_redraw >>= fun () ->
+        loop ?out config term hist state network log
+      else
+        ( begin
+            match !xmpp_session with
+              | None -> return_unit
+              | Some x ->
+                let otr_sessions = User.Users.fold (fun _ u acc ->
+                    List.fold_left (fun acc s ->
+                        if User.encrypted s.User.otr then
+                          ((User.userid u s), s.User.otr) :: acc
+                        else acc)
+                      acc
+                      u.User.active_sessions)
+                    state.users []
+                in
+                Lwt_list.iter_s
+                  (fun (jid_to, ctx) ->
+                     let _, out = Otr.Handshake.end_otr ctx in
+                     Xmpp_callbacks.XMPPClient.(send_message x
+                                                  ~kind:Chat
+                                                  ~jid_to:(JID.of_string jid_to)
+                                                  ?body:out ()))
+                  otr_sessions
+          end >|= fun () -> state )
+
     | Some message when String.length message > 0 ->
        LTerm_history.add hist message;
        let err data = log (Unix.localtime (Unix.time ()), "error", data) ; return_unit in

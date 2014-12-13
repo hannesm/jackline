@@ -135,20 +135,14 @@ let exec ?out input state config log redraw =
 
   | ("help", Some arg) when Commands.mem commands arg ->
     let cmd = Commands.find commands arg in
-    msg cmd.command_line cmd.documentation >|= fun () ->
-    true
+    msg cmd.command_line cmd.documentation
 
   | ("help", _) ->
     let cmds = String.concat " " (keys ()) in
-    msg "available commands (try [/help cmd])" cmds >|= fun () ->
-    true
-
-  | ("quit", _) ->
-    msg "self-destruction mechanism initiated" "have a nice day" >|= fun () ->
-    false
+    msg "available commands (try [/help cmd])" cmds
 
   | x ->
-    (match !xmpp_session, x with
+    match !xmpp_session, x with
      | None, ("connect", _) ->
        let otr_config = config.Config.otr_config in
        let received jid msg =
@@ -342,5 +336,4 @@ let exec ?out input state config log redraw =
 
      | Some _, ("connect", _) -> err "already connected"
 
-     | _ -> err "unknown command or not connected, try /help" ) >|= fun () ->
-    true
+     | _ -> err "unknown command or not connected, try /help"
