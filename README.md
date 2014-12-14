@@ -54,22 +54,27 @@ Now you should have a `~/.opam/system/bin/jackline` (or `~/.opam/4.02.1/bin/jack
 Left is the contact list, in the middle the chat window, below the log buffer. The last line is a prompt.
 
 In the contact list, presence subscription information is indicated by `[` and `]` (if subscription is both, `F` for from (contact is subscribed to your presence updates), `T` for to (you are subscribed to the presence updates of the contact), `?` for no presence subscription). The self-contact is marked by curly braces `{` and `}`.
-The presence is indicated by a single character (o = online, f = free, a = away, d = do not disturb, x = extended away, _ = offline). The focussed contact is marked by a grey background. Blinking indicates that a new message arrived (blue # on the left bottom also blinks).
+The presence is indicated by a single character (o = online, f = free, a = away, d = do not disturb, x = extended away, _ = offline).
+The focussed contact is marked by a grey background. Blinking of a contact indicates that a new message arrived (additionally, a blue # on the left bottom appears).
 
 Active keys:
 - PgUp/PgDown navigates through the contact list
 - Ctrl-q jumps to next notification
 - Ctrl-x jumps to last active user
 - F5 toggles display of offline contacts
+- F12 toggles display of contact list
 - Ctrl PgUp/PgDown scrolls chat
 
 Tab completion is available for the prompt. Tab completion completes the largest prefix.
 
 `/help` prints the available commands, `/help command` more detailed help of the given command.
 
-Sending a message is done by just typing the message followed by return.
+A message is sent to the active contact by pressing return.
 
-In the chat window, each message is prefixed with 3 characters: `***` is a local message, `<O-` is an incoming message (`O` indicates OTR encryption), `rO>` is an outgoing message (`r` indicates that message delivery request was not yet answered (NYI)).
+In the chat window, each message is prefixed with 3 characters:
+- `***` is a local message,
+- `<O-` is an incoming message (`O` indicates OTR encryption),
+- `rO>` is an outgoing message (`r` indicates that message delivery request was not yet answered (NYI)).
 
 Colors:
 - green frame and contact: OTR session established
