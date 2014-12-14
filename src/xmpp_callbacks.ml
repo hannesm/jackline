@@ -44,12 +44,12 @@ let message_callback (t : user_data session_data) stanza =
     | Some v ->
       let ctx, out, ret = Otr.Handshake.handle session.User.otr v in
       List.iter (function
-          | `Established_encrypted_session ->
+          | `Established_encrypted_session (high, first, second) ->
             msg `Local false "encrypted OTR connection established" ;
             ( match User.find_fp user ctx with
               | _, Some fps ->
                 let verified_key = List.exists (fun x -> x.User.verified) user.User.otr_fingerprints in
-                let verify = "verify over secondary channel (and type /fingerprint fp)" in
+                let verify = "verify over secondary channel (and trust using /fingerprint)" in
                 let otrmsg =
                   match verified_key, fps.User.verified, fps.User.session_count with
                   | _, true, _ -> "verified OTR fingerprint"
@@ -59,6 +59,17 @@ let message_callback (t : user_data session_data) stanza =
                   | false, false, n -> "unverified key (used " ^ (string_of_int n) ^ " times). please " ^ verify
                 in
                 msg `Local false otrmsg ;
+                let ssid =
+                  let to_hex x = match Hex.of_string x with `Hex s -> s in
+                  Printf.sprintf "%s%s%s %s%s%s"
+                    (if high then "[" else "")
+                    (to_hex first)
+                    (if high then "]" else "")
+                    (if high then "" else "[")
+                    (to_hex second)
+                    (if high then "" else "]")
+                in
+                msg `Local false ("session id (verify over second channel) " ^ ssid) ;
                 User.insert_inc user session.User.resource fps ;
               | _, None ->
                 msg `Local false "shouldn't happen - OTR established but couldn't find fingerprint" )
