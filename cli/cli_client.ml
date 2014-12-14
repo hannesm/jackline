@@ -104,7 +104,7 @@ let format_buddies buddies users active self notifications width =
         | Some s -> s.User.presence
       in
       let fg = color_session u self session in
-      let bg = if u = active then 7 else 15 in
+      let bg = if u = active then white else lwhite in
       let f, t =
         if u = self then
           ("{", "}")
@@ -115,7 +115,7 @@ let format_buddies buddies users active self notifications width =
         let data = Printf.sprintf " %s%s%s %s" f (User.presence_to_char presence) t id in
         pad width data
       in
-      let show = [B_fg fg ; B_bg(index bg) ; S item ; E_bg ; E_fg ] in
+      let show = [B_fg fg ; B_bg bg ; S item ; E_bg ; E_fg ] in
       if List.mem u notifications then
         B_blink true :: show @ [ E_blink ]
       else
