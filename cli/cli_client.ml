@@ -176,7 +176,7 @@ let maybe_trim str left =
   else
     ([], 0)
 
-let horizontal_line (user, session) fg_color buddy_width scrollback width =
+let horizontal_line (user, session) fg_color buddy_width scrollback show_buddy_list width =
   let open User in
   let buddy, presence, status, otr, otrcolor = match session with
     | Some s ->
@@ -199,8 +199,11 @@ let horizontal_line (user, session) fg_color buddy_width scrollback width =
     | None -> (user.jid, "", "", "", black)
   in
   let pre =
-    (Zed_utf8.make buddy_width (UChar.of_int 0x2500)) ^
-    (Zed_utf8.singleton (UChar.of_int 0x2534))
+    if show_buddy_list then
+      (Zed_utf8.make buddy_width (UChar.of_int 0x2500)) ^
+      (Zed_utf8.singleton (UChar.of_int 0x2534))
+    else
+      (Zed_utf8.singleton (UChar.of_int 0x2500))
   in
   let txt =
     match scrollback with
@@ -294,7 +297,10 @@ let make_prompt size time network state redraw =
   let log_size = 6 in
   let main_size = size.rows - log_size - 3 (* status + hline + readline *) in
   let buddy_width = 24 in
-  let chat_width = size.cols - buddy_width - 1 in
+  let chat_width =
+    if state.show_buddy_list then
+      size.cols - buddy_width - 1
+    else size.cols in
 
   if main_size < 0 || chat_width < 0 then
     eval ([S "window too small, please increase its size"])
@@ -325,11 +331,13 @@ let make_prompt size time network state redraw =
         let comb = List.combine buddies chat in
         let pipe = S (Zed_utf8.singleton (UChar.of_int 0x2502)) in
         List.map (fun (buddy, chat) ->
-            buddy @ [ B_fg fg_color ; pipe ; E_fg ; S chat ; S "\n" ])
+		  if state.show_buddy_list then
+		    buddy @ [ B_fg fg_color ; pipe ; E_fg ; S chat ; S "\n" ]
+		 else [ S chat ; S "\n"])
           comb
       in
 
-      let hline = horizontal_line state.active_chat fg_color buddy_width state.scrollback size.cols in
+      let hline = horizontal_line state.active_chat fg_color buddy_width state.scrollback state.show_buddy_list size.cols in
 
       let notify = List.length state.notifications > 0 in
       let log = (fst state.active_chat).User.preserve_history in
@@ -431,7 +439,8 @@ class read_line ~term ~network ~history ~state = object(self)
       state.show_offline <- not state.show_offline ;
       force_redraw ()
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = f12 ->
-      ()
+      state.show_buddy_list <- not state.show_buddy_list ;
+      force_redraw ()
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrlq ->
       if List.length state.notifications > 0 then
         activate_user state (List.hd (List.rev state.notifications))
