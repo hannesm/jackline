@@ -236,13 +236,6 @@ let status_line now user session notify log redraw fg_color width =
       lgreen
   in
 
-  let first =
-    if notify then
-      [ B_blink true ; B_fg blue ; S "#" ; E_fg ; E_blink ]
-    else
-      [ B_fg fg_color ; S (Zed_utf8.make 1 (UChar.of_int 0x2500)) ; E_fg ]
-  in
-
   let jid, left = maybe_trim jid (pred width) in
   let jid_pre, left = maybe_trim "< " left in
   let jid_post, left = maybe_trim " >─" left in
@@ -260,8 +253,16 @@ let status_line now user session notify log redraw fg_color width =
 
   let fill = if left > 0 then [S (Zed_utf8.make left (UChar.of_int 0x2500))] else [] in
 
-  first @ [ B_fg col ] @ redraw @ [ E_fg ] @
-  [ B_bold true ; B_fg fg_color ] @ time_pre @ time @ time_post @
+  let first =
+    let rnd = [ B_fg col ] @ redraw @ [ E_fg ] in
+    if notify then
+      [ B_bold true ; B_blink true ; B_fg blue ; S "#" ; E_fg ] @ rnd @ [ E_blink ]
+    else
+      [ B_bold true ; B_fg fg_color ; S (Zed_utf8.make 1 (UChar.of_int 0x2500)) ; E_fg ] @ rnd
+  in
+
+  first @
+  [ B_fg fg_color ] @ time_pre @ time @ time_post @
   jid_pre @ [ E_fg ; B_fg jid_color ] @ jid @ [ E_fg ; B_fg fg_color ] @ jid_post @
   fill @
   status_pre @ [ E_fg ; B_fg status_color ] @ status @ [ E_fg ; B_fg fg_color ] @ status_post @
