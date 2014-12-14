@@ -282,11 +282,12 @@ let make_prompt size time network state redraw =
   (if List.length state.log = 0 || List.hd state.log <> network then
      state.log <- (network :: state.log)) ;
 
-  (* this isn't good yet, we need to handle sessions properly *)
-  (match snd state.active_chat, User.good_session (fst state.active_chat) with
-   | None, Some x -> state.active_chat <- (fst state.active_chat, Some x)
-   | Some x, Some y when x <> y -> state.active_chat <- (fst state.active_chat, Some y)
-   | _ -> () );
+  (* the user in the hashtable might have been replace *)
+  (let user = User.Users.find state.users (fst state.active_chat).User.jid in
+   (* this isn't good yet, we need to handle sessions properly *)
+   let session = User.good_session user in
+   state.active_chat <- (user, session) );
+
 
   let log_size = 6 in
   let main_size = size.rows - log_size - 3 (* status + hline + readline *) in

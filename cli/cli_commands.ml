@@ -140,10 +140,8 @@ let handle_connect ?out state config log redraw failure =
     log (now, jid, msg)
   and notify u =
     ( let cmp_user other = u.User.jid = other.User.jid in
-      if List.exists cmp_user state.notifications then
+      if List.exists cmp_user state.notifications || cmp_user (fst state.active_chat) then
         ()
-      else if cmp_user (fst state.active_chat) then
-        state.active_chat <- (u, snd state.active_chat)
       else
         state.notifications <- u :: state.notifications ) ;
     redraw ()
