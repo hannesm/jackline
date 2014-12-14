@@ -473,8 +473,8 @@ let rec loop ?out (config : Config.t) term hist state network log =
               | Some x ->
                 let otr_sessions = User.Users.fold (fun _ u acc ->
                     List.fold_left (fun acc s ->
-                        if User.encrypted s.User.otr then
-                          ((User.userid u s), s.User.otr) :: acc
+                        if User.(encrypted s.otr) then
+                          User.(userid u s, s.otr) :: acc
                         else acc)
                       acc
                       u.User.active_sessions)
