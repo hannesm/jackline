@@ -248,15 +248,17 @@ let status_line now user session notify log redraw fg_color width =
   let status_pre, left = maybe_trim "[ " left in
   let status_post, left = maybe_trim " ]─" left in
 
+  let col = index (redraw mod 16) in
+  let redraw, left = maybe_trim (Printf.sprintf "%02x" redraw) left in
+
   let time, left = maybe_trim time left in
   let time_pre, left = maybe_trim "─( " left in
   let time_post, left = maybe_trim " )─" left in
 
   let fill = if left > 0 then [S (Zed_utf8.make left (UChar.of_int 0x2500))] else [] in
 
-  [ B_bold true ] @
-  first @ [ S redraw ] @
-  [ B_fg fg_color ] @ time_pre @ time @ time_post @
+  first @ [ B_fg col ] @ redraw @ [ E_fg ] @
+  [ B_bold true ; B_fg fg_color ] @ time_pre @ time @ time_post @
   jid_pre @ [ E_fg ; B_fg jid_color ] @ jid @ [ E_fg ; B_fg fg_color ] @ jid_post @
   fill @
   status_pre @ [ E_fg ; B_fg status_color ] @ status @ [ E_fg ; B_fg fg_color ] @ status_post @
@@ -358,8 +360,8 @@ let ctrldown = UChar.of_int 0x2507
 
 let redraw, force_redraw =
   (* this is just an ugly hack which should be removed *)
-  let a, b = S.create "" in
-  (a, fun () -> b "bla" ; b "")
+  let a, b = S.create 0 in
+  (a, fun () -> b (Random.int 256) )
 
 type direction = Up | Down
 
