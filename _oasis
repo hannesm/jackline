@@ -16,12 +16,14 @@ Library "xmpp_client"
   Modules         : Config, User, Persistency, Xmpp_connection, Xmpp_callbacks
   Pack            : true
   BuildDepends    : erm_xmpp, otr, tls, tls.lwt, lwt, sexplib, sexplib.syntax, hex, nocrypto, lwt.syntax
+  ByteOpt         : -w A-4-33-40-41-42-43-34-44
 
 Library "xmpp_client_cli"
   Path            : cli/
   Modules         : Cli_config, Cli_state, Cli_commands, Cli_client
   Pack            : true
   BuildDepends    : lambda-term, react, lwt.syntax, xmpp_client
+  ByteOpt         : -w A-4-33-40-41-42-43-34-44
 
 Executable "jackline"
   Path            : cli/
