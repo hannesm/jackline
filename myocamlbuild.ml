@@ -1,5 +1,5 @@
 (* OASIS_START *)
-(* DO NOT EDIT (digest: d3cbb348119a21b46bb3c610938ec0a8) *)
+(* DO NOT EDIT (digest: e511b8b8916bb8a256025ff9d306ab9a) *)
 module OASISGettext = struct
 (* # 22 "src/oasis/OASISGettext.ml" *)
 
@@ -610,7 +610,28 @@ let package_default =
      MyOCamlbuildBase.lib_ocaml =
        [("xmpp_client", ["src"], []); ("xmpp_client_cli", ["cli"], [])];
      lib_c = [];
-     flags = [];
+     flags =
+       [
+          (["oasis_library_xmpp_client_byte"; "ocaml"; "link"; "byte"],
+            [(OASISExpr.EBool true, S [A "-w"; A "A-4-33-40-41-42-43-34-44"])
+            ]);
+          (["oasis_library_xmpp_client_byte"; "ocaml"; "ocamldep"; "byte"],
+            [(OASISExpr.EBool true, S [A "-w"; A "A-4-33-40-41-42-43-34-44"])
+            ]);
+          (["oasis_library_xmpp_client_byte"; "ocaml"; "compile"; "byte"],
+            [(OASISExpr.EBool true, S [A "-w"; A "A-4-33-40-41-42-43-34-44"])
+            ]);
+          (["oasis_library_xmpp_client_cli_byte"; "ocaml"; "link"; "byte"],
+            [(OASISExpr.EBool true, S [A "-w"; A "A-4-33-40-41-42-43-34-44"])
+            ]);
+          (["oasis_library_xmpp_client_cli_byte"; "ocaml"; "ocamldep"; "byte"
+           ],
+            [(OASISExpr.EBool true, S [A "-w"; A "A-4-33-40-41-42-43-34-44"])
+            ]);
+          (["oasis_library_xmpp_client_cli_byte"; "ocaml"; "compile"; "byte"],
+            [(OASISExpr.EBool true, S [A "-w"; A "A-4-33-40-41-42-43-34-44"])
+            ])
+       ];
      includes = [("cli", ["src"])]
   }
   ;;
@@ -619,6 +640,6 @@ let conf = {MyOCamlbuildFindlib.no_automatic_syntax = false}
 
 let dispatch_default = MyOCamlbuildBase.dispatch_default conf package_default;;
 
-# 623 "myocamlbuild.ml"
+# 644 "myocamlbuild.ml"
 (* OASIS_STOP *)
 Ocamlbuild_plugin.dispatch dispatch_default;;
