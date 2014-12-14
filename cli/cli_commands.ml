@@ -139,10 +139,13 @@ let handle_connect ?out state config log redraw failure =
     let now = Unix.localtime (Unix.time ()) in
     log (now, jid, msg)
   and notify u =
-    (if (List.mem u state.notifications) || (fst state.active_chat = u) then
-       ()
-     else
-       state.notifications <- u :: state.notifications) ;
+    ( let cmp_user other = u.User.jid = other.User.jid in
+      if List.exists cmp_user state.notifications then
+        ()
+      else if cmp_user (fst state.active_chat) then
+        state.active_chat <- (u, snd state.active_chat)
+      else
+        state.notifications <- u :: state.notifications ) ;
     redraw ()
   and users = state.users
   in

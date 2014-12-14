@@ -152,10 +152,10 @@ let roster_callback users item =
     let subscription =
       match item.Roster.subscription with
       | Roster.SubscriptionRemove -> assert false
-      | Roster.SubscriptionBoth -> `Both
-      | Roster.SubscriptionNone -> `None
-      | Roster.SubscriptionFrom -> `From
-      | Roster.SubscriptionTo -> `To
+      | Roster.SubscriptionBoth   -> `Both
+      | Roster.SubscriptionNone   -> `None
+      | Roster.SubscriptionFrom   -> `From
+      | Roster.SubscriptionTo     -> `To
     in
     let properties =
       let app = if item.Roster.approved then [`PreApproved ] else [] in
@@ -168,9 +168,10 @@ let roster_callback users item =
               User.groups = item.Roster.group ;
               subscription ; properties }
     in
-    User.(Users.replace users t.jid t)
+    User.(Users.replace users t.jid t) ;
+    Some t
   with
-  _ -> ()
+  _ -> None
 
 let session_callback t =
   let err txt =
@@ -214,7 +215,8 @@ let session_callback t =
            let _, items = Roster.decode attrs els in
            if List.length items = 1 then
              let users = t.user_data.users in
-             List.iter (roster_callback users) items ;
+             let mods = List.map (roster_callback users) items in
+             List.iter (function None -> () | Some x -> t.user_data.notify x) mods ;
              return (IQResult None)
            else
              fail BadRequest
@@ -241,7 +243,7 @@ let session_callback t =
   Roster.get t (fun ?jid_from ?jid_to ?lang ?ver items ->
       ignore jid_from ; ignore jid_to ; ignore lang ; ignore ver ;
       let users = t.user_data.users in
-      List.iter (roster_callback users) items ;
+      ignore ( List.map (roster_callback users) items ) ;
       return () ) >>= fun () ->
 
   try_lwt send_presence t ()
