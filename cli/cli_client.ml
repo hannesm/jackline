@@ -300,7 +300,9 @@ let make_prompt size time network state redraw =
   let chat_width =
     if state.show_buddy_list then
       size.cols - buddy_width - 1
-    else size.cols in
+    else
+      size.cols
+  in
 
   if main_size < 0 || chat_width < 0 then
     eval ([S "window too small, please increase its size"])
@@ -313,28 +315,28 @@ let make_prompt size time network state redraw =
         String.concat "\n" data
       in
 
-      let buddies = buddy_list state main_size buddy_width in
-
-      let chat =
-        let data = match fst state.active_chat with
-          | x when x = state.user -> log_buffer state.log chat_width
-          | x                     -> message_buffer x.User.history chat_width
-        in
-        (* data is already in right order -- but we need to strip scrollback *)
-        let elements = drop (state.scrollback * main_size) (List.rev data) in
-        pad_l_rev "" main_size (List.rev elements)
-      in
-
       let fg_color = color_session (fst state.active_chat) state.user (snd state.active_chat) in
 
       let main_window =
-        let comb = List.combine buddies chat in
-        let pipe = S (Zed_utf8.singleton (UChar.of_int 0x2502)) in
-        List.map (fun (buddy, chat) ->
-		  if state.show_buddy_list then
-		    buddy @ [ B_fg fg_color ; pipe ; E_fg ; S chat ; S "\n" ]
-		 else [ S chat ; S "\n"])
-          comb
+        let chat =
+          let data = match fst state.active_chat with
+            | x when x = state.user -> log_buffer state.log chat_width
+            | x                     -> message_buffer x.User.history chat_width
+          in
+          (* data is already in right order -- but we need to strip scrollback *)
+          let elements = drop (state.scrollback * main_size) (List.rev data) in
+          pad_l_rev "" main_size (List.rev elements)
+        in
+
+        if state.show_buddy_list then
+          (let buddies = buddy_list state main_size buddy_width in
+           let comb = List.combine buddies chat in
+           let pipe = S (Zed_utf8.singleton (UChar.of_int 0x2502)) in
+           List.map (fun (buddy, chat) ->
+               buddy @ [ B_fg fg_color ; pipe ; E_fg ; S chat ; S "\n" ])
+             comb)
+        else
+          List.map (fun chat -> [ S chat ; S "\n"]) chat
       in
 
       let hline = horizontal_line state.active_chat fg_color buddy_width state.scrollback state.show_buddy_list size.cols in
