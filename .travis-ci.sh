@@ -16,4 +16,8 @@ opam repo add xmpp-dev git://github.com/hannesm/xmpp-opam > /dev/null 2>&1
 
 opam update -u
 
-opam install jackline
+opam install --deps-only jackline
+
+eval `opam config env`
+ocaml setup.ml -configure
+ocaml setup.ml -build
