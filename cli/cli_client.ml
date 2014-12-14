@@ -13,20 +13,20 @@ let rec take x l acc =
   match x, l with
   | 0, _       -> List.rev acc
   | n, x :: xs -> take (pred n) xs (x :: acc)
-  | n, _       -> assert false
+  | _, _       -> assert false
 
 let rec drop x l =
   match x, l with
   | 0, xs      -> xs
   | n, _ :: xs -> drop (pred n) xs
-  | n, []      -> []
+  | _, []      -> []
 
 let pad_l_rev neutral x l =
   let rec doit xs =
       match x - (List.length xs) with
       | 0            -> xs
       | d when d > 0 -> doit (neutral :: xs)
-      | d            -> drop (List.length xs - x) xs
+      | _            -> drop (List.length xs - x) xs
   in
   doit l
 
@@ -37,12 +37,12 @@ let pad x s =
   match x - (String.length s) with
   | 0                  -> s
   | d when d > 0       -> s ^ (String.make d ' ')
-  | d (* when d < 0 *) -> String.sub s 0 x
+  | _ (* when d < 0 *) -> String.sub s 0 x
 
 let rec find_index id i = function
-  | []                -> 0
-  | x::xs when x = id -> i
-  | _::xs             -> find_index id (succ i) xs
+  | []               -> 0
+  | x::_ when x = id -> i
+  | _::xs            -> find_index id (succ i) xs
 
 let color_session u su = function
   | Some x when User.(encrypted x.otr) -> green
@@ -124,7 +124,7 @@ let format_buddies buddies users active self notifications width =
 
 let format_messages msgs =
   let open User in
-  let printmsg { direction ; encrypted ; received ; timestamp ; message } =
+  let printmsg { direction ; encrypted ; received ; timestamp ; message ; _ } =
     let lt = Unix.localtime timestamp in
     let time =
       Printf.sprintf "%02d-%02d %02d:%02d "
@@ -191,9 +191,9 @@ let horizontal_line (user, session) fg_color buddy_width scrollback width =
           " - " ^ stripped
       in
       let otrcolor, otr = match fingerprint s.otr with
-        | fp, Some raw when verified_fp user raw -> (fg_color, " - OTR verified")
-        | fp, Some raw                           -> (red, " - unverified OTR: " ^ fp)
-        | fp, None                               -> (red, " - no OTR")
+        | _ , Some raw when verified_fp user raw -> (fg_color, " - OTR verified")
+        | fp, Some _                             -> (red, " - unverified OTR: " ^ fp)
+        | _ , None                               -> (red, " - no OTR")
       in
       (userid user s, " -- " ^ presence, status, otr, otrcolor)
     | None -> (user.jid, "", "", "", black)
@@ -216,11 +216,11 @@ let horizontal_line (user, session) fg_color buddy_width scrollback width =
   let post = if left > 0 then [S (Zed_utf8.make left (UChar.of_int 0x2500))] else [] in
   B_fg fg_color :: pre @ buddy @ [ E_fg ; B_fg otrcolor ] @ otr @ [ E_fg ; B_fg fg_color ] @ presence @ status @ post @ [ E_fg ]
 
-let status_line user session notify log redraw fg_color width =
+let status_line now user session notify log redraw fg_color width =
   let status = User.presence_to_string session.User.presence in
   let jid = User.userid user session in
   let time =
-    let now = Unix.localtime (Unix.time ()) in
+    let now = Unix.localtime now in
     Printf.sprintf "%02d:%02d" now.Unix.tm_hour now.Unix.tm_min
   in
 
@@ -330,7 +330,7 @@ let make_prompt size time network state redraw =
 
       let notify = List.length state.notifications > 0 in
       let log = (fst state.active_chat).User.preserve_history in
-      let status = status_line state.user state.session notify log redraw fg_color size.cols in
+      let status = status_line time state.user state.session notify log redraw fg_color size.cols in
       let main = List.flatten main_window in
 
       try
@@ -402,20 +402,20 @@ let navigate_buddy_list state direction =
 
 class read_line ~term ~network ~history ~state = object(self)
   inherit LTerm_read_line.read_line ~history () as super
-  inherit [Zed_utf8.t] LTerm_read_line.term term as t
+  inherit [Zed_utf8.t] LTerm_read_line.term term
 
-  method completion =
+  method! completion =
     let prefix  = Zed_rope.to_string self#input_prev in
     let completions = Cli_commands.completion prefix in
     self#set_completion 0 completions
 
-  method complete =
+  method! complete =
     try super#complete with
     | _ -> ()
 
-  method show_box = false
+  method! show_box = false
 
-  method send_action = function
+  method! send_action = function
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = down ->
       navigate_buddy_list state Down
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = up ->
@@ -522,7 +522,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
          | (user, Some session), Some x -> send_msg user session x
          | _, None -> err "no active session, try to connect first" ) >>= fun () ->
        loop ?out config term hist state network log
-     | Some message -> loop ?out config term hist state network log
+     | Some _ -> loop ?out config term hist state network log
      | None -> loop ?out config term hist state network log
 
 let init_system log =

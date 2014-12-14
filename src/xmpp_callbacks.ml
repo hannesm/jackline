@@ -47,7 +47,7 @@ let message_callback (t : user_data session_data) stanza =
           | `Established_encrypted_session ->
             msg `Local false "encrypted OTR connection established" ;
             ( match User.find_fp user ctx with
-              | fp, Some fps ->
+              | _, Some fps ->
                 let verified_key = List.exists (fun x -> x.User.verified) user.User.otr_fingerprints in
                 let verify = "verify over secondary channel (and type /fingerprint fp)" in
                 let otrmsg =
@@ -60,7 +60,7 @@ let message_callback (t : user_data session_data) stanza =
                 in
                 msg `Local false otrmsg ;
                 User.insert_inc user session.User.resource fps ;
-              | fp, None ->
+              | _, None ->
                 msg `Local false "shouldn't happen - OTR established but couldn't find fingerprint" )
           | `Warning w -> msg `Local false w
           | `Received_error e -> msg (`From from) false e
@@ -79,6 +79,7 @@ let message_callback (t : user_data session_data) stanza =
         with e -> t.user_data.failure e
 
 let message_error t ?id ?jid_from ?jid_to ?lang error =
+  ignore id ; ignore jid_to ; ignore lang ;
   let log = t.user_data.received in
   let jid = match jid_from with
     | None -> "unknown"
@@ -99,17 +100,16 @@ let presence_callback t stanza =
        | Some x -> (Some x, " - " ^ x)
      in
      let handle_presence newp () =
-       let open User in
-       let session = ensure_session jid t.user_data.otr_config user in
-       let id = userid user session in
-       let old = presence_to_char session.presence in
-       session.priority <- ( match stanza.content.priority with
+       let session = User.ensure_session jid t.user_data.otr_config user in
+       let id = User.userid user session in
+       let old = User.presence_to_char session.User.presence in
+       session.User.priority <- ( match stanza.content.priority with
            | None -> 0
            | Some x -> x ) ;
-       session.status <- stat ;
-       session.presence <- newp ;
-       let n = presence_to_char newp in
-       let nl = presence_to_string newp in
+       session.User.status <- stat ;
+       session.User.presence <- newp ;
+       let n = User.presence_to_char newp in
+       let nl = User.presence_to_string newp in
        log id ("presence changed: [" ^ old ^ ">" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring)
      in
      let logp txt =
@@ -136,6 +136,7 @@ let presence_callback t stanza =
   return_unit
 
 let presence_error t ?id ?jid_from ?jid_to ?lang error =
+  ignore id ; ignore jid_to ; ignore lang ;
   let log = t.user_data.received in
   let jid = match jid_from with
     | None -> "unknown"
@@ -191,6 +192,7 @@ let session_callback t =
 
   register_iq_request_handler t Roster.ns_roster
     (fun ev jid_from jid_to lang () ->
+       ignore lang ;
        match ev with
        | IQGet _el -> fail BadRequest
        | IQSet el ->
@@ -208,8 +210,8 @@ let session_callback t =
                with _ -> fail BadRequest )
            | _ -> fail BadRequest ) >>= fun () ->
          match el with
-         | Xml.Xmlelement ((ns_roster, "query"), attrs, els) ->
-           let ver, items = Roster.decode attrs els in
+         | Xml.Xmlelement ((ns_roster, "query"), attrs, els) when ns_roster = Roster.ns_roster ->
+           let _, items = Roster.decode attrs els in
            if List.length items = 1 then
              let users = t.user_data.users in
              List.iter (roster_callback users) items ;
@@ -237,6 +239,7 @@ let session_callback t =
         with _ -> err "during presence parsing, ignoring" ; return_unit ));
 
   Roster.get t (fun ?jid_from ?jid_to ?lang ?ver items ->
+      ignore jid_from ; ignore jid_to ; ignore lang ; ignore ver ;
       let users = t.user_data.users in
       List.iter (roster_callback users) items ;
       return () ) >>= fun () ->

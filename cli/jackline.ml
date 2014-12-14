@@ -28,9 +28,9 @@ let start_client cfgdir debug () =
     else
       return None ) >>= fun out ->
 
-  Cli_client.init_system log ;
+  Cli_client.init_system (log ?step:None) ;
 
-  Cli_client.loop ?out config term history state n log >>= fun state ->
+  Cli_client.loop ?out config term history state n (log ?step:None) >>= fun state ->
 
   ( match out with
     | None -> return_unit

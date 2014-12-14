@@ -5,7 +5,7 @@ class read_inputline ~term ~prompt () = object(self)
   inherit LTerm_read_line.read_line ()
   inherit [Zed_utf8.t] LTerm_read_line.term term
 
-  method show_box = false
+  method! show_box = false
 
   initializer
     self#set_prompt (S.const (LTerm_text.of_string prompt))
@@ -15,7 +15,7 @@ class read_password term = object(self)
   inherit LTerm_read_line.read_password () as super
   inherit [Zed_utf8.t] LTerm_read_line.term term
 
-  method send_action = function
+  method! send_action = function
     | LTerm_read_line.Break ->
         (* Ignore Ctrl+C *)
         ()
@@ -49,7 +49,7 @@ let configure term () =
   (match jid with
    | None -> fail (Invalid_argument "bad jabber ID")
    | Some x -> return x) >>= fun jid ->
-  let { JID.ldomain } = jid in
+  let { JID.ldomain ; _ } = jid in
   (new read_inputline ~term ~prompt:"enter port [5222]: " ())#run >>= fun port ->
   let port = if port = "" then 5222 else int_of_string port in
   (if port <= 0 || port > 65535 then

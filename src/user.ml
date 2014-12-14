@@ -209,7 +209,7 @@ let keys users =
   List.sort compare us
 
 let bare_jid jid =
-  let { JID.lnode ; JID.ldomain ; JID.lresource } = jid in
+  let { JID.lnode ; JID.ldomain ; JID.lresource ; _ } = jid in
   (lnode ^ "@" ^ ldomain, lresource)
 
 let find_or_add jid users =
@@ -222,7 +222,7 @@ let find_or_add jid users =
     t
 
 let ensure_session jid otr_cfg user =
-  let { JID.lresource } = jid in
+  let { JID.lresource ; _ } = jid in
   let r_matches l s = s.resource = l in
   (if not (List.exists (r_matches lresource) user.active_sessions) then
      let sess = empty_session lresource otr_cfg () in
@@ -258,7 +258,7 @@ let t_of_sexp t version =
           let name = match version with
             | 0 -> let str = string_of_sexp nam in
                    if str = "" then None else Some str
-            | n -> option_of_sexp string_of_sexp nam
+            | _ -> option_of_sexp string_of_sexp nam
           in
           { t with name }
         | Sexp.List [ Sexp.Atom "jid" ; Sexp.Atom jid ] ->

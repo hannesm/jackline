@@ -146,9 +146,13 @@ let handle_connect ?out state config log redraw failure =
     redraw ()
   and users = state.users
   in
-  let (user_data : Xmpp_callbacks.user_data) = Xmpp_callbacks.({
-      otr_config ; users ; received ; notify ; failure ;
-  }) in
+  let (user_data : Xmpp_callbacks.user_data) = {
+      Xmpp_callbacks.otr_config = otr_config ;
+      Xmpp_callbacks.users      = users      ;
+      Xmpp_callbacks.received   = received   ;
+      Xmpp_callbacks.notify     = notify     ;
+      Xmpp_callbacks.failure    = failure    ;
+  } in
   Xmpp_callbacks.connect ?out config user_data () >|= (function
       | None   -> ()
       | Some s -> xmpp_session := Some s ;
@@ -195,7 +199,7 @@ let handle_add s failure msg a =
      with e -> failure e)
   with _ -> msg "error" "parsing of jid failed (user@node)"
 
-let handle_fingerprint s dump err a = function
+let handle_fingerprint dump err a = function
   | user, Some session when User.encrypted session.User.otr ->
     let manual_fp = string_normalize_fingerprint a in
     ( match User.fingerprint session.User.otr with
@@ -207,7 +211,7 @@ let handle_fingerprint s dump err a = function
       | _ -> err "provided fingerprint does not match the one of this active session" )
   | _ -> err "no active OTR session"
 
-let handle_log dump err (user, _) v a =
+let handle_log dump (user, _) v a =
   dump ("logging turned " ^ a) ;
   user.User.preserve_history <- v ;
   return_unit
@@ -344,7 +348,7 @@ let exec ?out input state config log redraw =
   let dump data = User.new_message (fst state.active_chat) `Local false false data in
 
   match cmd_arg input with
-  | ("help", x) -> handle_help msg x
+  | ("help", x) -> handle_help (msg ?prefix:None) x
   | ("connect", _) ->
     ( match !xmpp_session with
       | None   -> handle_connect ?out state config log redraw failure
@@ -360,17 +364,16 @@ let exec ?out input state config log redraw =
     ( match !xmpp_session, x with
       | None  , _      -> err "not connected"
       | Some _, None   -> handle_help (msg ~prefix:"argument required") (Some "add")
-      | Some s, Some a -> handle_add s failure msg a )
+      | Some s, Some a -> handle_add s failure (msg ?prefix:None) a )
   | ("fingerprint", x) ->
-    ( match !xmpp_session, x with
-      | None  , _      -> err "not connected"
-      | Some _, None   -> handle_help (msg ~prefix:"argument required") (Some "fingerprint")
-      | Some s, Some a -> handle_fingerprint s dump err a state.active_chat )
+    ( match x with
+      | None   -> handle_help (msg ~prefix:"argument required") (Some "fingerprint")
+      | Some a -> handle_fingerprint dump err a state.active_chat )
   | ("log", x) ->
     ( match x with
       | None   -> handle_help (msg ~prefix:"argument required") (Some "log")
-      | Some a when a = "on"  -> handle_log dump err state.active_chat true a
-      | Some a when a = "off" -> handle_log dump err state.active_chat false a
+      | Some a when a = "on"  -> handle_log dump state.active_chat true a
+      | Some a when a = "off" -> handle_log dump state.active_chat false a
       | Some _ -> handle_help (msg ~prefix:"unknown argument") (Some "log") )
   | ("authorization", x) ->
     ( match !xmpp_session, x with
