@@ -126,7 +126,11 @@ let format_messages msgs =
   let open User in
   let printmsg { direction ; encrypted ; received ; timestamp ; message } =
     let lt = Unix.localtime timestamp in
-    let time = Printf.sprintf "%02d-%02d %02d:%02d " lt.Unix.tm_mon lt.Unix.tm_mday lt.Unix.tm_hour lt.Unix.tm_min in
+    let time =
+      Printf.sprintf "%02d-%02d %02d:%02d "
+        (succ lt.Unix.tm_mon) lt.Unix.tm_mday
+        lt.Unix.tm_hour lt.Unix.tm_min
+    in
     let en = if encrypted then "O" else "-" in
     let pre = match direction with
       | `From _ -> "<" ^ en ^ "- "
