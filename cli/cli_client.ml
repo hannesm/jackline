@@ -77,7 +77,7 @@ let rec line_wrap ~max_length entries acc : string list =
       | true , true  -> remaining
       | false, true  -> part1::remaining
       | true , false -> part2::remaining
-      | false, false -> part1::part2::remaining
+      | false, false -> part2::part1::remaining
     in
     line_wrap ~max_length remaining acc
   | entry::remaining when (Zed_utf8.length entry) > max_length ->
