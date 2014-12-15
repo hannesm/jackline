@@ -111,12 +111,16 @@ let format_buddies buddies users active self notifications width =
         else
           User.subscription_to_chars u.User.subscription
       in
+      let notify = List.mem u notifications in
       let item =
-        let data = Printf.sprintf " %s%s%s %s" f (User.presence_to_char presence) t id in
+        let data = Printf.sprintf "%s%s%s%s %s"
+            (if notify then "*" else " ")
+            f (User.presence_to_char presence) t id
+        in
         pad width data
       in
       let show = [B_fg fg ; B_bg bg ; S item ; E_bg ; E_fg ] in
-      if List.mem u notifications then
+      if notify then
         B_blink true :: show @ [ E_blink ]
       else
         show)
@@ -256,7 +260,7 @@ let status_line now user session notify log redraw fg_color width =
   let first =
     let rnd = [ B_fg col ] @ redraw @ [ E_fg ] in
     if notify then
-      [ B_bold true ; B_blink true ; B_fg blue ; S "#" ; E_fg ] @ rnd @ [ E_blink ]
+      [ B_bold true ; B_blink true ; B_fg blue ; S "#" ] @ redraw @ [ E_fg ; E_blink ]
     else
       [ B_bold true ; B_fg fg_color ; S (Zed_utf8.make 1 (UChar.of_int 0x2500)) ; E_fg ] @ rnd
   in
