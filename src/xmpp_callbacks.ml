@@ -49,7 +49,7 @@ let message_callback (t : user_data session_data) stanza =
             ( match User.find_fp user ctx with
               | _, Some fps ->
                 let verified_key = List.exists (fun x -> x.User.verified) user.User.otr_fingerprints in
-                let verify = "verify over secondary channel (and trust using /fingerprint)" in
+                let verify = "verify the fingerprint over second channel" in
                 let otrmsg =
                   match verified_key, fps.User.verified, fps.User.session_count with
                   | _, true, _ -> "verified OTR fingerprint"
@@ -69,7 +69,7 @@ let message_callback (t : user_data session_data) stanza =
                     (to_hex second)
                     (if high then "" else "]")
                 in
-                msg `Local false ("session id (verify over second channel) " ^ ssid) ;
+                msg `Local false ("session id (to verify this session over second channel) " ^ ssid) ;
                 User.insert_inc user session.User.resource fps ;
               | _, None ->
                 msg `Local false "shouldn't happen - OTR established but couldn't find fingerprint" )
