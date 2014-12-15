@@ -27,6 +27,7 @@ depends: [
   "otr"
   "lambda-term"
   "react"
+  "type_conv"
   "sexplib"
   "hex"
 ]
