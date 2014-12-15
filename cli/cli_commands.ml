@@ -240,7 +240,7 @@ let dump_otr_fps fps =
     let resources = String.concat ", " fp.User.resources in
     fp.User.data ^ " " ^ ver ^ " (used in " ^ used ^ " sessions, resources: " ^ resources ^ ")"
   in
-  String.concat ", " (List.map marshal_otr fps)
+  String.concat "\n" (List.map marshal_otr fps)
 
 let handle_otr_info dump (user, active_session) =
   match active_session with
