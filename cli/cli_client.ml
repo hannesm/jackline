@@ -305,7 +305,7 @@ let make_prompt size time network state redraw =
       size.cols
   in
 
-  if main_size < 0 || chat_width < 0 then
+  if main_size <= 0 || chat_width <= 0 then
     eval ([S "window too small, please increase its size"])
   else
     begin
