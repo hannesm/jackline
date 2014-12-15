@@ -310,7 +310,7 @@ let make_prompt size time network state redraw =
   in
 
   if main_size <= 6 || chat_width <= 10 then
-    eval ([S "window too small, please increase its size"])
+    eval ([S "need more space"])
   else
     begin
       let logs =
