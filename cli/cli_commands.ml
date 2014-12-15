@@ -237,7 +237,8 @@ let dump_otr_fps fps =
   let marshal_otr fp =
     let ver = if fp.User.verified then "verified" else "unverified" in
     let used = string_of_int fp.User.session_count in
-    fp.User.data ^ " " ^ ver ^ " (used in " ^ used ^ " sessions)"
+    let resources = String.concat ", " fp.User.resources in
+    fp.User.data ^ " " ^ ver ^ " (used in " ^ used ^ " sessions, resources: " ^ resources ^ ")"
   in
   String.concat ", " (List.map marshal_otr fps)
 
