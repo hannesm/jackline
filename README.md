@@ -39,8 +39,8 @@ OPAM is the OCaml package manager, and not directly needed, but very convenient 
 
 First be aware that this is unreleased alpha software. Bug reports are welcome (pull requests as well).
 
-Get OCaml (4.02.1 preferred), get opam (1.2!), gmp is also needed
-If you have an older OCaml compiler, get opam and run `opam switch 4.02.1`
+Get OCaml (4.02.1 preferred), get opam (1.2), aspcud and gmp are also needed.
+If you have an older OCaml compiler, run `opam switch 4.02.1`.
 
 Run the following commands:
 - `opam repo add xmpp-dev git://github.com/hannesm/xmpp-opam`
