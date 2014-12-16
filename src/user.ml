@@ -60,7 +60,8 @@ type session = {
   mutable presence : presence ;
   mutable status : string option ;
   mutable priority : int ;
-  mutable otr : Otr.State.session
+  mutable otr : Otr.State.session ;
+  mutable dispose : bool ;
 }
 
 let empty_session resource config () = {
@@ -68,7 +69,8 @@ let empty_session resource config () = {
   presence = `Offline ;
   status = None ;
   priority = 0 ;
-  otr = Otr.State.new_session config ()
+  otr = Otr.State.new_session config () ;
+  dispose = false ;
 }
 
 open Sexplib
@@ -221,16 +223,84 @@ let find_or_add jid users =
     Users.add users id t ;
     t
 
+
+(*
+   xmpp resources should be unique for each client, thus multiple
+   sessions between two contacts can be established. great idea!
+   unfortunately the real world is crap. look at some resources:
+   -mcabber.123456 mcabber.123457
+   -276687891418300495410099 276687891418300495410010 ...
+   -D87A6DD1
+   -gmail.1234D33 ...
+   -5d234568880
+   -BitlBee7D0D5864
+   -AAAA AAAAB (size increases/decreases (because some use random and print without leading 0s))
+
+   thus I have some magic here to uniquify sessions... the idea is
+   (read: hand-wavy):
+    if two resources share a common prefix and have some random hex numbers,
+    they are the same
+
+   this naive obviously fails:
+     user X with AAAA comes online, user X with AAAB comes online
+     (read: these are the same) -- then AAAA goes offline.. AAAB is
+     still online (and this order of events happens on a reconnect due
+     to timeout)
+ *)
+let resource_similar a b =
+  let alen = String.length a
+  and blen = String.length b
+  in
+  if abs (alen - blen) > 2 then
+    false (* they're a bit too much off *)
+  else
+    let stop = min alen blen in
+    let rec equal idx =
+      if idx < stop then
+        if String.get a idx = String.get b idx then
+          equal (succ idx)
+        else
+          idx
+      else
+        idx
+    in
+    let hex_char = function
+      | 'a' .. 'f' | 'A' .. 'F' | '0' .. '9' -> true
+      | _ -> false
+    in
+    let rec hex idx s =
+      if idx < String.length s then
+        if hex_char (String.get s idx) then
+          hex (succ idx) s
+        else
+          false
+      else
+        true
+    in
+    let prefix_len = equal 0 in
+    hex prefix_len a && hex prefix_len b
+
 let ensure_session jid otr_cfg user =
   let { JID.lresource ; _ } = jid in
   let r_matches l s = s.resource = l in
+  (* there might be an exact match *)
   (if not (List.exists (r_matches lresource) user.active_sessions) then
      let sess = empty_session lresource otr_cfg () in
+     (* or some special session *)
      (if List.exists (r_matches "/special/") user.active_sessions then
         let dummy = List.find (r_matches "/special/") user.active_sessions in
         sess.otr <- dummy.otr ;
         user.active_sessions <-
-          List.filter (fun s -> not (r_matches "/special/" s)) user.active_sessions) ;
+          List.filter (fun s -> s <> dummy) user.active_sessions) ;
+     (* it may also be similar enough such that we carry over otr state *)
+     let r_similar s = resource_similar s.resource lresource in
+     (if List.exists r_similar user.active_sessions then
+        let similar = List.find r_similar user.active_sessions in
+        similar.dispose <- true ;
+        user.active_sessions <-
+          List.filter (fun s -> s <> similar) user.active_sessions ;
+        if similar.presence = `Offline then
+        sess.otr <- similar.otr) ;
      user.active_sessions <- (sess :: user.active_sessions ) );
   List.find (r_matches lresource) user.active_sessions
 

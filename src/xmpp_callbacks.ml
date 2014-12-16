@@ -121,7 +121,10 @@ let presence_callback t stanza =
        session.User.presence <- newp ;
        let n = User.presence_to_char newp in
        let nl = User.presence_to_string newp in
-       log id ("presence changed: [" ^ old ^ ">" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring)
+       log id ("presence changed: [" ^ old ^ ">" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring) ;
+       if newp = `Offline && session.User.dispose then
+         user.User.active_sessions <-
+           List.filter (fun s -> s <> session) user.User.active_sessions
      in
      let logp txt =
        let id, _ = User.bare_jid jid in
