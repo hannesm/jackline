@@ -61,8 +61,13 @@ let configure term () =
   ( if ta then
       begin
         (new read_inputline ~term ~prompt:"enter path to trust anchors: " ())#run >>= fun trust_anchor ->
-        Lwt_unix.access trust_anchor [ Unix.F_OK ; Unix.R_OK ] >|= fun () ->
-        `Trust_anchor trust_anchor
+        Lwt_unix.access trust_anchor [ Unix.F_OK ; Unix.R_OK ] >>= fun () ->
+        X509_lwt.certs_of_pem trust_anchor >>= fun tas ->
+        let tas = Certificate.valid_cas ~time:(Unix.time ()) tas in
+        if List.length tas = 0 then
+          fail (Invalid_argument "trust anchors are empty!")
+        else
+          return (`Trust_anchor trust_anchor)
       end
     else
       begin
