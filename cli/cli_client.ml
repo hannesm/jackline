@@ -414,9 +414,10 @@ let navigate_buddy_list state direction =
     List.length userlist > succ active_idx,
     pred active_idx >= 0
   with
-  | Down, true, _    -> set_active (succ active_idx)
-  | Up  , _   , true -> set_active (pred active_idx)
-  | _                -> ()
+  | Down, true, _     -> set_active (succ active_idx)
+  | Down, false, _    -> set_active 0
+  | Up  , _   , true  -> set_active (pred active_idx)
+  | Up  , _   , false -> set_active (pred (List.length userlist))
 
 class read_line ~term ~network ~history ~state = object(self)
   inherit LTerm_read_line.read_line ~history () as super
@@ -480,8 +481,8 @@ let rec loop ?out (config : Config.t) term hist state network log =
       | Sys.Break -> return None
       | LTerm_read_line.Interrupt -> return (Some "/quit")
   with
-   | Some command when (String.length command > 0) && String.get command 0 = '/' ->
-      LTerm_history.add hist command;
+    | Some command when (String.length command > 0) && String.get command 0 = '/' ->
+      LTerm_history.add hist command ;
       if String.trim command <> "/quit" then
         Cli_commands.exec ?out command state config log force_redraw >>= fun () ->
         loop ?out config term hist state network log
@@ -510,7 +511,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
           end >|= fun () -> state )
 
     | Some message when String.length message > 0 ->
-       LTerm_history.add hist message;
+       LTerm_history.add hist message ;
        let err data = log (Unix.localtime (Unix.time ()), "error", data) ; return_unit in
        let send_msg user session t =
          let ctx, out, user_out = Otr.Handshake.send_otr session.User.otr message in
