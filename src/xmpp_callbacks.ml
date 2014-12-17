@@ -304,8 +304,7 @@ let connect ?out config user_data _ =
         let make_tls () =
           (match config.authenticator with
            | `Trust_anchor x  -> X509_lwt.authenticator (`Ca_file x)
-           | `Fingerprint fp -> X509_lwt.authenticator (`Hex_fingerprints (`SHA256, [(server, fp)]))
-           | `None -> fail (Invalid_argument "Specify a TLS authentication method: Fingerprint or path to trust anchors") ) >>= fun authenticator ->
+           | `Fingerprint fp -> X509_lwt.authenticator (`Hex_fingerprints (`SHA256, [(server, fp)])) ) >>= fun authenticator ->
           TLSSocket.switch (PlainSocket.get_fd socket_data) server authenticator >>= fun socket_data ->
           user_data.received "started TLS connection to" server ;
           user_data.received "TLS info" (tls_epoch_to_line socket_data) ;

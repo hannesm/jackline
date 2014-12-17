@@ -5,7 +5,6 @@ open Sexplib.Conv
 type auth = [
   | `Fingerprint of string
   | `Trust_anchor of string
-  | `None
 ] with sexp
 
 type t = {
@@ -17,49 +16,60 @@ type t = {
   otr_config : Otr.State.config ;
 }
 
-let empty = {
-  version = 2 ;
-  jid = JID.of_string "user@server/resource" ;
-  port = 5222 ;
-  password = "" ;
-  authenticator = `None ;
-  otr_config = Otr.State.default_config
-}
+let current_version = 2
 
 let t_of_sexp t =
   match t with
   | Sexp.List l ->
-      List.fold_left (fun t v -> match v with
-        | Sexp.List [ Sexp.Atom "version" ; v ] ->
-          let version = int_of_sexp v in
-          { t with version }
-        | Sexp.List [ Sexp.Atom "jid" ; Sexp.Atom v ] ->
-          let jid = try JID.of_string v with _ -> Printf.printf "parse error in jid" ; t.jid in
-          { t with jid }
-        | Sexp.List [ Sexp.Atom "port" ; port ] ->
-          { t with port = int_of_sexp port }
-        | Sexp.List [ Sexp.Atom "password" ; Sexp.Atom password ] ->
-          { t with password }
-        | Sexp.List [ Sexp.Atom "trust_anchor" ; trust_anchor ] ->
-          (match t.version with
-           | 0 -> { t with authenticator = `Trust_anchor (string_of_sexp trust_anchor) }
-           | 1 -> ( match option_of_sexp string_of_sexp trust_anchor with
-               | None -> t
-               | Some x -> { t with authenticator = `Trust_anchor x } )
-           | _ -> raise (Invalid_argument "unexpected element: trust_anchor") )
-        | Sexp.List [ Sexp.Atom "tls_fingerprint" ; tls_fp ] ->
-          if t.version = 1 then
-            ( match option_of_sexp string_of_sexp tls_fp with
-              | None -> t
-              | Some x -> { t with authenticator = `Fingerprint x } )
-          else
-            raise (Invalid_argument "unexpected element: tls_fingerprint")
-        | Sexp.List [ Sexp.Atom "authenticator" ; auth ] ->
-          { t with authenticator = auth_of_sexp auth }
-        | Sexp.List [ Sexp.Atom "otr_config" ; v ] ->
-          { t with otr_config = Otr.State.config_of_sexp v }
-        | _ -> assert false)
-        empty l
+    (match
+      List.fold_left (fun (ver, jid, port, pass, auth, otr_cfg) v -> match v with
+          | Sexp.List [ Sexp.Atom "version" ; v ] ->
+            assert (ver = None) ;
+            let version = int_of_sexp v in
+            (Some version, jid, port, pass, auth, otr_cfg)
+          | Sexp.List [ Sexp.Atom "jid" ; Sexp.Atom v ] ->
+            assert (jid = None) ;
+            let jid =
+              try JID.of_string v
+              with _ -> raise (Invalid_argument "parse error in jid")
+            in
+            (ver, Some jid, port, pass, auth, otr_cfg)
+          | Sexp.List [ Sexp.Atom "port" ; p ] ->
+            assert (port = None) ;
+            (ver, jid, Some (int_of_sexp p), pass, auth, otr_cfg)
+          | Sexp.List [ Sexp.Atom "password" ; Sexp.Atom password ] ->
+            assert (pass = None) ;
+            (ver, jid, port, Some password, auth, otr_cfg)
+          | Sexp.List [ Sexp.Atom "trust_anchor" ; trust_anchor ] ->
+            assert (auth = None) ;
+            (match ver with
+             | Some 0 ->
+               let auth = Some (`Trust_anchor (string_of_sexp trust_anchor)) in
+               (ver, jid, port, pass, auth, otr_cfg)
+             | Some 1 -> ( match option_of_sexp string_of_sexp trust_anchor with
+                 | None -> (ver, jid, port, pass, auth, otr_cfg)
+                 | Some x -> (ver, jid, port, pass, Some (`Trust_anchor x), otr_cfg) )
+             | _ -> raise (Invalid_argument "unexpected element: trust_anchor") )
+          | Sexp.List [ Sexp.Atom "tls_fingerprint" ; tls_fp ] ->
+            assert (auth = None) ;
+            ( match ver with
+              | Some 1 ->
+                ( match option_of_sexp string_of_sexp tls_fp with
+                  | None -> (ver, jid, port, pass, auth, otr_cfg)
+                  | Some x -> (ver, jid, port, pass, Some (`Fingerprint x), otr_cfg) )
+              | _ -> raise (Invalid_argument "unexpected element: tls_fingerprint") )
+          | Sexp.List [ Sexp.Atom "authenticator" ; authenticator ] ->
+            assert (auth = None) ;
+            (ver, jid, port, pass, Some (auth_of_sexp authenticator), otr_cfg)
+          | Sexp.List [ Sexp.Atom "otr_config" ; v ] ->
+            assert (otr_cfg = None) ;
+            (ver, jid, port, pass, auth, Some (Otr.State.config_of_sexp v) )
+          | _ -> assert false)
+        (None, None, None, None, None, None) l
+     with
+     | Some version, Some jid, Some port, Some password, Some authenticator, Some otr_config ->
+       { version ; jid ; port ; password ; authenticator ; otr_config }
+     | _ -> raise (Invalid_argument "broken config") )
   | _ -> raise (Invalid_argument "broken config")
 
 let record kvs =

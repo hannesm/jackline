@@ -92,7 +92,7 @@ let configure term () =
       xs []
   in
   ask_list
-    Otr.State.versions
+    Otr.State.all_versions
     Otr.State.version_to_string
     "Protocol "
     " support (recommended)" >>= fun versions ->
@@ -102,7 +102,7 @@ let configure term () =
       return versions ) >>= fun versions ->
 
   ask_list
-    Otr.State.policies
+    Otr.State.all_policies
     Otr.State.policy_to_string
     ""
     " (recommended)" >|= fun policies ->
@@ -113,7 +113,7 @@ let configure term () =
     Otr.State.dsa = dsa
   } in
   let config = Config.({
-      version = empty.version ;
+      version = current_version ;
       jid ;
       port ;
       password ;
