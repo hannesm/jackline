@@ -22,7 +22,19 @@ let read dir file =
       read_data fd >>= fun buf ->
       Lwt_unix.close fd >|= fun () ->
       Some (String.trim buf))
-    (fun _ -> return None)
+    (fun _ ->
+       Lwt.catch
+         (fun () ->
+            Lwt_unix.access dir [ Unix.F_OK ] >|= fun () ->
+            Some dir)
+         (fun _ -> return None) >>= function
+       | Some f ->
+         Lwt_unix.stat f >>= fun stat ->
+         if stat.Lwt_unix.st_kind = Lwt_unix.S_DIR then
+           return None
+         else
+           fail (Invalid_argument "given path is not a directory")
+       | None -> return None )
 
 let write_data fd data =
   let rec write start =
