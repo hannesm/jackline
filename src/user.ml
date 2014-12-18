@@ -239,13 +239,16 @@ let find_or_add jid users =
    thus I have some magic here to uniquify sessions... the idea is
    (read: hand-wavy):
     if two resources share a common prefix and have some random hex numbers,
-    they are the same
+    they are similar!
 
    this naive obviously fails:
      user X with AAAA comes online, user X with AAAB comes online
-     (read: these are the same) -- then AAAA goes offline.. AAAB is
+     (read: these are similar) -- then AAAA goes offline.. AAAB is
      still online (and this order of events happens on a reconnect due
      to timeout)
+
+   thus only the otr ctx is copied over, and the dispose flag is set...
+   when a contact goes offline where dispose is set, the session is removed
  *)
 let resource_similar a b =
   let alen = String.length a
