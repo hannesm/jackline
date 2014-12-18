@@ -44,6 +44,8 @@ let _ =
     "changes presence subscription of the current contact to argument -- one of 'allow', 'cancel', 'request', 'request_unsubscribe'"
     [ "allow" ; "cancel" ; "request" ; "request_unsubscribe" ] ;
   new_command
+    "clear" "/clear" "clears the active window chat backlog" [] ;
+  new_command
     "connect" "/connect" "connects to the server" [] ;
   new_command
     "fingerprint" "/fingerprint [fp]"
@@ -291,6 +293,9 @@ let handle_info dump cfgdir (user, active_session) =
       dump "otr" (Otr.State.session_to_string s.User.otr))
     user.User.active_sessions
 
+let handle_clear (user, active_session) =
+  return (user.User.history <- [])
+
 let handle_otr_start s dump failure otr_cfg (user, active_session) =
   let send_over resource body =
     let jid_to =
@@ -377,6 +382,8 @@ let exec ?out input state config log redraw =
       | Some a when a = "on"  -> handle_log dump state.active_chat true a
       | Some a when a = "off" -> handle_log dump state.active_chat false a
       | Some _ -> handle_help (msg ~prefix:"unknown argument") (Some "log") )
+  | ("clear", _ ) ->
+    handle_clear state.active_chat
   | ("authorization", x) ->
     ( match !xmpp_session, x with
       | None  , _      -> err "not connected"
