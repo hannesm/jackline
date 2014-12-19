@@ -301,9 +301,9 @@ let make_prompt size time network state redraw =
 
   let statusses = status_log state in
   (* network should be an event, then I wouldn't need a check here *)
-  (match statusses with
-   | x::_ when x.User.direction = (fst network) && x.User.message = (snd network) -> ()
-   | _ -> add_status state (fst network) (snd network)) ;
+  (if state.last_status <> network then
+     (add_status state (fst network) (snd network) ;
+      state.last_status <- network) ) ;
 
   (* the user in the hashtable might have been replace *)
   (let user = User.Users.find state.users (fst state.active_chat).User.jid in

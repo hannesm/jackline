@@ -3,6 +3,7 @@ type ui_state = {
   config_directory : string ;
   user : User.user ; (* set initially *)
   session : User.session ; (* set initially *)
+  mutable last_status : (User.direction * string) ;
   mutable active_chat : (User.user * User.session option) ; (* modified by user (scrolling through buddies) *)
   mutable last_active_chat : (User.user * User.session option) ;
   users : User.users ; (* extended by xmpp callbacks *)
@@ -16,6 +17,7 @@ let empty_ui_state config_directory user session users = {
   config_directory ;
   user ;
   session ;
+  last_status = (`Local "", "") ;
   active_chat = (user, Some session) ;
   last_active_chat = (user, Some session) ;
   users ;

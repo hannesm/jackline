@@ -302,7 +302,7 @@ let handle_info dump (user, active_session) cfgdir =
       dump "otr" (Otr.State.session_to_string s.User.otr))
     user.User.active_sessions
 
-let handle_own_info dump (user, session) cfgdir config =
+let handle_own_info dump user own_session active_session cfgdir config =
   let dump a b = dump (a ^ ": " ^ b) in
   common_info dump user cfgdir ;
   let otr_pub = Nocrypto.Dsa.pub_of_priv config.Config.otr_config.Otr.State.dsa in
@@ -310,9 +310,18 @@ let handle_own_info dump (user, session) cfgdir config =
   if List.length user.User.otr_fingerprints > 0 then
     dump "otr fingerprints" (dump_otr_fps user.User.otr_fingerprints) ;
   List.iteri (fun i s ->
-      let act = if session = s then " (own session)" else "" in
+      let act =
+        let own = if own_session = s then
+            " (own session)"
+          else
+            ""
+        in
+        match active_session with
+        | Some x when x = s -> own ^ " (active)"
+        | _ -> own
+      in
       dump ("session " ^ (string_of_int i) ^ act) (marshal_session s) ;
-      if session <> s then dump "otr" (Otr.State.session_to_string s.User.otr))
+      if own_session <> s then dump "otr" (Otr.State.session_to_string s.User.otr))
     user.User.active_sessions
 
 let handle_otr_start s dump failure otr_cfg (user, active_session) =
@@ -371,6 +380,7 @@ let exec ?out input state config log redraw =
     msg "session error" (Printexc.to_string reason)
   in
   let dump data = User.new_message (fst state.active_chat) (`Local "") false false data in
+  let self = state.user = fst state.active_chat in
 
   match cmd_arg input with
   (* completely independent *)
@@ -415,30 +425,44 @@ let exec ?out input state config log redraw =
       | Some _ -> handle_help (msg ~prefix:"unknown argument") (Some "log") )
 
   | ("info", _) ->
-    ( match fst state.active_chat with
-      | u when u = state.user -> handle_own_info dump (state.user, state.session) state.config_directory config
-      | _ -> handle_info dump state.active_chat state.config_directory );
+    ( if self then
+        handle_own_info dump state.user state.session (snd state.active_chat) state.config_directory config
+      else
+        handle_info dump state.active_chat state.config_directory );
     return_unit
   | ("otr", x) ->
     ( match x with
       | None -> handle_help (msg ~prefix:"arguent required") (Some "otr")
-      | Some x when x = "info"  -> handle_otr_info dump state.active_chat ; return_unit
+      | Some x when x = "info" ->
+        ( if self then
+            handle_own_info dump state.user state.session (snd state.active_chat) state.config_directory config
+          else
+            handle_otr_info dump state.active_chat ) ;
+        return_unit
       | Some x -> (match !xmpp_session with
           | None -> err "not connected"
-          | Some s when x = "start" -> handle_otr_start s dump failure config.Config.otr_config state.active_chat
-          | Some s when x = "stop" -> handle_otr_stop s dump err failure state.active_chat
+          | Some s when x = "start" ->
+            if self then err "do not like to talk to myself" else
+              handle_otr_start s dump failure config.Config.otr_config state.active_chat
+          | Some s when x = "stop" ->
+            if self then err "do not like to talk to myself" else
+              handle_otr_stop s dump err failure state.active_chat
           | Some _ -> handle_help (msg ~prefix:"unknown argument") (Some "otr") ) )
 
   | ("fingerprint", x) ->
     ( match x with
       | None   -> handle_help (msg ~prefix:"argument required") (Some "fingerprint")
-      | Some a -> handle_fingerprint dump err a state.active_chat )
+      | Some a ->
+        if self then err "won't talk to myself" else
+          handle_fingerprint dump err a state.active_chat )
   | ("authorization", x) ->
     ( match !xmpp_session, x with
       | None  , _      -> err "not connected"
       | Some _, None   -> handle_help (msg ~prefix:"argument required") (Some "authorization")
-      | Some s, Some a -> handle_authorization s failure dump state.active_chat a >>= (function
-        | None   -> handle_help (msg ~prefix:"unknown argument") (Some "authorization")
-        | Some _ -> return_unit ) )
+      | Some s, Some a ->
+        if self then err "won't authorize myself" else
+          handle_authorization s failure dump state.active_chat a >>= (function
+              | None   -> handle_help (msg ~prefix:"unknown argument") (Some "authorization")
+              | Some _ -> return_unit ) )
 
   | _ -> handle_help (msg ~prefix:"unknown command") None
