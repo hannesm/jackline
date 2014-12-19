@@ -307,9 +307,7 @@ let make_prompt size time network state redraw =
 
   (* the user in the hashtable might have been replace *)
   (let user = User.Users.find state.users (fst state.active_chat).User.jid in
-   (* this isn't good yet, we need to handle sessions properly *)
-   let session = User.good_session user in
-   state.active_chat <- (user, session) );
+   state.active_chat <- (user, snd state.active_chat) );
 
 
   let log_size = 6 in
@@ -546,15 +544,31 @@ let rec loop ?out (config : Config.t) term hist state network log =
                                       ~jid_to:(JID.of_string jid_to)
                                       ?body:out () )
        in
-       ( match state.active_chat, !xmpp_session with
-         | (user, _), _ when user = state.user -> return_unit
-         | (user, None), Some x ->
+       ( match fst state.active_chat,
+               (User.good_session (fst state.active_chat)),
+               !xmpp_session
+         with
+         | user, _           , _      when user = state.user ->
+           err "try `M-x doctor` in emacs instead"
+         | user, None        , Some x ->
            let ctx = Otr.State.new_session config.Config.otr_config () in
            send_msg user ctx user.User.jid (fun _ -> ()) x
-         | (user, Some session), Some x ->
+         | user, Some session, Some x ->
+           ( match snd state.active_chat with
+             | Some x when x = session -> ()
+             | old                     ->
+               state.active_chat <- (user, Some session) ;
+               match old with
+               | None   -> ()
+               | Some y ->
+                 User.new_message user (`Local "switching active session")
+                   false false
+                   ("now " ^ session.User.resource ^ " was " ^ y.User.resource)
+           ) ;
            let set = fun ctx -> session.User.otr <- ctx in
            send_msg user session.User.otr (User.userid user session) set x
-         | _, None -> err "no active session, try to connect first" ) >>= fun () ->
+         | _   , _           , None ->
+           err "no active session, try to connect first" ) >>= fun () ->
        loop ?out config term hist state network log
      | Some _ -> loop ?out config term hist state network log
      | None -> loop ?out config term hist state network log

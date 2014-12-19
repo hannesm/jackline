@@ -369,7 +369,7 @@ let tell_user (log:(User.direction * string) -> unit) ?(prefix:string option) (f
     | None -> from
     | Some x -> x ^ "; " ^ from
   in
-  log (`From f, msg) ;
+  log (`Local f, msg) ;
   return_unit
 
 let exec ?out input state config log redraw =
@@ -381,6 +381,17 @@ let exec ?out input state config log redraw =
   in
   let dump data = User.new_message (fst state.active_chat) (`Local "") false false data in
   let self = state.user = fst state.active_chat in
+  (match User.good_session (fst state.active_chat), snd state.active_chat with
+   | None  , _                 -> ()
+   | Some x, Some y when x = y -> ()
+   | Some x, old               ->
+     state.active_chat <- ((fst state.active_chat), Some x) ;
+     match old with
+     | None   -> ()
+     | Some y -> User.new_message (fst state.active_chat)
+                   (`Local "switching active session") false false
+                   ("now " ^ x.User.resource ^ " was " ^ y.User.resource)
+  ) ;
 
   match cmd_arg input with
   (* completely independent *)
