@@ -96,12 +96,12 @@ let log_buffer log width =
         lt.Unix.tm_hour lt.Unix.tm_min lt.Unix.tm_sec
     in
     let from = match direction with
-      | `From jid -> jid
+      | `From jid -> jid ^ ":"
       | `Local x when x = "" -> "***"
-      | `Local x -> "***" ^ x
+      | `Local x -> "*** " ^ x ^ " ***"
       | `To _ -> ">>>"
     in
-    time ^ from ^ ": " ^ message
+    time ^ from ^ " " ^ message
   in
   let entries = List.map print_log log in
   line_wrap ~max_length:width entries []
@@ -206,7 +206,7 @@ let horizontal_line (user, session) fg_color buddy_width scrollback show_buddy_l
           in
           " - " ^ stripped
       in
-      let otrcolor, otr = match fingerprint s.otr with
+      let otrcolor, otr = match otr_fingerprint s.otr with
         | _ , Some raw when verified_fp user raw -> (fg_color, " - OTR verified")
         | fp, Some _                             -> (red, " - unverified OTR: " ^ fp)
         | _ , None                               -> (red, " - no OTR")

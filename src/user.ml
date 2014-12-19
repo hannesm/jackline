@@ -149,13 +149,17 @@ let userid u s = match s.resource with
   | r when r = "" -> u.jid
   | r -> u.jid ^ "/" ^ r
 
-let fingerprint otr =
-  let hex x = match Hex.of_string (Cstruct.to_string x) with
-      `Hex e -> (String.((sub e 0 8) ^ " " ^ (sub e 8 8) ^ " " ^ (sub e 16 8) ^ " " ^ (sub e 24 8) ^ " " ^ (sub e 32 8)), Some e)
-  in
+let format_fp e =
+  String.((sub e 0 8) ^ " " ^ (sub e 8 8) ^ " " ^ (sub e 16 8) ^ " " ^ (sub e 24 8) ^ " " ^ (sub e 32 8))
+
+let fingerprint dsa_pub =
+  let hex x = match Hex.of_string (Cstruct.to_string x) with `Hex e -> e in
+  hex (Otr.Crypto.OtrDsa.fingerprint dsa_pub)
+
+let otr_fingerprint otr =
   match otr.Otr.State.their_dsa with
   | None -> ("No OTR", None)
-  | Some x -> hex (Otr.Crypto.OtrDsa.fingerprint x)
+  | Some x -> let fp = fingerprint x in (format_fp fp, Some fp)
 
 let replace u fp =
   u.otr_fingerprints <-
@@ -173,7 +177,7 @@ let find_raw_fp u raw =
     Not_found -> { data = raw ; verified = false ; resources = []; session_count = 0 }
 
 let find_fp u otr =
-  match fingerprint otr with
+  match otr_fingerprint otr with
   | fp, Some raw ->
     let fps = find_raw_fp u raw in
     (fp, Some fps)

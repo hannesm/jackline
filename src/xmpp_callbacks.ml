@@ -290,23 +290,26 @@ let connect ?out config user_data _ =
   and port = config.port
   in
 
-  let log msg data = user_data.received ((`Local "error", (msg ^ ": " ^ data))) in
+  let err_log msg data = user_data.received ((`Local "error", (msg ^ ": " ^ data))) in
+  let info info data = user_data.received (`Local info, data) in
 
   match
     ( try Some ((Unix.gethostbyname server).Unix.h_addr_list.(0))
       with _ -> None )
   with
-  | None -> log "couldn't resolve hostname" server ; return None
+  | None -> err_log "couldn't resolve hostname" server ; return None
   | Some inet_addr ->
-    log "resolved hostname" server ;
     let sockaddr = Unix.ADDR_INET (inet_addr, port) in
     (try_lwt PlainSocket.open_connection sockaddr >>= fun s -> return (Some s)
      with _ -> return None ) >>= fun socket ->
-    let txt = server ^ " on port " ^ (string_of_int port) in
+    let txt =
+      let addr = Unix.string_of_inet_addr inet_addr in
+      addr ^ " (" ^ server ^ ") on port " ^ (string_of_int port)
+    in
     match socket with
-    | None -> log "failed to open a connection to" txt ; return None
+    | None -> err_log "failed to open a connection to" txt ; return None
     | Some socket_data ->
-        log "opened connection to" txt ;
+        info "opened connection to" txt ;
         let module Socket_module = struct type t = PlainSocket.socket
           let socket = socket_data
           include PlainSocket
@@ -316,8 +319,7 @@ let connect ?out config user_data _ =
            | `Trust_anchor x  -> X509_lwt.authenticator (`Ca_file x)
            | `Fingerprint fp -> X509_lwt.authenticator (`Hex_fingerprints (`SHA256, [(server, fp)])) ) >>= fun authenticator ->
           TLSSocket.switch (PlainSocket.get_fd socket_data) server authenticator >>= fun socket_data ->
-          log "started TLS connection to" server ;
-          log "TLS info" (tls_epoch_to_line socket_data) ;
+          info "TLS session info" (tls_epoch_to_line socket_data) ;
           let module TLS_module = struct type t = Tls_lwt.Unix.t
             let socket = socket_data
             include TLSSocket

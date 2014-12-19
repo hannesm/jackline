@@ -211,7 +211,7 @@ let handle_add s failure msg a =
 let handle_fingerprint dump err a = function
   | user, Some session when User.encrypted session.User.otr ->
     let manual_fp = string_normalize_fingerprint a in
-    ( match User.fingerprint session.User.otr with
+    ( match User.otr_fingerprint session.User.otr with
       | _, Some raw_cur_fp when raw_cur_fp = manual_fp ->
         let otr_fp = User.find_raw_fp user raw_cur_fp in
         User.replace user { otr_fp with User.verified = true } ;
@@ -258,8 +258,7 @@ let handle_otr_info dump (user, active_session) =
   | None ->
     dump ("(no active session) OTR fingerprints: " ^ (dump_otr_fps user.User.otr_fingerprints))
 
-let handle_info dump cfgdir (user, active_session) =
-  let dump a b = dump (a ^ ": " ^ b) in
+let common_info dump user cfgdir =
   dump "jid" user.User.jid ;
   ( match user.User.name with
     | None -> ()
@@ -269,7 +268,20 @@ let handle_info dump cfgdir (user, active_session) =
         let dir = Persistency.message_history_dir cfgdir in
         Filename.concat dir user.User.jid
       in
-      dump "persistent history in " histo ) ;
+      dump "persistent history in " histo )
+
+let marshal_session s =
+  let prio = string_of_int s.User.priority in
+  let pres = User.presence_to_string s.User.presence in
+  let status = match s.User.status with
+    | None -> ""
+    | Some x -> " - " ^ x
+  in
+  s.User.resource ^ " (" ^ prio ^ "): " ^ pres ^ status
+
+let handle_info dump (user, active_session) cfgdir =
+  let dump a b = dump (a ^ ": " ^ b) in
+  common_info dump user cfgdir ;
   ( match user.User.groups with
     | [] -> ()
     | xs -> dump "groups" (String.concat ", " xs) ) ;
@@ -281,15 +293,6 @@ let handle_info dump cfgdir (user, active_session) =
   let add = if String.length add > 0 then " (" ^ (String.trim add) ^ ")" else "" in
   dump "subscription" ((User.subscription_to_string user.User.subscription) ^ add) ;
   dump "otr fingerprints" (dump_otr_fps user.User.otr_fingerprints) ;
-  let marshal_session s =
-    let prio = string_of_int s.User.priority in
-    let pres = User.presence_to_string s.User.presence in
-    let status = match s.User.status with
-      | None -> ""
-      | Some x -> " - " ^ x
-    in
-    s.User.resource ^ " (" ^ prio ^ "): " ^ pres ^ status
-  in
   List.iteri (fun i s ->
       let act = match active_session with
         | Some x when x = s -> " (active)"
@@ -297,6 +300,19 @@ let handle_info dump cfgdir (user, active_session) =
       in
       dump ("session " ^ (string_of_int i) ^ act) (marshal_session s) ;
       dump "otr" (Otr.State.session_to_string s.User.otr))
+    user.User.active_sessions
+
+let handle_own_info dump (user, session) cfgdir config =
+  let dump a b = dump (a ^ ": " ^ b) in
+  common_info dump user cfgdir ;
+  let otr_pub = Nocrypto.Dsa.pub_of_priv config.Config.otr_config.Otr.State.dsa in
+  dump "own otr fingerprint" (User.format_fp (User.fingerprint otr_pub)) ;
+  if List.length user.User.otr_fingerprints > 0 then
+    dump "otr fingerprints" (dump_otr_fps user.User.otr_fingerprints) ;
+  List.iteri (fun i s ->
+      let act = if session = s then " (own session)" else "" in
+      dump ("session " ^ (string_of_int i) ^ act) (marshal_session s) ;
+      if session <> s then dump "otr" (Otr.State.session_to_string s.User.otr))
     user.User.active_sessions
 
 let handle_otr_start s dump failure otr_cfg (user, active_session) =
@@ -398,7 +414,11 @@ let exec ?out input state config log redraw =
       | Some a when a = "off" -> handle_log dump state.active_chat false a
       | Some _ -> handle_help (msg ~prefix:"unknown argument") (Some "log") )
 
-  | ("info", _) -> handle_info dump state.config_directory state.active_chat ; return_unit
+  | ("info", _) ->
+    ( match fst state.active_chat with
+      | u when u = state.user -> handle_own_info dump (state.user, state.session) state.config_directory config
+      | _ -> handle_info dump state.active_chat state.config_directory );
+    return_unit
   | ("otr", x) ->
     ( match x with
       | None -> handle_help (msg ~prefix:"arguent required") (Some "otr")
