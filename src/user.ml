@@ -323,6 +323,8 @@ let good_session user =
       in
       Some (List.hd ss)
 
+let db_version = 1
+
 let t_of_sexp t version =
   match t with
   | Sexp.List l ->
@@ -338,6 +340,7 @@ let t_of_sexp t version =
           { t with jid }
         | Sexp.List [ Sexp.Atom "groups" ; gps ] ->
           { t with groups = list_of_sexp string_of_sexp gps }
+        (* TODO: rename to preserve_messages and bump version *)
         | Sexp.List [ Sexp.Atom "preserve_history" ; hf ] ->
           { t with preserve_messages = bool_of_sexp hf }
         | Sexp.List [ Sexp.Atom "properties" ; p ] ->
@@ -361,6 +364,7 @@ let sexp_of_t t =
     "name"            , sexp_of_option sexp_of_string t.name ;
     "jid"             , sexp_of_string t.jid ;
     "groups"          , sexp_of_list sexp_of_string t.groups ;
+    (* TODO: rename preserve_messages and bump version *)
     "preserve_history", sexp_of_bool t.preserve_messages ;
     "properties"      , sexp_of_list sexp_of_property t.properties ;
     "subscription"    , sexp_of_subscription t.subscription ;
@@ -425,7 +429,7 @@ let store_users users =
   let data = Users.fold (fun _ s acc -> (sexp_of_t s, marshal_history s) :: acc) users [] in
   let users, histories = List.split data in
   let hist_version = sexp_of_int 0 in
-  Sexp.(to_string_mach (List [ sexp_of_int 1 ; List users ]),
+  Sexp.(to_string_mach (List [ sexp_of_int db_version ; List users ]),
         List.fold_left (fun acc v ->
             match v with
             | None -> acc
