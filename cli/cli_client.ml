@@ -88,9 +88,20 @@ let rec line_wrap ~max_length entries acc : string list =
   | [] -> acc
 
 let log_buffer log width =
-  let print_log (lt, from, msg) =
-    let time = Printf.sprintf "[%02d:%02d:%02d] " lt.Unix.tm_hour lt.Unix.tm_min lt.Unix.tm_sec in
-    time ^ from ^ ": " ^ msg
+  let open User in
+  let print_log { direction ; timestamp ; message ; _ } =
+    let time =
+      let lt = Unix.localtime timestamp in
+      Printf.sprintf "[%02d:%02d:%02d] "
+        lt.Unix.tm_hour lt.Unix.tm_min lt.Unix.tm_sec
+    in
+    let from = match direction with
+      | `From jid -> jid
+      | `Local x when x = "" -> "***"
+      | `Local x -> "***" ^ x
+      | `To _ -> ">>>"
+    in
+    time ^ from ^ ": " ^ message
   in
   let entries = List.map print_log log in
   line_wrap ~max_length:width entries []
@@ -139,7 +150,8 @@ let format_messages msgs =
     let pre = match direction with
       | `From _ -> "<" ^ en ^ "- "
       | `To _   -> (if received then "-" else "r") ^ en ^ "> "
-      | `Local  -> "*** "
+      | `Local x when x = "" -> "*** "
+      | `Local x -> "***" ^ x ^ "*** "
     in
     time ^ pre ^ message
   in
@@ -274,23 +286,24 @@ let status_line now user session notify log redraw fg_color width =
 
 let make_prompt size time network state redraw =
   (* we might have gotten a connection termination - if so mark everything offline *)
-  (let _, err, _ = network in
-   match
-     (try Some (String.sub err 0 11)
-      with _ -> None),
-     !xmpp_session
-   with
-   | (Some x, None) when x = "async error" || x = "session err" ->
-     state.session.User.presence <- `Offline ;
-     state.session.User.status <- None ;
-     User.Users.iter (fun _ u ->
-         List.iter (fun s -> s.User.presence <- `Offline) u.User.active_sessions)
-       state.users ;
-   | _ -> () ) ;
+  (match fst network with
+   | `Local err ->
+     let err_prefix = try String.sub err 0 11 with Invalid_argument _ -> "" in
+     ( match err_prefix, !xmpp_session with
+       | (x, None) when x = "async error" || x = "session err" ->
+         state.session.User.presence <- `Offline ;
+         state.session.User.status <- None ;
+         User.Users.iter (fun _ u ->
+             List.iter (fun s -> s.User.presence <- `Offline) u.User.active_sessions)
+           state.users ;
+       | _ -> () )
+   | _ -> () );
 
+  let statusses = status_log state in
   (* network should be an event, then I wouldn't need a check here *)
-  (if List.length state.log = 0 || List.hd state.log <> network then
-     state.log <- (network :: state.log)) ;
+  (match statusses with
+   | x::_ when x.User.direction = (fst network) && x.User.message = (snd network) -> ()
+   | _ -> add_status state (fst network) (snd network)) ;
 
   (* the user in the hashtable might have been replace *)
   (let user = User.Users.find state.users (fst state.active_chat).User.jid in
@@ -314,7 +327,12 @@ let make_prompt size time network state redraw =
   else
     begin
       let logs =
-        let entries = if List.length state.log > log_size then take log_size state.log [] else state.log in
+        let entries =
+          if List.length statusses > log_size then
+            take log_size statusses []
+          else
+            statusses
+        in
         let entries = log_buffer entries size.cols in
         let data = pad_l_rev "" log_size entries in
         String.concat "\n" data
@@ -325,7 +343,7 @@ let make_prompt size time network state redraw =
       let main_window =
         let chat =
           let data = match fst state.active_chat with
-            | x when x = state.user -> log_buffer state.log chat_width
+            | x when x = state.user -> log_buffer statusses chat_width
             | x                     -> message_buffer x.User.message_history chat_width
           in
           (* data is already in right order -- but we need to strip scrollback *)
@@ -512,7 +530,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
 
     | Some message when String.length message > 0 ->
        LTerm_history.add hist message ;
-       let err data = log (Unix.localtime (Unix.time ()), "error", data) ; return_unit in
+       let err data = log (`Local "error", data) ; return_unit in
        let send_msg user session t =
          let ctx, out, user_out = Otr.Handshake.send_otr session.User.otr message in
          session.User.otr <- ctx ;
@@ -520,7 +538,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
            User.new_message user direction enc false data
          in
          (match user_out with
-          | `Warning msg      -> add_msg `Local false msg
+          | `Warning msg      -> add_msg (`Local "") false msg
           | `Sent m           -> add_msg (`To "") false m
           | `Sent_encrypted m -> add_msg (`To "") true m ) ;
          let jid_to = if session.User.resource = "/special/" then
@@ -548,8 +566,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
 let init_system log =
   Lwt.async_exception_hook := (
     fun exn ->
-      let now = Unix.localtime (Unix.time ()) in
-      let err m = log (now, "async error", m) in
+      let err m = log (`Local "async error", m) in
 
       xmpp_session := None ;
 

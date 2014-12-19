@@ -20,7 +20,7 @@ let start_client cfgdir debug () =
   let user = User.find_or_add config.Config.jid users in
   let session = User.ensure_session config.Config.jid config.Config.otr_config user in
   let state = Cli_state.empty_ui_state cfgdir user session users in
-  let n, log = S.create (Unix.localtime (Unix.time ()), "welcome to jackline", "use /help for some help") in
+  let n, log = S.create (`Local "welcome to jackline", "use /help for some help") in
 
   ( if debug then
       Persistency.open_append (Unix.getenv "PWD") "out.txt" >|= fun fd ->

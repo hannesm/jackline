@@ -109,7 +109,7 @@ type property = [
 type direction = [
   | `From of string (* full jid *)
   | `To of string (* id *)
-  | `Local
+  | `Local of string
 ] with sexp
 
 type message = {
@@ -412,9 +412,9 @@ let marshal_history user =
     let new_msgs =
       List.filter (fun m ->
           match m.direction, m.persistent with
-          | `Local, _    -> false
-          | _     , true -> false
-          | _            -> true)
+          | `Local _, _    -> false
+          | _       , true -> false
+          | _              -> true)
         user.message_history
     in
     let new_msgs = List.map (fun x -> { x with persistent = true }) new_msgs in

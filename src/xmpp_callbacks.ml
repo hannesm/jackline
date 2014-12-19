@@ -21,14 +21,14 @@ open Lwt
 type user_data = {
   otr_config : Otr.State.config ;
   users : User.users ;
-  received : string -> string -> unit ;
+  received : (User.direction * string) -> unit ;
   notify : User.user -> unit ;
   failure : exn -> unit Lwt.t ;
 }
 
 let message_callback (t : user_data session_data) stanza =
   match stanza.jid_from with
-  | None -> t.user_data.received "error" "no from in stanze" ; return_unit
+  | None -> t.user_data.received ((`Local "error"), "no from in stanza") ; return_unit
   | Some jid ->
     let user = User.find_or_add jid t.user_data.users in
     let session = User.ensure_session jid t.user_data.otr_config user in
@@ -39,13 +39,13 @@ let message_callback (t : user_data session_data) stanza =
     in
     match stanza.content.body with
     | None ->
-      (*    msg `Local false "**empty message**" ; *)
+      (*    msg (`Local "") false "**empty message**" ; *)
       return_unit
     | Some v ->
       let ctx, out, ret = Otr.Handshake.handle session.User.otr v in
       List.iter (function
           | `Established_encrypted_session (high, first, second) ->
-            msg `Local false "encrypted OTR connection established" ;
+            msg (`Local "") false "encrypted OTR connection established" ;
             ( match User.find_fp user ctx with
               | _, Some fps ->
                 let verified_key = List.exists (fun x -> x.User.verified) user.User.otr_fingerprints in
@@ -58,7 +58,7 @@ let message_callback (t : user_data session_data) stanza =
                   | false, false, 0 -> "new unverified key! please " ^ verify
                   | false, false, n -> "unverified key (used " ^ (string_of_int n) ^ " times). please " ^ verify
                 in
-                msg `Local false otrmsg ;
+                msg (`Local "") false otrmsg ;
                 let ssid =
                   let to_hex x = match Hex.of_string x with `Hex s -> s in
                   Printf.sprintf "%s%s%s %s%s%s"
@@ -69,11 +69,11 @@ let message_callback (t : user_data session_data) stanza =
                     (to_hex second)
                     (if high then "" else "]")
                 in
-                msg `Local false ("session id (to verify this session over second channel) " ^ ssid) ;
+                msg (`Local "") false ("session id (to verify this session over second channel) " ^ ssid) ;
                 User.insert_inc user session.User.resource fps ;
               | _, None ->
-                msg `Local false "shouldn't happen - OTR established but couldn't find fingerprint" )
-          | `Warning w -> msg `Local false w
+                msg (`Local "") false "shouldn't happen - OTR established but couldn't find fingerprint" )
+          | `Warning w -> msg (`Local "") false w
           | `Received_error e -> msg (`From from) false e
           | `Received m -> msg (`From from) false m
           | `Received_encrypted e -> msg (`From from) true e)
@@ -91,18 +91,23 @@ let message_callback (t : user_data session_data) stanza =
 
 let message_error t ?id ?jid_from ?jid_to ?lang error =
   ignore id ; ignore jid_to ; ignore lang ;
-  let log = t.user_data.received in
   let jid = match jid_from with
     | None -> "unknown"
     | Some x -> JID.string_of_jid x
   in
-  log jid ("error message: " ^ error.err_text) ;
+  let msg =
+    let err = "error message" in
+    match error.err_text with
+    | x when x = "" -> err
+    | x -> err ^ ": " ^ x
+  in
+  t.user_data.received ((`From jid), msg) ;
   return_unit
 
 let presence_callback t stanza =
   let log = t.user_data.received in
   (match stanza.jid_from with
-   | None     -> log "error" "presence received without sending jid, ignoring"
+   | None     -> log ((`Local "error"), "presence received without sending jid, ignoring")
    | Some jid ->
      let user = User.find_or_add jid t.user_data.users in
      let stat, statstring = match stanza.content.status with
@@ -121,14 +126,14 @@ let presence_callback t stanza =
        session.User.presence <- newp ;
        let n = User.presence_to_char newp in
        let nl = User.presence_to_string newp in
-       log id ("presence changed: [" ^ old ^ ">" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring) ;
+       log ((`From id), ("presence changed: [" ^ old ^ ">" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring)) ;
        if newp = `Offline && session.User.dispose then
          user.User.active_sessions <-
            List.filter (fun s -> s <> session) user.User.active_sessions
      in
      let logp txt =
-       let id, _ = User.bare_jid jid in
-       log id (txt ^ statstring)
+       User.new_message user (`Local "authorization (reply with /authorization [arg])") false true (txt ^ statstring) ;
+       t.user_data.notify user
      in
      match stanza.content.presence_type with
      | None ->
@@ -151,12 +156,17 @@ let presence_callback t stanza =
 
 let presence_error t ?id ?jid_from ?jid_to ?lang error =
   ignore id ; ignore jid_to ; ignore lang ;
-  let log = t.user_data.received in
   let jid = match jid_from with
     | None -> "unknown"
     | Some x -> JID.string_of_jid x
   in
-  log jid ("presence error: " ^ error.err_text) ;
+  let msg =
+    let err = "presence error" in
+    match error.err_text with
+    | x when x = "" -> err
+    | x -> err ^ ": " ^ x
+  in
+  t.user_data.received ((`From jid), msg) ;
   return_unit
 
 
@@ -188,9 +198,7 @@ let roster_callback users item =
   _ -> None
 
 let session_callback t =
-  let err txt =
-    let f = t.user_data.received in
-    f "handling error" txt
+  let err txt = t.user_data.received ((`Local "handling error"), txt)
   in
   register_iq_request_handler t Version.ns_version
     (fun ev _jid_from _jid_to _lang () ->
@@ -282,21 +290,23 @@ let connect ?out config user_data _ =
   and port = config.port
   in
 
+  let log msg data = user_data.received ((`Local "error", (msg ^ ": " ^ data))) in
+
   match
     ( try Some ((Unix.gethostbyname server).Unix.h_addr_list.(0))
       with _ -> None )
   with
-  | None -> user_data.received "couldn't resolve hostname" server ; return None
+  | None -> log "couldn't resolve hostname" server ; return None
   | Some inet_addr ->
-    user_data.received "resolved hostname" server ;
+    log "resolved hostname" server ;
     let sockaddr = Unix.ADDR_INET (inet_addr, port) in
     (try_lwt PlainSocket.open_connection sockaddr >>= fun s -> return (Some s)
      with _ -> return None ) >>= fun socket ->
     let txt = server ^ " on port " ^ (string_of_int port) in
     match socket with
-    | None -> user_data.received "failed to open a connection to" txt ; return None
+    | None -> log "failed to open a connection to" txt ; return None
     | Some socket_data ->
-        user_data.received "opened connection to" txt ;
+        log "opened connection to" txt ;
         let module Socket_module = struct type t = PlainSocket.socket
           let socket = socket_data
           include PlainSocket
@@ -306,8 +316,8 @@ let connect ?out config user_data _ =
            | `Trust_anchor x  -> X509_lwt.authenticator (`Ca_file x)
            | `Fingerprint fp -> X509_lwt.authenticator (`Hex_fingerprints (`SHA256, [(server, fp)])) ) >>= fun authenticator ->
           TLSSocket.switch (PlainSocket.get_fd socket_data) server authenticator >>= fun socket_data ->
-          user_data.received "started TLS connection to" server ;
-          user_data.received "TLS info" (tls_epoch_to_line socket_data) ;
+          log "started TLS connection to" server ;
+          log "TLS info" (tls_epoch_to_line socket_data) ;
           let module TLS_module = struct type t = Tls_lwt.Unix.t
             let socket = socket_data
             include TLSSocket

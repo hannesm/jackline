@@ -146,9 +146,6 @@ let handle_help msg = function
 
 let handle_connect ?out state config log redraw failure =
   let otr_config = config.Config.otr_config
-  and received jid msg =
-    let now = Unix.localtime (Unix.time ()) in
-    log (now, jid, msg)
   and notify u =
     ( let cmp_user other = u.User.jid = other.User.jid in
       if List.exists cmp_user state.notifications || cmp_user (fst state.active_chat) then
@@ -161,7 +158,7 @@ let handle_connect ?out state config log redraw failure =
   let (user_data : Xmpp_callbacks.user_data) = {
       Xmpp_callbacks.otr_config = otr_config ;
       Xmpp_callbacks.users      = users      ;
-      Xmpp_callbacks.received   = received   ;
+      Xmpp_callbacks.received   = log        ;
       Xmpp_callbacks.notify     = notify     ;
       Xmpp_callbacks.failure    = failure    ;
   } in
@@ -342,13 +339,12 @@ let handle_otr_stop s dump err failure (user, active_session) =
     send_over session.User.resource out
   | None -> err "no active session"
 
-let tell_user (log:(Unix.tm * string * string) -> unit) ?(prefix:string option) (from:string) (msg:string) =
-  let now = Unix.localtime (Unix.time ()) in
+let tell_user (log:(User.direction * string) -> unit) ?(prefix:string option) (from:string) (msg:string) =
   let f = match prefix with
     | None -> from
     | Some x -> x ^ "; " ^ from
   in
-  log (now, f, msg) ;
+  log (`From f, msg) ;
   return_unit
 
 let exec ?out input state config log redraw =
@@ -358,7 +354,7 @@ let exec ?out input state config log redraw =
     xmpp_session := None ;
     msg "session error" (Printexc.to_string reason)
   in
-  let dump data = User.new_message (fst state.active_chat) `Local false false data in
+  let dump data = User.new_message (fst state.active_chat) (`Local "") false false data in
 
   match cmd_arg input with
   (* completely independent *)
