@@ -36,35 +36,44 @@ let new_command name command_line documentation subcommands =
   Commands.add commands name { name ; command_line ; documentation ; subcommands }
 
 let _ =
-  new_command
-    "add" "/add [jid]"
-    "adds jid to your contact list, and sends a subscription request" [] ;
-  new_command
-    "authorization" "/authorization [argument]"
-    "changes presence subscription of the current contact to argument -- one of 'allow', 'cancel', 'request', 'request_unsubscribe'"
-    [ "allow" ; "cancel" ; "request" ; "request_unsubscribe" ] ;
-  new_command
-    "clear" "/clear" "clears the active window chat backlog" [] ;
+  (* global *)
   new_command
     "connect" "/connect" "connects to the server" [] ;
   new_command
-    "fingerprint" "/fingerprint [fp]"
-    "verifies the current contact's OTR fingerprint (fp must match the one used in the currently established session)" [] ;
+    "quit" "/quit" "exits this client" [] ;
+
+  (* global roster commands *)
+  new_command
+    "add" "/add [jid]"
+    "adds jid to your contact list, and sends a subscription request" [] ;
+
+  (* things affecting you *)
   new_command
     "status" "/status [presence] [message]"
     "sets your presence -- one of 'free' 'away' 'dnd' 'xa' 'offline' or 'online' and status message"
     [ "free" ; "away" ; "dnd" ; "xa" ; "offline" ; "online" ] ;
   new_command
-    "quit" "/quit" "exits this client" [] ;
+    "priority" "/priority [number]" "set your presence priority to number" [ ] ;
+
+  (* user as context *)
+  new_command
+    "log" "/log [on|off]" "enable or disable logging for current contact" [ "on" ; "off" ] ;
+  new_command
+    "clear" "/clear" "clears the active window chat backlog" [] ;
+  new_command
+    "authorization" "/authorization [argument]"
+    "changes presence subscription of the current contact to argument -- one of 'allow', 'cancel', 'request', 'request_unsubscribe'"
+    [ "allow" ; "cancel" ; "request" ; "request_unsubscribe" ] ;
+  new_command
+    "fingerprint" "/fingerprint [fp]"
+    "verifies the current contact's OTR fingerprint (fp must match the one used in the currently established session)" [] ;
   new_command
     "info" "/info" "displays information about the current session" [] ;
   new_command
     "otr" "/otr [argument]" "manages OTR session by argument -- one of 'start' 'stop' or 'info'"
     [ "start" ; "stop" ; "info" ] ;
-  new_command
-    "log" "/log [on|off]" "enable or disable logging for current contact" [ "on" ; "off" ] ;
-  new_command
-    "priority" "/priority [number]" "set your presence priority to number" [ ] ;
+
+  (* nothing below here, please *)
   new_command
     "help" "/help [cmd]" "shows available commands or detailed help for cmd"
     (keys ())
