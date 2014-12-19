@@ -45,7 +45,7 @@ let message_callback (t : user_data session_data) stanza =
       let ctx, out, ret = Otr.Handshake.handle session.User.otr v in
       List.iter (function
           | `Established_encrypted_session (high, first, second) ->
-            msg (`Local "") false "encrypted OTR connection established" ;
+            msg (`Local "OTR") false "encrypted OTR connection established" ;
             ( match User.find_fp user ctx with
               | _, Some fps ->
                 let verified_key = List.exists (fun x -> x.User.verified) user.User.otr_fingerprints in
@@ -58,7 +58,7 @@ let message_callback (t : user_data session_data) stanza =
                   | false, false, 0 -> "new unverified key! please " ^ verify
                   | false, false, n -> "unverified key (used " ^ (string_of_int n) ^ " times). please " ^ verify
                 in
-                msg (`Local "") false otrmsg ;
+                msg (`Local "OTR key") false otrmsg ;
                 let ssid =
                   let to_hex x = match Hex.of_string x with `Hex s -> s in
                   Printf.sprintf "%s%s%s %s%s%s"
@@ -69,11 +69,11 @@ let message_callback (t : user_data session_data) stanza =
                     (to_hex second)
                     (if high then "" else "]")
                 in
-                msg (`Local "") false ("session id (to verify this session over second channel) " ^ ssid) ;
+                msg (`Local "OTR") false ("session id (to verify this session over second channel) " ^ ssid) ;
                 User.insert_inc user session.User.resource fps ;
               | _, None ->
-                msg (`Local "") false "shouldn't happen - OTR established but couldn't find fingerprint" )
-          | `Warning w -> msg (`Local "") false w
+                msg (`Local "PROBLEM") false "shouldn't happen - OTR established but couldn't find fingerprint" )
+          | `Warning w -> msg (`Local "OTR warning") false w
           | `Received_error e -> msg (`From from) false e
           | `Received m -> msg (`From from) false m
           | `Received_encrypted e -> msg (`From from) true e)

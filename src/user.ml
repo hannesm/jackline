@@ -293,13 +293,7 @@ let ensure_session jid otr_cfg user =
   (* there might be an exact match *)
   (if not (List.exists (r_matches lresource) user.active_sessions) then
      let sess = empty_session lresource otr_cfg () in
-     (* or some special session *)
-     (if List.exists (r_matches "/special/") user.active_sessions then
-        let dummy = List.find (r_matches "/special/") user.active_sessions in
-        sess.otr <- dummy.otr ;
-        user.active_sessions <-
-          List.filter (fun s -> s <> dummy) user.active_sessions) ;
-     (* it may also be similar enough such that we carry over otr state *)
+     (* it may be similar enough such that we carry over otr state *)
      let r_similar s = resource_similar s.resource lresource in
      (if List.exists r_similar user.active_sessions then
         let similar = List.find r_similar user.active_sessions in

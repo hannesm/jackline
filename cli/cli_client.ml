@@ -531,33 +531,29 @@ let rec loop ?out (config : Config.t) term hist state network log =
     | Some message when String.length message > 0 ->
        LTerm_history.add hist message ;
        let err data = log (`Local "error", data) ; return_unit in
-       let send_msg user session t =
-         let ctx, out, user_out = Otr.Handshake.send_otr session.User.otr message in
-         session.User.otr <- ctx ;
+       let send_msg user otr_ctx jid_to setter t =
+         let ctx, out, user_out = Otr.Handshake.send_otr otr_ctx message in
+         setter ctx ;
          let add_msg direction enc data =
            User.new_message user direction enc false data
          in
          (match user_out with
-          | `Warning msg      -> add_msg (`Local "") false msg
+          | `Warning msg      -> add_msg (`Local "OTR Warning") false msg
           | `Sent m           -> add_msg (`To "") false m
           | `Sent_encrypted m -> add_msg (`To "") true m ) ;
-         let jid_to = if session.User.resource = "/special/" then
-             user.User.jid
-           else
-             user.User.jid ^ "/" ^ session.User.resource
-         in
          Xmpp_callbacks.XMPPClient.(send_message t
                                       ~kind:Chat
                                       ~jid_to:(JID.of_string jid_to)
-                                      ?body:out ())
+                                      ?body:out () )
        in
        ( match state.active_chat, !xmpp_session with
          | (user, _), _ when user = state.user -> return_unit
          | (user, None), Some x ->
-           let dummy_session = User.empty_session "/special/" config.Config.otr_config () in
-           user.User.active_sessions <- dummy_session :: user.User.active_sessions ;
-           send_msg user dummy_session x
-         | (user, Some session), Some x -> send_msg user session x
+           let ctx = Otr.State.new_session config.Config.otr_config () in
+           send_msg user ctx user.User.jid (fun _ -> ()) x
+         | (user, Some session), Some x ->
+           let set = fun ctx -> session.User.otr <- ctx in
+           send_msg user session.User.otr (User.userid user session) set x
          | _, None -> err "no active session, try to connect first" ) >>= fun () ->
        loop ?out config term hist state network log
      | Some _ -> loop ?out config term hist state network log
