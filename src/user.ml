@@ -126,19 +126,19 @@ let message direction encrypted received message =
     timestamp = Unix.time () ; message ; persistent = false }
 
 type user = {
-  jid                      : string ; (* user@domain, unique key *)
-  name                     : string option ;
-  groups                   : string list ;
-  subscription             : subscription ;
-  properties               : property list ;
-  mutable preserve_history : bool ;
-  mutable history          : message list ; (* persistent if preserve_history is true *)
-  mutable otr_fingerprints : fingerprint list ;
-  mutable active_sessions  : session list (* not persistent *)
+  jid                       : string ; (* user@domain, unique key *)
+  name                      : string option ;
+  groups                    : string list ;
+  subscription              : subscription ;
+  properties                : property list ;
+  mutable preserve_messages : bool ;
+  mutable message_history   : message list ; (* persistent if preserve_messages is true *)
+  mutable otr_fingerprints  : fingerprint list ;
+  mutable active_sessions   : session list (* not persistent *)
 }
 
 let new_message u dir enc rcvd msg =
-  u.history <- (message dir enc rcvd msg) :: u.history
+  u.message_history <- (message dir enc rcvd msg) :: u.message_history
 
 let encrypted ctx =
   match Otr.State.(ctx.state.message_state) with
@@ -185,15 +185,15 @@ let verified_fp u raw =
 
 
 let empty = {
-  name             = None ;
-  jid              = "a@b" ;
-  groups           = [] ;
-  subscription     = `None ;
-  properties       = [] ;
-  history          = [] ;
-  preserve_history = false ;
-  otr_fingerprints = [] ;
-  active_sessions  = []
+  name              = None ;
+  jid               = "a@b" ;
+  groups            = [] ;
+  subscription      = `None ;
+  properties        = [] ;
+  message_history   = [] ;
+  preserve_messages = false ;
+  otr_fingerprints  = [] ;
+  active_sessions   = []
 }
 
 module StringHash =
@@ -339,7 +339,7 @@ let t_of_sexp t version =
         | Sexp.List [ Sexp.Atom "groups" ; gps ] ->
           { t with groups = list_of_sexp string_of_sexp gps }
         | Sexp.List [ Sexp.Atom "preserve_history" ; hf ] ->
-          { t with preserve_history = bool_of_sexp hf }
+          { t with preserve_messages = bool_of_sexp hf }
         | Sexp.List [ Sexp.Atom "properties" ; p ] ->
           { t with properties = list_of_sexp property_of_sexp p }
         | Sexp.List [ Sexp.Atom "subscription" ; s ] ->
@@ -361,13 +361,13 @@ let sexp_of_t t =
     "name"            , sexp_of_option sexp_of_string t.name ;
     "jid"             , sexp_of_string t.jid ;
     "groups"          , sexp_of_list sexp_of_string t.groups ;
-    "preserve_history", sexp_of_bool t.preserve_history ;
+    "preserve_history", sexp_of_bool t.preserve_messages ;
     "properties"      , sexp_of_list sexp_of_property t.properties ;
     "subscription"    , sexp_of_subscription t.subscription ;
     "otr_fingerprints", sexp_of_list sexp_of_fingerprint t.otr_fingerprints ;
   ]
 
-let load_history file =
+let load_history file strict =
   let load_h = function
     | Sexp.List [ ver ; Sexp.List msgs ] ->
       let version = int_of_sexp ver in
@@ -378,7 +378,10 @@ let load_history file =
   in
   match (try Some (Sexp.load_rev_sexps file) with _ -> None) with
     | Some hists -> List.flatten (List.map load_h hists)
-    | _ -> Printf.printf "parsing histories failed" ; []
+    | _ ->
+      if strict then
+        Printf.printf "parsing histories failed" ;
+      []
 
 let load_users hist_dir bytes =
   let table = Users.create 100 in
@@ -393,11 +396,7 @@ let load_users hist_dir bytes =
                  if Users.mem table id then
                    Printf.printf "key %s already present in table, ignoring\n%!" id
                  else
-                   (u.history <-
-                      if u.preserve_history then
-                        load_history (Filename.concat hist_dir id)
-                      else
-                        [] ;
+                   (u.message_history <- load_history (Filename.concat hist_dir id) u.preserve_messages ;
                     Users.add table id u) )
            users
        | _ -> Printf.printf "parse failed while parsing db\n")
@@ -405,14 +404,14 @@ let load_users hist_dir bytes =
   table
 
 let marshal_history user =
-  if user.preserve_history then
+  if user.preserve_messages then
     let new_msgs =
       List.filter (fun m ->
           match m.direction, m.persistent with
           | `Local, _    -> false
           | _     , true -> false
           | _            -> true)
-        user.history
+        user.message_history
     in
     let new_msgs = List.map (fun x -> { x with persistent = true }) new_msgs in
     if List.length new_msgs > 0 then

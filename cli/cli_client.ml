@@ -326,7 +326,7 @@ let make_prompt size time network state redraw =
         let chat =
           let data = match fst state.active_chat with
             | x when x = state.user -> log_buffer state.log chat_width
-            | x                     -> message_buffer x.User.history chat_width
+            | x                     -> message_buffer x.User.message_history chat_width
           in
           (* data is already in right order -- but we need to strip scrollback *)
           let elements = drop (state.scrollback * main_size) (List.rev data) in
@@ -347,7 +347,7 @@ let make_prompt size time network state redraw =
       let hline = horizontal_line state.active_chat fg_color buddy_width state.scrollback state.show_buddy_list size.cols in
 
       let notify = List.length state.notifications > 0 in
-      let log = (fst state.active_chat).User.preserve_history in
+      let log = (fst state.active_chat).User.preserve_messages in
       let status = status_line time state.user state.session notify log redraw fg_color size.cols in
       let main = List.flatten main_window in
 

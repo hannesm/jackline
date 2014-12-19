@@ -75,7 +75,7 @@ let write dir filename buf =
 
 let config = "config.sexp"
 let users = "users.sexp"
-let history_dir dir = Filename.concat dir "histories"
+let message_history_dir dir = Filename.concat dir "histories"
 
 let dump_config cfgdir cfg =
   write cfgdir config (Config.store_config cfg)
@@ -83,7 +83,7 @@ let dump_config cfgdir cfg =
 let dump_users cfgdir data =
   let userdb, histories = User.store_users data in
   write cfgdir users userdb >>= fun () ->
-  let histo = history_dir cfgdir in
+  let histo = message_history_dir cfgdir in
   Lwt_list.iter_p (fun (id, data) -> append histo id data) histories
 
 let load_config cfg =
@@ -93,6 +93,6 @@ let load_config cfg =
 
 let load_users cfg =
   read cfg users >|= function
-  | Some x ->  (try User.load_users (history_dir cfg) x with _ -> User.Users.create 100)
+  | Some x ->  (try User.load_users (message_history_dir cfg) x with _ -> User.Users.create 100)
   | None -> User.Users.create 100
 

@@ -225,7 +225,7 @@ let handle_fingerprint dump err a = function
 
 let handle_log dump (user, _) v a =
   dump ("logging turned " ^ a) ;
-  user.User.preserve_history <- v ;
+  user.User.preserve_messages <- v ;
   return_unit
 
 let handle_authorization s failure dump (user, _) arg =
@@ -267,9 +267,9 @@ let handle_info dump cfgdir (user, active_session) =
   ( match user.User.name with
     | None -> ()
     | Some x -> dump "name" x ) ;
-  ( if user.User.preserve_history then
+  ( if user.User.preserve_messages then
       let histo =
-        let dir = Persistency.history_dir cfgdir in
+        let dir = Persistency.message_history_dir cfgdir in
         Filename.concat dir user.User.jid
       in
       dump "persistent history in " histo ) ;
@@ -363,7 +363,7 @@ let exec ?out input state config log redraw =
   match cmd_arg input with
   (* completely independent *)
   | ("help", x) -> handle_help (msg ?prefix:None) x
-  | ("clear", _ ) -> (fst state.active_chat).User.history <- [] ; return_unit
+  | ("clear", _ ) -> (fst state.active_chat).User.message_history <- [] ; return_unit
 
   (* connect *)
   | ("connect", _) ->
