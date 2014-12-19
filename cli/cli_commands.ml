@@ -293,9 +293,6 @@ let handle_info dump cfgdir (user, active_session) =
       dump "otr" (Otr.State.session_to_string s.User.otr))
     user.User.active_sessions
 
-let handle_clear (user, active_session) =
-  return (user.User.history <- [])
-
 let handle_otr_start s dump failure otr_cfg (user, active_session) =
   let send_over resource body =
     let jid_to =
@@ -355,11 +352,17 @@ let exec ?out input state config log redraw =
   let dump data = User.new_message (fst state.active_chat) `Local false false data in
 
   match cmd_arg input with
+  (* completely independent *)
   | ("help", x) -> handle_help (msg ?prefix:None) x
+  | ("clear", _ ) -> (fst state.active_chat).User.history <- [] ; return_unit
+
+  (* connect *)
   | ("connect", _) ->
     ( match !xmpp_session with
       | None   -> handle_connect ?out state config log redraw failure
       | Some _ -> err "already connected" )
+
+  (* own things *)
   | ("status", x) ->
     ( match !xmpp_session, x with
       | None  , _      -> err "not connected"
@@ -367,30 +370,29 @@ let exec ?out input state config log redraw =
       | Some s, Some a -> handle_status s failure state.session a >>= (function
           | None   -> handle_help (msg ~prefix:"unknown argument") (Some "status")
           | Some _ -> return_unit ) )
+  | ("priority", x) ->
+    ( match !xmpp_session, x with
+      | None  , _      -> err "not connected"
+      | Some _, None   -> handle_help (msg ~prefix:"argument required") (Some "priority")
+      | Some s, Some p -> handle_priority s failure state.session p >>= (function
+          | None   -> handle_help (msg ~prefix:"unknown argument") (Some "priority")
+          | Some _ -> return_unit ) )
+
+  (* do not use active_chat *)
   | ("add", x) ->
     ( match !xmpp_session, x with
       | None  , _      -> err "not connected"
       | Some _, None   -> handle_help (msg ~prefix:"argument required") (Some "add")
       | Some s, Some a -> handle_add s failure (msg ?prefix:None) a )
-  | ("fingerprint", x) ->
-    ( match x with
-      | None   -> handle_help (msg ~prefix:"argument required") (Some "fingerprint")
-      | Some a -> handle_fingerprint dump err a state.active_chat )
+
+  (* commands using active_chat as context *)
   | ("log", x) ->
     ( match x with
       | None   -> handle_help (msg ~prefix:"argument required") (Some "log")
       | Some a when a = "on"  -> handle_log dump state.active_chat true a
       | Some a when a = "off" -> handle_log dump state.active_chat false a
       | Some _ -> handle_help (msg ~prefix:"unknown argument") (Some "log") )
-  | ("clear", _ ) ->
-    handle_clear state.active_chat
-  | ("authorization", x) ->
-    ( match !xmpp_session, x with
-      | None  , _      -> err "not connected"
-      | Some _, None   -> handle_help (msg ~prefix:"argument required") (Some "authorization")
-      | Some s, Some a -> handle_authorization s failure dump state.active_chat a >>= (function
-        | None   -> handle_help (msg ~prefix:"unknown argument") (Some "authorization")
-        | Some _ -> return_unit ) )
+
   | ("info", _) -> handle_info dump state.config_directory state.active_chat ; return_unit
   | ("otr", x) ->
     ( match x with
@@ -401,11 +403,17 @@ let exec ?out input state config log redraw =
           | Some s when x = "start" -> handle_otr_start s dump failure config.Config.otr_config state.active_chat
           | Some s when x = "stop" -> handle_otr_stop s dump err failure state.active_chat
           | Some _ -> handle_help (msg ~prefix:"unknown argument") (Some "otr") ) )
-  | ("priority", x) ->
+
+  | ("fingerprint", x) ->
+    ( match x with
+      | None   -> handle_help (msg ~prefix:"argument required") (Some "fingerprint")
+      | Some a -> handle_fingerprint dump err a state.active_chat )
+  | ("authorization", x) ->
     ( match !xmpp_session, x with
       | None  , _      -> err "not connected"
-      | Some _, None   -> handle_help (msg ~prefix:"argument required") (Some "priority")
-      | Some s, Some p -> handle_priority s failure state.session p >>= (function
-          | None   -> handle_help (msg ~prefix:"unknown argument") (Some "priority")
-          | Some _ -> return_unit ) )
+      | Some _, None   -> handle_help (msg ~prefix:"argument required") (Some "authorization")
+      | Some s, Some a -> handle_authorization s failure dump state.active_chat a >>= (function
+        | None   -> handle_help (msg ~prefix:"unknown argument") (Some "authorization")
+        | Some _ -> return_unit ) )
+
   | _ -> handle_help (msg ~prefix:"unknown command") None
