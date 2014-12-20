@@ -18,8 +18,8 @@ let start_client cfgdir debug () =
 
   let history = LTerm_history.create [] in
   let user = User.find_or_add config.Config.jid users in
-  let user, session =
-    User.ensure_session user config.Config.jid `Offline config.Config.otr_config
+  let session =
+    User.ensure_session users user config.Config.jid `Offline config.Config.otr_config
   in
   User.Users.replace users user.User.jid user ;
   let state = Cli_state.empty_ui_state cfgdir user.User.jid session users in

@@ -32,8 +32,9 @@ let message_callback (t : user_data session_data) stanza =
   | None -> t.user_data.received ((`Local "error"), "no from in stanza") ; return_unit
   | Some jid ->
     let user = User.find_or_add jid t.user_data.users in
-    let user, session = User.ensure_session user jid `Offline t.user_data.otr_config in
-    User.Users.replace t.user_data.users user.User.jid user ;
+    let session = User.ensure_session
+        t.user_data.users user jid `Offline t.user_data.otr_config
+    in
     let from = JID.string_of_jid jid in
     let msg dir enc txt =
       t.user_data.message jid dir enc txt
@@ -108,8 +109,9 @@ let presence_callback t stanza =
        | Some x -> (Some x, " - " ^ x)
      in
      let handle_presence newp () =
-       let user, session = User.ensure_session user jid newp t.user_data.otr_config in
-       User.Users.replace t.user_data.users user.User.jid user ;
+       let session = User.ensure_session
+           t.user_data.users user jid newp t.user_data.otr_config
+       in
        let id = User.userid user session in
        let old = User.presence_to_char session.User.presence in
        session.User.priority <- ( match stanza.content.priority with

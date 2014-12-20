@@ -289,7 +289,7 @@ let resource_similar a b =
     let prefix_len = equal 0 in
     hex prefix_len a && hex prefix_len b
 
-let ensure_session user jid presence otr_cfg =
+let ensure_session users user jid presence otr_cfg =
   let { JID.lresource ; _ } = jid in
   let r_matches l s = s.resource = l in
   (* there might be an exact match *)
@@ -299,29 +299,33 @@ let ensure_session user jid presence otr_cfg =
     else
       active_sessions
   in
-  if List.exists (r_matches lresource) user.active_sessions then
-    let session = List.find (r_matches lresource) user.active_sessions in
-    session.presence <- presence ;
-    let active_sessions = maybe_remove session user.active_sessions in
-    ({ user with active_sessions }, session)
-  else
-    let session = empty_session lresource presence otr_cfg () in
-    (* it may be similar enough such that we carry over otr state *)
-    let r_similar s = resource_similar s.resource lresource in
-    let similar =
-      if List.exists r_similar user.active_sessions then
-        let similar = List.find r_similar user.active_sessions in
-        session.otr <- similar.otr ;
-        similar.dispose <- true ;
-        Some similar
-      else
-        None
-    in
-    let acts = match similar with
-      | None -> user.active_sessions
-      | Some x -> maybe_remove x user.active_sessions
-    in
-    ({ user with active_sessions = session :: acts }, session)
+  let user, session =
+    if List.exists (r_matches lresource) user.active_sessions then
+      let session = List.find (r_matches lresource) user.active_sessions in
+      session.presence <- presence ;
+      let active_sessions = maybe_remove session user.active_sessions in
+      ({ user with active_sessions }, session)
+    else
+      let session = empty_session lresource presence otr_cfg () in
+      (* it may be similar enough such that we carry over otr state *)
+      let r_similar s = resource_similar s.resource lresource in
+      let similar =
+        if List.exists r_similar user.active_sessions then
+          let similar = List.find r_similar user.active_sessions in
+          session.otr <- similar.otr ;
+          similar.dispose <- true ;
+          Some similar
+        else
+          None
+      in
+      let acts = match similar with
+        | None -> user.active_sessions
+        | Some x -> maybe_remove x user.active_sessions
+      in
+      ({ user with active_sessions = session :: acts }, session)
+  in
+  Users.replace users user.jid user ;
+  session
 
 let active_session user =
   if List.length user.active_sessions = 0 then
