@@ -132,7 +132,7 @@ type user = {
   properties               : property list ;
   preserve_messages        : bool ;
   mutable message_history  : message list ; (* persistent if preserve_messages is true *)
-  mutable otr_fingerprints : fingerprint list ;
+  otr_fingerprints         : fingerprint list ;
   mutable active_sessions  : session list (* not persistent *)
 }
 
@@ -161,8 +161,11 @@ let otr_fingerprint otr =
   | Some x -> let fp = fingerprint x in (format_fp fp, Some fp)
 
 let replace_fp u fp =
-  u.otr_fingerprints <-
-    fp :: (List.filter (fun x -> x.data <> fp.data) u.otr_fingerprints)
+  let otr_fingerprints =
+    let others = List.filter (fun x -> x.data <> fp.data) u.otr_fingerprints in
+    fp :: others
+  in
+  { u with otr_fingerprints }
 
 let insert_inc u r fp =
   replace_fp u

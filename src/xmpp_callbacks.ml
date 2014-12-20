@@ -70,7 +70,8 @@ let message_callback (t : user_data session_data) stanza =
                   | false, false, n -> "unverified key (used " ^ (string_of_int n) ^ " times). please " ^ verify
                 in
                 msg (`Local "OTR key") false otrmsg ;
-                User.insert_inc user session.User.resource fps ;
+                let user = User.insert_inc user session.User.resource fps in
+                User.Users.replace t.user_data.users user.User.jid user
               | _, None ->
                 msg (`Local "PROBLEM") false "shouldn't happen - OTR established but couldn't find fingerprint" )
           | `Warning w -> msg (`Local "OTR warning") false w

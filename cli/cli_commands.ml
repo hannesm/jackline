@@ -207,14 +207,15 @@ let handle_add s failure msg a =
      with e -> failure e)
   with _ -> msg "error" "parsing of jid failed (user@node)"
 
-let handle_fingerprint dump fp user =
+let handle_fingerprint users dump fp user =
   match User.active_session user with
   | Some session when User.encrypted session.User.otr ->
     let manual_fp = string_normalize_fingerprint fp in
     ( match session.User.otr.Otr.State.their_dsa with
       | Some key when User.fingerprint key = manual_fp ->
         let otr_fp = User.find_raw_fp user manual_fp in
-        User.replace_fp user { otr_fp with User.verified = true } ;
+        let user = User.replace_fp user { otr_fp with User.verified = true } in
+        User.Users.replace users user.User.jid user ;
         dump ("fingerprint " ^ fp ^ " is now marked verified") ;
         None
       | _ -> Some "provided fingerprint does not match the one of this active session" )
@@ -459,7 +460,7 @@ let exec ?out input state config log redraw =
       | None   -> handle_help (msg ~prefix:"argument required") (Some "fingerprint")
       | Some fp ->
         if self then err "won't talk to myself" else
-          match handle_fingerprint dump fp contact with
+          match handle_fingerprint state.users dump fp contact with
           | None -> return_unit
           | Some x -> err x )
   | ("authorization", x) ->
