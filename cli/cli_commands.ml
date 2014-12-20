@@ -336,6 +336,8 @@ let handle_otr_start s dump failure otr_cfg user =
      with e -> failure e)
   in
   match User.active_session user with
+  | Some session when User.encrypted session.User.otr ->
+    dump "session is already encrypted, please finish first (/otr stop)!" ; return_unit
   | Some session ->
     let ctx, out = Otr.Handshake.start_otr session.User.otr in
     session.User.otr <- ctx ;
