@@ -81,8 +81,15 @@ let rec line_wrap ~max_length entries acc : string list =
     in
     line_wrap ~max_length remaining acc
   | entry::remaining when (Zed_utf8.length entry) > max_length ->
-    let part1, part2 = Zed_utf8.break entry max_length in
-    line_wrap ~max_length (("  " ^ part2)::part1::remaining) acc
+    let wrap_point =
+      let wrap_border = max_length - 12 in
+      if wrap_border > 12 && String.contains_from entry wrap_border ' ' then
+        String.index_from entry wrap_border ' '
+      else
+        max_length
+    in
+    let part1, part2 = Zed_utf8.break entry wrap_point in
+    line_wrap ~max_length (("  " ^ String.trim part2)::part1::remaining) acc
   | entry::remaining ->
     line_wrap ~max_length remaining (entry::acc)
   | [] -> acc
