@@ -288,11 +288,15 @@ let make_prompt size time network state redraw =
      let err_prefix = try String.sub err 0 11 with Invalid_argument _ -> "" in
      ( match err_prefix, !xmpp_session with
        | (x, None) when x = "async error" || x = "session err" ->
-         state.session.User.presence <- `Offline ;
-         state.session.User.status <- None ;
-         User.Users.iter (fun _ u ->
-             List.iter (fun s -> s.User.presence <- `Offline) u.User.active_sessions)
-           state.users ;
+         let users = User.Users.fold (fun id u acc ->
+             let act = List.map
+                 (fun s -> { s with User.presence = `Offline })
+                 u.User.active_sessions
+             in
+             (id, { u with User.active_sessions = act }) :: acc)
+             state.users []
+         in
+         List.iter (fun (id, u) -> User.Users.replace state.users id u) users
        | _ -> () )
    | _ -> () );
 
@@ -368,7 +372,8 @@ let make_prompt size time network state redraw =
 
       let notify = List.length notifications > 0 in
       let log = active.User.preserve_messages in
-      let status = status_line time self state.session notify log redraw fg_color size.cols in
+      let mysession = List.find (fun s -> s.User.resource = state.resource) self.User.active_sessions in
+      let status = status_line time self mysession notify log redraw fg_color size.cols in
       let main = List.flatten main_window in
 
       try
@@ -533,17 +538,16 @@ let rec loop ?out (config : Config.t) term hist state network log =
        LTerm_history.add hist message ;
        let err data = log (`Local "error", data) ; return_unit in
        let contact = User.Users.find state.users state.active_contact in
-       let prep_msg otr_ctx =
-         let ctx, out, user_out = Otr.Handshake.send_otr otr_ctx message in
+       let handle_otr_out user_out =
          let add_msg direction enc data =
-           let user = User.new_message contact direction enc false data in
+           let user = User.Users.find state.users state.active_contact in
+           let user = User.new_message user direction enc false data in
            User.Users.replace state.users user.User.jid user
          in
          (match user_out with
           | `Warning msg      -> add_msg (`Local "OTR Warning") false msg
           | `Sent m           -> add_msg (`To "") false m
           | `Sent_encrypted m -> add_msg (`To "") true m ) ;
-         (ctx, out)
        in
        let failure reason =
          xmpp_session := None ;
@@ -554,8 +558,9 @@ let rec loop ?out (config : Config.t) term hist state network log =
        else
          match User.active_session contact, !xmpp_session with
          | Some session, Some t ->
-           let ctx, out = prep_msg session.User.otr in
-           session.User.otr <- ctx ;
+           let ctx, out, user_out = Otr.Handshake.send_otr session.User.otr message in
+           User.update_otr state.users contact session ctx ;
+           handle_otr_out user_out ;
            (try_lwt Xmpp_callbacks.XMPPClient.(
                 send_message t
                   ~kind:Chat
@@ -564,7 +569,8 @@ let rec loop ?out (config : Config.t) term hist state network log =
             with e -> failure e)
          | None        , Some t ->
            let ctx = Otr.State.new_session config.Config.otr_config () in
-           let _, out = prep_msg ctx in
+           let _, out, user_out = Otr.Handshake.send_otr ctx message in
+           handle_otr_out user_out ;
            (try_lwt Xmpp_callbacks.XMPPClient.(
              send_message t
                ~kind:Chat

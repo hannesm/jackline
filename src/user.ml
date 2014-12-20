@@ -56,11 +56,11 @@ let presence_to_char = function
 
 type session = {
   resource : string ;
-  mutable presence : presence ;
-  mutable status : string option ;
-  mutable priority : int ;
-  mutable otr : Otr.State.session ;
-  mutable dispose : bool ;
+  presence : presence ;
+  status   : string option ;
+  priority : int ;
+  otr      : Otr.State.session ;
+  dispose  : bool ;
 }
 
 let empty_session resource presence config () = {
@@ -294,40 +294,83 @@ let resource_similar a b =
     let prefix_len = equal 0 in
     hex prefix_len a && hex prefix_len b
 
+let retrieve test lst =
+  let item = List.find test lst in
+  (item, List.filter (fun s -> s <> item) lst)
+
+let update_otr users user session otr =
+  let active_sessions = List.filter (fun s -> s <> session) user.active_sessions in
+  let session = { session with otr } in
+  let user = { user with active_sessions = session :: active_sessions } in
+  Users.replace users user.jid user
+
+let replace_session users user session =
+  let others = List.filter (fun s -> s.resource <> session.resource) user.active_sessions in
+  let user = { user with active_sessions = session :: others } in
+  Users.replace users user.jid user ;
+  user
+
+let get_session user tst =
+  if List.exists tst user.active_sessions then
+    Some (List.find tst user.active_sessions)
+  else
+    None
+
+let find_session user resource =
+  let tst s = s.resource = resource in
+  get_session user tst
+
+let find_similar_session user resource =
+  let r_similar s = resource_similar s.resource resource in
+  get_session user r_similar
+
+let maybe_dispose users user = function
+  | Some x when x.dispose && x.presence = `Offline ->
+    let active_sessions = List.filter (fun s -> s <> x) user.active_sessions in
+    let user = { user with active_sessions } in
+    Users.replace users user.jid user
+  | _ -> ()
+
 let ensure_session users user jid presence otr_cfg =
   let { JID.lresource ; _ } = jid in
   let r_matches l s = s.resource = l in
   (* there might be an exact match *)
-  let maybe_remove session active_sessions =
-    if session.dispose && session.presence = `Offline then
-      List.filter (fun s -> s <> session) active_sessions
-    else
-      active_sessions
+  let addme session =
+    not (session.dispose && session.presence = `Offline)
   in
   let user, session =
     if List.exists (r_matches lresource) user.active_sessions then
-      let session = List.find (r_matches lresource) user.active_sessions in
-      session.presence <- presence ;
-      let active_sessions = maybe_remove session user.active_sessions in
+      let session, active_sessions =
+        retrieve (r_matches lresource) user.active_sessions
+      in
+      let session = { session with presence } in
+      let active_sessions =
+        if addme session then
+          session :: active_sessions
+        else
+          active_sessions
+      in
       ({ user with active_sessions }, session)
     else
       let session = empty_session lresource presence otr_cfg () in
       (* it may be similar enough such that we carry over otr state *)
       let r_similar s = resource_similar s.resource lresource in
-      let similar =
+      let session, active_sessions =
         if List.exists r_similar user.active_sessions then
-          let similar = List.find r_similar user.active_sessions in
-          session.otr <- similar.otr ;
-          similar.dispose <- true ;
-          Some similar
+          let similar, active_sessions =
+            retrieve r_similar user.active_sessions
+          in
+          let similar = { similar with dispose = true } in
+          ({ session with otr = similar.otr },
+           if addme similar then
+             similar :: active_sessions
+           else
+             active_sessions)
         else
-          None
+          (session, user.active_sessions)
       in
-      let acts = match similar with
-        | None -> user.active_sessions
-        | Some x -> maybe_remove x user.active_sessions
-      in
-      ({ user with active_sessions = session :: acts }, session)
+      let active_sessions = session :: active_sessions in
+      ({ user with active_sessions }, session)
   in
   Users.replace users user.jid user ;
   session

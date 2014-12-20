@@ -45,7 +45,8 @@ let message_callback (t : user_data session_data) stanza =
       return_unit
     | Some v ->
       let ctx, out, ret = Otr.Handshake.handle session.User.otr v in
-      session.User.otr <- ctx ;
+      let user = User.find_or_add jid t.user_data.users in
+      User.update_otr t.user_data.users user session ctx ;
       List.iter (function
           | `Established_encrypted_session ssid ->
             msg (`Local "OTR") false ("encrypted OTR connection established (session id " ^ ssid ^ ")") ;
@@ -106,20 +107,41 @@ let presence_callback t stanza =
        | Some x when x = "" -> (None, "")
        | Some x -> (Some x, " - " ^ x)
      in
+     let userid, resource = User.bare_jid jid in
      let handle_presence newp () =
-       let session = User.ensure_session
-           t.user_data.users user jid newp t.user_data.otr_config
-       in
-       let id = User.userid user session in
-       let old = User.presence_to_char session.User.presence in
-       session.User.priority <- ( match stanza.content.priority with
+       let prio = match stanza.content.priority with
            | None -> 0
-           | Some x -> x ) ;
-       session.User.status <- stat ;
-       session.User.presence <- newp ;
+           | Some x -> x
+       in
+       let session = {
+         User.resource = resource ;
+         User.presence = newp ;
+         User.status   = stat ;
+         User.priority = prio ;
+         User.otr      = Otr.State.new_session t.user_data.otr_config () ;
+         User.dispose  = false ;
+       } in
+       let session, old, similar =
+         match User.find_session user resource with
+         | Some s -> ({ session with User.otr = s.User.otr }, Some s, None)
+         | None -> match User.find_similar_session user resource with
+           | Some s -> ({ session with User.otr = s.User.otr }, None, Some s)
+           | None -> (session, None, None)
+       in
+
+       let user = User.replace_session t.user_data.users user session in
+       let old = match old with
+         | None   -> "_"
+         | Some o -> User.presence_to_char o.User.presence
+       in
+       User.maybe_dispose t.user_data.users user similar ;
+
        let n = User.presence_to_char newp in
        let nl = User.presence_to_string newp in
-       log ((`From id), ("presence changed: [" ^ old ^ ">" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring)) ;
+       let info =
+         "presence changed: [" ^ old ^ ">" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring
+       in
+       log (`From (userid ^ "/" ^ resource), info)
      in
      let auth_info txt =
        let hlp = ("(use /authorization [arg])" ^ statstring) in

@@ -193,14 +193,14 @@ let send_status s presence status priority failure =
   (try_lwt send_presence s ?kind ?show ?status ?priority ()
    with e -> failure e) >|= fun () -> Some ()
 
-let handle_status s failure session a =
+let handle_status s session failure a =
   let p, status = split_ws a in
   match User.string_to_presence p with
   | None   -> return None
   | Some x -> let priority = session.User.priority in
               send_status s x status priority failure
 
-let handle_priority s failure session p =
+let handle_priority s session failure p =
   try
     let prio = int_of_string p in
     assert (prio >= -128 && prio <= 127) ; (* RFC 6121 4.7.2.3 *)
@@ -317,19 +317,15 @@ let handle_info dump user cfgdir =
       dump ("session " ^ (string_of_int i) ^ act) (marshal_session s))
     user.User.active_sessions
 
-let handle_own_info dump user own_session cfgdir config =
+let handle_own_info dump user cfgdir config res =
   let dump a b = dump (a ^ ": " ^ b) in
   common_info dump user cfgdir ;
   let otr_pub = Nocrypto.Dsa.pub_of_priv config.Config.otr_config.Otr.State.dsa in
   dump "own otr fingerprint" (User.format_fp (User.fingerprint otr_pub)) ;
   let active = User.active_session user in
   List.iteri (fun i s ->
+      let own = if s.User.resource = res then " (own)" else "" in
       let act =
-        let own = if own_session = s then
-            " (own session)"
-          else
-            ""
-        in
         match active with
         | Some x when x = s -> own ^ " (active)"
         | _ -> own
@@ -337,7 +333,7 @@ let handle_own_info dump user own_session cfgdir config =
       dump ("session " ^ (string_of_int i) ^ act) (marshal_session s))
     user.User.active_sessions
 
-let handle_otr_start s dump failure otr_cfg user =
+let handle_otr_start s users dump failure otr_cfg user =
   let send_over resource body =
     let jid_to =
       let r = if resource = "" then "" else "/" ^ resource in
@@ -351,7 +347,7 @@ let handle_otr_start s dump failure otr_cfg user =
     dump "session is already encrypted, please finish first (/otr stop)!" ; return_unit
   | Some session ->
     let ctx, out = Otr.Handshake.start_otr session.User.otr in
-    session.User.otr <- ctx ;
+    User.update_otr users user session ctx ;
     dump "starting OTR session" ;
     send_over session.User.resource (Some out)
   | None ->
@@ -362,13 +358,13 @@ let handle_otr_start s dump failure otr_cfg user =
     dump "starting OTR session" ;
     send_over "" (Some out)
 
-let handle_otr_stop s dump err failure user =
+let handle_otr_stop s users dump err failure user =
   match User.active_session user with
   | Some session ->
     ( match Otr.State.(session.User.otr.state.message_state) with
       | `MSGSTATE_ENCRYPTED _ | `MSGSTATE_FINISHED ->
         let ctx, out = Otr.Handshake.end_otr session.User.otr in
-        session.User.otr <- ctx ;
+        User.update_otr users user session ctx ;
         dump "finished OTR session" ;
         ( match out with
           | None   -> return_unit
@@ -421,14 +417,24 @@ let exec ?out input state config log redraw =
     ( match !xmpp_session, x with
       | None  , _      -> err "not connected"
       | Some _, None   -> handle_help (msg ~prefix:"argument required") (Some "status")
-      | Some s, Some a -> handle_status s failure state.session a >>= (function
+      | Some s, Some a ->
+        let session = List.find
+            (fun s -> s.User.resource = state.resource)
+            contact.User.active_sessions
+        in
+        handle_status s session failure a >>= (function
           | None   -> handle_help (msg ~prefix:"unknown argument") (Some "status")
           | Some _ -> return_unit ) )
   | ("priority", x) ->
     ( match !xmpp_session, x with
       | None  , _      -> err "not connected"
       | Some _, None   -> handle_help (msg ~prefix:"argument required") (Some "priority")
-      | Some s, Some p -> handle_priority s failure state.session p >>= (function
+      | Some s, Some p ->
+        let session = List.find
+            (fun s -> s.User.resource = state.resource)
+            contact.User.active_sessions
+        in
+        handle_priority s session failure p >>= (function
           | None   -> handle_help (msg ~prefix:"unknown argument") (Some "priority")
           | Some _ -> return_unit ) )
 
@@ -449,7 +455,7 @@ let exec ?out input state config log redraw =
 
   | ("info", _) ->
     ( if self then
-        handle_own_info dump contact state.session state.config_directory config
+        handle_own_info dump contact state.config_directory config state.resource
       else
         handle_info dump contact state.config_directory );
     return_unit
@@ -466,10 +472,10 @@ let exec ?out input state config log redraw =
           | None -> err "not connected"
           | Some s when x = "start" ->
             if self then err "do not like to talk to myself" else
-              handle_otr_start s dump failure config.Config.otr_config contact
+              handle_otr_start s state.users dump failure config.Config.otr_config contact
           | Some s when x = "stop" ->
             if self then err "do not like to talk to myself" else
-              handle_otr_stop s dump err failure contact
+              handle_otr_stop s state.users dump err failure contact
           | Some _ -> handle_help (msg ~prefix:"unknown argument") (Some "otr") ) )
 
   | ("fingerprint", x) ->

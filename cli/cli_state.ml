@@ -2,7 +2,7 @@
 type ui_state = {
   config_directory            : string                    ; (* set initially *)
   user                        : string                    ; (* set initially *)
-  session                     : User.session              ; (* set initially *)
+  resource                    : string                    ; (* set initially *)
 
   users                       : User.users                ; (* read from disk, extended by xmpp callbacks *)
 
@@ -18,12 +18,12 @@ type ui_state = {
   mutable last_status         : (User.direction * string) ; (* internal use only *)
 }
 
-let empty_ui_state config_directory user session users =
+let empty_ui_state config_directory user resource users =
   let last_status = (`Local "", "") in
   {
     config_directory              ;
     user                          ;
-    session                       ;
+    resource                      ;
 
     users                         ;
 
