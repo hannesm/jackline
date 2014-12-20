@@ -63,9 +63,9 @@ type session = {
   mutable dispose : bool ;
 }
 
-let empty_session resource config () = {
+let empty_session resource presence config () = {
   resource ;
-  presence = `Offline ;
+  presence ;
   status = None ;
   priority = 0 ;
   otr = Otr.State.new_session config () ;
@@ -133,7 +133,7 @@ type user = {
   preserve_messages        : bool ;
   mutable message_history  : message list ; (* persistent if preserve_messages is true *)
   otr_fingerprints         : fingerprint list ;
-  mutable active_sessions  : session list (* not persistent *)
+  active_sessions          : session list (* not persistent *)
 }
 
 let new_message u dir enc rcvd msg =
@@ -289,23 +289,39 @@ let resource_similar a b =
     let prefix_len = equal 0 in
     hex prefix_len a && hex prefix_len b
 
-let ensure_session jid otr_cfg user =
+let ensure_session user jid presence otr_cfg =
   let { JID.lresource ; _ } = jid in
   let r_matches l s = s.resource = l in
   (* there might be an exact match *)
-  (if not (List.exists (r_matches lresource) user.active_sessions) then
-     let sess = empty_session lresource otr_cfg () in
-     (* it may be similar enough such that we carry over otr state *)
-     let r_similar s = resource_similar s.resource lresource in
-     (if List.exists r_similar user.active_sessions then
+  let maybe_remove session active_sessions =
+    if session.dispose && session.presence = `Offline then
+      List.filter (fun s -> s <> session) active_sessions
+    else
+      active_sessions
+  in
+  if List.exists (r_matches lresource) user.active_sessions then
+    let session = List.find (r_matches lresource) user.active_sessions in
+    session.presence <- presence ;
+    let active_sessions = maybe_remove session user.active_sessions in
+    ({ user with active_sessions }, session)
+  else
+    let session = empty_session lresource presence otr_cfg () in
+    (* it may be similar enough such that we carry over otr state *)
+    let r_similar s = resource_similar s.resource lresource in
+    let similar =
+      if List.exists r_similar user.active_sessions then
         let similar = List.find r_similar user.active_sessions in
-        sess.otr <- similar.otr ;
+        session.otr <- similar.otr ;
         similar.dispose <- true ;
-        if similar.presence = `Offline then
-          user.active_sessions <-
-            List.filter (fun s -> s <> similar) user.active_sessions) ;
-     user.active_sessions <- (sess :: user.active_sessions) );
-  List.find (r_matches lresource) user.active_sessions
+        Some similar
+      else
+        None
+    in
+    let acts = match similar with
+      | None -> user.active_sessions
+      | Some x -> maybe_remove x user.active_sessions
+    in
+    ({ user with active_sessions = session :: acts }, session)
 
 let active_session user =
   if List.length user.active_sessions = 0 then

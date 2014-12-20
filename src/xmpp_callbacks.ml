@@ -31,7 +31,8 @@ let message_callback (t : user_data session_data) stanza =
   | None -> t.user_data.received ((`Local "error"), "no from in stanza") ; return_unit
   | Some jid ->
     let user = User.find_or_add jid t.user_data.users in
-    let session = User.ensure_session jid t.user_data.otr_config user in
+    let user, session = User.ensure_session user jid `Offline t.user_data.otr_config in
+    User.Users.replace t.user_data.users user.User.jid user ;
     let from = JID.string_of_jid jid in
     let msg dir enc txt =
       User.new_message user dir enc true txt ;
@@ -116,7 +117,8 @@ let presence_callback t stanza =
        | Some x -> (Some x, " - " ^ x)
      in
      let handle_presence newp () =
-       let session = User.ensure_session jid t.user_data.otr_config user in
+       let user, session = User.ensure_session user jid newp t.user_data.otr_config in
+       User.Users.replace t.user_data.users user.User.jid user ;
        let id = User.userid user session in
        let old = User.presence_to_char session.User.presence in
        session.User.priority <- ( match stanza.content.priority with
@@ -127,9 +129,6 @@ let presence_callback t stanza =
        let n = User.presence_to_char newp in
        let nl = User.presence_to_string newp in
        log ((`From id), ("presence changed: [" ^ old ^ ">" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring)) ;
-       if newp = `Offline && session.User.dispose then
-         user.User.active_sessions <-
-           List.filter (fun s -> s <> session) user.User.active_sessions
      in
      let logp txt =
        User.new_message user (`Local txt) false true ("(use /authorization [arg])" ^ statstring) ;
