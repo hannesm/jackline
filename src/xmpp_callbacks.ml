@@ -43,6 +43,7 @@ let message_callback (t : user_data session_data) stanza =
       return_unit
     | Some v ->
       let ctx, out, ret = Otr.Handshake.handle session.User.otr v in
+      session.User.otr <- ctx ;
       List.iter (function
           | `Established_encrypted_session (high, first, second) ->
             msg (`Local "OTR") false "encrypted OTR connection established" ;
@@ -78,7 +79,6 @@ let message_callback (t : user_data session_data) stanza =
           | `Received m -> msg (`From from) false m
           | `Received_encrypted e -> msg (`From from) true e)
         ret ;
-      session.User.otr <- ctx ;
       match out with
       | None -> return ()
       | Some body ->

@@ -386,11 +386,13 @@ let exec ?out input state config log redraw =
    | Some x, Some y when x = y -> ()
    | Some x, old               ->
      state.active_chat <- ((fst state.active_chat), Some x) ;
-     match old with
-     | None   -> ()
-     | Some y -> User.new_message (fst state.active_chat)
-                   (`Local "switching active session") false false
-                   ("now " ^ x.User.resource ^ " was " ^ y.User.resource)
+     let prev = match old with
+     | None   -> "none"
+     | Some y -> y.User.resource
+     in
+     User.new_message (fst state.active_chat)
+       (`Local "(cmd) switching active session") false false
+       ("now " ^ x.User.resource ^ " was " ^ prev)
   ) ;
 
   match cmd_arg input with

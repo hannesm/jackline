@@ -307,7 +307,14 @@ let make_prompt size time network state redraw =
 
   (* the user in the hashtable might have been replace *)
   (let user = User.Users.find state.users (fst state.active_chat).User.jid in
-   state.active_chat <- (user, snd state.active_chat) );
+   let session = match snd state.active_chat, User.good_session user with
+     | None, Some y              -> add_status state (`Local "(make_prompt) changed active session") ("none -> " ^ y.User.resource) ; Some y
+     | Some x, Some y when x = y -> Some x
+     | Some x, Some y            -> add_status state (`Local "(make_prompt) changed active session") (x.User.resource ^ " -> " ^ y.User.resource) ; Some y
+     | Some _, None              -> assert false
+     | None, None                -> None
+   in
+   state.active_chat <- (user, session) );
 
 
   let log_size = 6 in
@@ -529,9 +536,8 @@ let rec loop ?out (config : Config.t) term hist state network log =
     | Some message when String.length message > 0 ->
        LTerm_history.add hist message ;
        let err data = log (`Local "error", data) ; return_unit in
-       let send_msg user otr_ctx jid_to setter t =
+       let prep_msg user otr_ctx =
          let ctx, out, user_out = Otr.Handshake.send_otr otr_ctx message in
-         setter ctx ;
          let add_msg direction enc data =
            User.new_message user direction enc false data
          in
@@ -539,10 +545,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
           | `Warning msg      -> add_msg (`Local "OTR Warning") false msg
           | `Sent m           -> add_msg (`To "") false m
           | `Sent_encrypted m -> add_msg (`To "") true m ) ;
-         Xmpp_callbacks.XMPPClient.(send_message t
-                                      ~kind:Chat
-                                      ~jid_to:(JID.of_string jid_to)
-                                      ?body:out () )
+         (ctx, out)
        in
        ( match fst state.active_chat,
                (User.good_session (fst state.active_chat)),
@@ -552,21 +555,30 @@ let rec loop ?out (config : Config.t) term hist state network log =
            err "try `M-x doctor` in emacs instead"
          | user, None        , Some x ->
            let ctx = Otr.State.new_session config.Config.otr_config () in
-           send_msg user ctx user.User.jid (fun _ -> ()) x
+           let _, out = prep_msg user ctx in
+           Xmpp_callbacks.XMPPClient.(send_message x
+                                        ~kind:Chat
+                                        ~jid_to:(JID.of_string user.User.jid)
+                                        ?body:out () )
          | user, Some session, Some x ->
            ( match snd state.active_chat with
              | Some x when x = session -> ()
              | old                     ->
                state.active_chat <- (user, Some session) ;
-               match old with
-               | None   -> ()
-               | Some y ->
-                 User.new_message user (`Local "switching active session")
-                   false false
-                   ("now " ^ session.User.resource ^ " was " ^ y.User.resource)
+               let prev = match old with
+               | None   -> "none"
+               | Some y -> y.User.resource
+               in
+               User.new_message user (`Local "(send_msg) switching active session")
+                 false false
+                 ("now " ^ session.User.resource ^ " was " ^ prev)
            ) ;
-           let set = fun ctx -> session.User.otr <- ctx in
-           send_msg user session.User.otr (User.userid user session) set x
+           let ctx, out = prep_msg user session.User.otr in
+           session.User.otr <- ctx ;
+           Xmpp_callbacks.XMPPClient.(send_message x
+                                        ~kind:Chat
+                                        ~jid_to:(JID.of_string (User.userid user session))
+                                        ?body:out () )
          | _   , _           , None ->
            err "no active session, try to connect first" ) >>= fun () ->
        loop ?out config term hist state network log
