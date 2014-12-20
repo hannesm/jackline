@@ -1,5 +1,4 @@
 
-
 type presence = [
   | `Online | `Free | `Away | `DoNotDisturb | `ExtendedAway | `Offline
 ]
@@ -31,29 +30,29 @@ let compare_presence a b =
   | _, `Offline -> -1
 
 let presence_to_string = function
-  | `Online -> "online"
-  | `Free -> "free"
-  | `Away -> "away"
+  | `Online       -> "online"
+  | `Free         -> "free"
+  | `Away         -> "away"
   | `DoNotDisturb -> "do not disturb"
   | `ExtendedAway -> "extended away"
-  | `Offline -> "offline"
+  | `Offline      -> "offline"
 
 let string_to_presence = function
-  | "free" | "f"    -> Some `Free
-  | "away" | "a"    -> Some `Away
-  | "dnd" | "d"     -> Some `DoNotDisturb
-  | "xa" | "x"      -> Some `ExtendedAway
+  | "free"    | "f" -> Some `Free
+  | "away"    | "a" -> Some `Away
+  | "dnd"     | "d" -> Some `DoNotDisturb
+  | "xa"      | "x" -> Some `ExtendedAway
   | "offline" | "_" -> Some `Offline
-  | "online" | "o"  -> Some `Online
+  | "online"  | "o" -> Some `Online
   | _               -> None
 
 let presence_to_char = function
-  | `Online -> "o"
-  | `Free -> "f"
-  | `Away -> "a"
+  | `Online       -> "o"
+  | `Free         -> "f"
+  | `Away         -> "a"
   | `DoNotDisturb -> "d"
   | `ExtendedAway -> "x"
-  | `Offline -> "_"
+  | `Offline      -> "_"
 
 type session = {
   resource : string ;
