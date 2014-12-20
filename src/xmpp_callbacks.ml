@@ -39,8 +39,12 @@ let message_callback (t : user_data session_data) stanza =
     let user = t.user_data.find_or_create jid in
     let session = t.user_data.find_or_create_session user resource in
     let msg dir enc txt =
+      let txt = try match Zed_utf8.validate txt
+        with _ -> txt
+        with Invalid (err_msg,escaped_msg) -> err_msg ^ ": " ^ escaped_message
+      in
       let user = match t.user_data.find jid with Some x -> x | None -> assert false in
-      t.user_data.message user dir enc txt
+      t.user_data.message user dir enc true txt ;
     in
     match stanza.content.body with
     | None -> return_unit
