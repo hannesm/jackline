@@ -436,7 +436,7 @@ let exec ?out input state config log redraw =
     return_unit
   | ("otr", x) ->
     ( match x with
-      | None -> handle_help (msg ~prefix:"arguent required") (Some "otr")
+      | None -> handle_help (msg ~prefix:"argument required") (Some "otr")
       | Some x when x = "info" ->
         ( if self then
             handle_own_otr_info dump config
