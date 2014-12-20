@@ -154,6 +154,13 @@ let handle_connect ?out state config log redraw failure =
       state.notifications <- id :: state.notifications ;
     User.Users.replace state.users id u ;
     redraw ()
+  and message jid dir enc txt =
+    let bare, _ = User.bare_jid jid in
+    let user = User.Users.find state.users bare in
+    let user = User.new_message user dir enc true txt in
+    User.Users.replace state.users bare user ;
+    state.notifications <- bare :: state.notifications ;
+    redraw ()
   and users = state.users
   in
   let (user_data : Xmpp_callbacks.user_data) = {
@@ -161,6 +168,7 @@ let handle_connect ?out state config log redraw failure =
       Xmpp_callbacks.users      = users      ;
       Xmpp_callbacks.received   = log        ;
       Xmpp_callbacks.notify     = notify     ;
+      Xmpp_callbacks.message    = message    ;
       Xmpp_callbacks.failure    = failure    ;
   } in
   Xmpp_callbacks.connect ?out config user_data () >|= (function

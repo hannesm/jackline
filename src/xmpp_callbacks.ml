@@ -23,6 +23,7 @@ type user_data = {
   users      : User.users       ;
   received   : (User.direction * string) -> unit ;
   notify     : bool -> User.user -> unit ;
+  message    : JID.t -> User.direction -> bool -> string -> unit ;
   failure    : exn -> unit Lwt.t ;
 }
 
@@ -35,9 +36,7 @@ let message_callback (t : user_data session_data) stanza =
     User.Users.replace t.user_data.users user.User.jid user ;
     let from = JID.string_of_jid jid in
     let msg dir enc txt =
-      let user = User.find_or_add jid t.user_data.users in
-      let user = User.new_message user dir enc true txt in
-      t.user_data.notify true user
+      t.user_data.message jid dir enc txt
     in
     match stanza.content.body with
     | None ->
@@ -124,8 +123,7 @@ let presence_callback t stanza =
      in
      let auth_info txt =
        let hlp = ("(use /authorization [arg])" ^ statstring) in
-       let user = User.new_message user (`Local txt) false true hlp in
-       t.user_data.notify true user
+       t.user_data.message jid (`Local txt) false hlp
      in
      match stanza.content.presence_type with
      | None ->
