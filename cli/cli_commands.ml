@@ -253,10 +253,14 @@ let dump_otr_fps fps =
 let handle_otr_info dump user =
   match User.active_session user with
   | Some session ->
-    dump ("otr session " ^ session.User.resource ^ ": " ^ Otr.State.session_to_string session.User.otr) ;
+    dump ("active otr session " ^ session.User.resource ^ ": " ^ Otr.State.session_to_string session.User.otr) ;
     dump ("otr fingerprints: " ^ (dump_otr_fps user.User.otr_fingerprints))
   | None ->
     dump ("(no active session) OTR fingerprints: " ^ (dump_otr_fps user.User.otr_fingerprints))
+
+let handle_own_otr_info dump config =
+  let otr_pub = Nocrypto.Dsa.pub_of_priv config.Config.otr_config.Otr.State.dsa in
+  dump ("own otr fingerprint: " ^ (User.format_fp (User.fingerprint otr_pub)))
 
 let common_info dump user cfgdir =
   dump "jid" user.User.jid ;
@@ -292,15 +296,13 @@ let handle_info dump user cfgdir =
   in
   let add = if String.length add > 0 then " (" ^ (String.trim add) ^ ")" else "" in
   dump "subscription" ((User.subscription_to_string user.User.subscription) ^ add) ;
-  dump "otr fingerprints" (dump_otr_fps user.User.otr_fingerprints) ;
   let active = User.active_session user in
   List.iteri (fun i s ->
       let act = match active with
         | Some x when x = s -> " (active)"
         | _ -> ""
       in
-      dump ("session " ^ (string_of_int i) ^ act) (marshal_session s) ;
-      dump "otr" (Otr.State.session_to_string s.User.otr))
+      dump ("session " ^ (string_of_int i) ^ act) (marshal_session s))
     user.User.active_sessions
 
 let handle_own_info dump user own_session cfgdir config =
@@ -308,8 +310,6 @@ let handle_own_info dump user own_session cfgdir config =
   common_info dump user cfgdir ;
   let otr_pub = Nocrypto.Dsa.pub_of_priv config.Config.otr_config.Otr.State.dsa in
   dump "own otr fingerprint" (User.format_fp (User.fingerprint otr_pub)) ;
-  if List.length user.User.otr_fingerprints > 0 then
-    dump "otr fingerprints" (dump_otr_fps user.User.otr_fingerprints) ;
   let active = User.active_session user in
   List.iteri (fun i s ->
       let act =
@@ -322,8 +322,7 @@ let handle_own_info dump user own_session cfgdir config =
         | Some x when x = s -> own ^ " (active)"
         | _ -> own
       in
-      dump ("session " ^ (string_of_int i) ^ act) (marshal_session s) ;
-      if own_session <> s then dump "otr" (Otr.State.session_to_string s.User.otr))
+      dump ("session " ^ (string_of_int i) ^ act) (marshal_session s))
     user.User.active_sessions
 
 let handle_otr_start s dump failure otr_cfg user =
@@ -440,7 +439,7 @@ let exec ?out input state config log redraw =
       | None -> handle_help (msg ~prefix:"arguent required") (Some "otr")
       | Some x when x = "info" ->
         ( if self then
-            handle_own_info dump contact state.session state.config_directory config
+            handle_own_otr_info dump config
           else
             handle_otr_info dump contact ) ;
         return_unit
