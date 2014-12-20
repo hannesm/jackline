@@ -157,9 +157,6 @@ let format_messages msgs =
   in
   List.map printmsg msgs
 
-let message_buffer msgs width =
-  line_wrap ~max_length:width (format_messages msgs) []
-
 let buddy_list users show_offline self active notifications length width =
   let buddies = show_buddies users show_offline self active notifications in
   let formatted_buddies = format_buddies buddies users self active notifications width in
@@ -348,7 +345,8 @@ let make_prompt size time network state redraw =
             if active = self then
               log_buffer statusses chat_width
             else
-              message_buffer active.User.message_history chat_width
+              let messages = active.User.message_history in
+              line_wrap ~max_length:chat_width (format_messages messages) []
           in
           (* data is already in right order -- but we need to strip scrollback *)
           let elements = drop (state.scrollback * main_size) (List.rev data) in
