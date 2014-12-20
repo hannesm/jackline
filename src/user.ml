@@ -125,15 +125,15 @@ let message direction encrypted received message =
     timestamp = Unix.time () ; message ; persistent = false }
 
 type user = {
-  jid                       : string ; (* user@domain, unique key *)
-  name                      : string option ;
-  groups                    : string list ;
-  subscription              : subscription ;
-  properties                : property list ;
-  mutable preserve_messages : bool ;
-  mutable message_history   : message list ; (* persistent if preserve_messages is true *)
-  mutable otr_fingerprints  : fingerprint list ;
-  mutable active_sessions   : session list (* not persistent *)
+  jid                      : string ; (* user@domain, unique key *)
+  name                     : string option ;
+  groups                   : string list ;
+  subscription             : subscription ;
+  properties               : property list ;
+  preserve_messages        : bool ;
+  mutable message_history  : message list ; (* persistent if preserve_messages is true *)
+  mutable otr_fingerprints : fingerprint list ;
+  mutable active_sessions  : session list (* not persistent *)
 }
 
 let new_message u dir enc rcvd msg =

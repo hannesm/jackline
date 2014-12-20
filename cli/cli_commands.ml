@@ -220,10 +220,11 @@ let handle_fingerprint dump fp user =
       | _ -> Some "provided fingerprint does not match the one of this active session" )
   | _ -> Some "no active OTR session"
 
-let handle_log dump user v a =
-  dump ("logging turned " ^ a) ;
-  user.User.preserve_messages <- v ;
-  return_unit
+let handle_log users dump user v a =
+  if user.User.preserve_messages <> v then
+    (dump ("logging turned " ^ a) ;
+     let user = { user with User.preserve_messages = v } in
+     User.Users.replace users user.User.jid user)
 
 let handle_authorization s failure dump user arg =
   let open Xmpp_callbacks.XMPPClient in
@@ -424,8 +425,8 @@ let exec ?out input state config log redraw =
   | ("log", x) ->
     ( match x with
       | None   -> handle_help (msg ~prefix:"argument required") (Some "log")
-      | Some a when a = "on"  -> handle_log dump contact true a
-      | Some a when a = "off" -> handle_log dump contact false a
+      | Some a when a = "on"  -> handle_log state.users dump contact true a ; return_unit
+      | Some a when a = "off" -> handle_log state.users dump contact false a ; return_unit
       | Some _ -> handle_help (msg ~prefix:"unknown argument") (Some "log") )
 
   | ("info", _) ->
