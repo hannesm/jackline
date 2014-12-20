@@ -233,9 +233,9 @@ let handle_fingerprint users dump fp user =
 
 let handle_log users dump user v a =
   if user.User.preserve_messages <> v then
-    (dump ("logging turned " ^ a) ;
-     let user = { user with User.preserve_messages = v } in
-     User.Users.replace users user.User.jid user)
+    (let user = { user with User.preserve_messages = v } in
+     User.Users.replace users user.User.jid user ;
+     dump ("logging turned " ^ a))
 
 let handle_authorization s failure dump user arg =
   let open Xmpp_callbacks.XMPPClient in
