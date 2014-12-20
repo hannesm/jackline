@@ -297,12 +297,12 @@ let ensure_session jid otr_cfg user =
      let r_similar s = resource_similar s.resource lresource in
      (if List.exists r_similar user.active_sessions then
         let similar = List.find r_similar user.active_sessions in
+        sess.otr <- similar.otr ;
         similar.dispose <- true ;
-        user.active_sessions <-
-          List.filter (fun s -> s <> similar) user.active_sessions ;
         if similar.presence = `Offline then
-        sess.otr <- similar.otr) ;
-     user.active_sessions <- (sess :: user.active_sessions ) );
+          user.active_sessions <-
+            List.filter (fun s -> s <> similar) user.active_sessions) ;
+     user.active_sessions <- (sess :: user.active_sessions) );
   List.find (r_matches lresource) user.active_sessions
 
 let active_session user =
