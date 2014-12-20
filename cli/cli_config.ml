@@ -85,11 +85,11 @@ let configure term () =
   (* otr config *)
   LTerm.fprintl term "OTR config" >>= fun () ->
   let ask_list xs to_string prefix suffix =
-    Lwt_list.fold_right_s (fun v acc ->
+    Lwt_list.fold_left_s (fun acc v ->
       read_yes_no term (prefix ^ (to_string v) ^ suffix) >|= function
       | true -> v :: acc
       | false -> acc)
-      xs []
+      [] xs
   in
   ask_list
     Otr.State.all_versions
