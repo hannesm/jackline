@@ -22,7 +22,7 @@ type user_data = {
   otr_config : Otr.State.config ;
   users      : User.users       ;
   received   : (User.direction * string) -> unit ;
-  notify     : string -> unit ;
+  notify     : bool -> User.user -> unit ;
   failure    : exn -> unit Lwt.t ;
 }
 
@@ -35,8 +35,8 @@ let message_callback (t : user_data session_data) stanza =
     User.Users.replace t.user_data.users user.User.jid user ;
     let from = JID.string_of_jid jid in
     let msg dir enc txt =
-      User.new_message user dir enc true txt ;
-      t.user_data.notify user.User.jid
+      let user = User.new_message user dir enc true txt in
+      t.user_data.notify true user
     in
     match stanza.content.body with
     | None ->
@@ -130,9 +130,10 @@ let presence_callback t stanza =
        let nl = User.presence_to_string newp in
        log ((`From id), ("presence changed: [" ^ old ^ ">" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring)) ;
      in
-     let logp txt =
-       User.new_message user (`Local txt) false true ("(use /authorization [arg])" ^ statstring) ;
-       t.user_data.notify user.User.jid
+     let auth_info txt =
+       let hlp = ("(use /authorization [arg])" ^ statstring) in
+       let user = User.new_message user (`Local txt) false true hlp in
+       t.user_data.notify true user
      in
      match stanza.content.presence_type with
      | None ->
@@ -144,11 +145,11 @@ let presence_callback t stanza =
          | Some ShowDND -> handle_presence `DoNotDisturb ()
          | Some ShowXA -> handle_presence `ExtendedAway ()
        end
-     | Some Probe -> logp "probed"
-     | Some Subscribe -> logp "subscription request"
-     | Some Subscribed -> logp "successfully subscribed"
-     | Some Unsubscribe -> logp "shouldn't see this unsubscribe"
-     | Some Unsubscribed -> logp "you're so off my buddy list"
+     | Some Probe -> auth_info "probed"
+     | Some Subscribe -> auth_info "subscription request"
+     | Some Subscribed -> auth_info "successfully subscribed"
+     | Some Unsubscribe -> auth_info "shouldn't see this unsubscribe"
+     | Some Unsubscribed -> auth_info "you're so off my buddy list"
      | Some Unavailable -> handle_presence `Offline ()
   ) ;
   return_unit
@@ -191,7 +192,6 @@ let roster_callback users item =
               User.groups = item.Roster.group ;
               subscription ; properties }
     in
-    User.(Users.replace users t.jid t) ;
     Some t
   with
   _ -> None
@@ -237,7 +237,7 @@ let session_callback t =
            if List.length items = 1 then
              let users = t.user_data.users in
              let mods = List.map (roster_callback users) items in
-             List.iter (function None -> () | Some x -> t.user_data.notify x.User.jid) mods ;
+             List.iter (function None -> () | Some x -> t.user_data.notify true x) mods ;
              return (IQResult None)
            else
              fail BadRequest
@@ -264,7 +264,8 @@ let session_callback t =
   Roster.get t (fun ?jid_from ?jid_to ?lang ?ver items ->
       ignore jid_from ; ignore jid_to ; ignore lang ; ignore ver ;
       let users = t.user_data.users in
-      ignore ( List.map (roster_callback users) items ) ;
+      let mods = List.map (roster_callback users) items in
+      List.iter (function None -> () | Some x -> t.user_data.notify false x) mods ;
       return () ) >>= fun () ->
 
   try_lwt send_presence t ()

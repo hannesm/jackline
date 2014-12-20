@@ -43,6 +43,7 @@ let empty_ui_state config_directory user session users =
 let status_log state = state.user.User.message_history
 
 let add_status state dir msg =
-  User.new_message state.user dir false true msg
+  let user = User.new_message state.user dir false true msg in
+  User.Users.replace state.users user.User.jid user
 
 let (xmpp_session : Xmpp_callbacks.user_data Xmpp_callbacks.XMPPClient.session_data option ref) = ref None

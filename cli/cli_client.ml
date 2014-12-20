@@ -535,7 +535,8 @@ let rec loop ?out (config : Config.t) term hist state network log =
        let prep_msg otr_ctx =
          let ctx, out, user_out = Otr.Handshake.send_otr otr_ctx message in
          let add_msg direction enc data =
-           User.new_message contact direction enc false data
+           let user = User.new_message contact direction enc false data in
+           User.Users.replace state.users user.User.jid user
          in
          (match user_out with
           | `Warning msg      -> add_msg (`Local "OTR Warning") false msg

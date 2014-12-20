@@ -125,19 +125,19 @@ let message direction encrypted received message =
     timestamp = Unix.time () ; message ; persistent = false }
 
 type user = {
-  jid                      : string ; (* user@domain, unique key *)
-  name                     : string option ;
-  groups                   : string list ;
-  subscription             : subscription ;
-  properties               : property list ;
-  preserve_messages        : bool ;
-  mutable message_history  : message list ; (* persistent if preserve_messages is true *)
-  otr_fingerprints         : fingerprint list ;
-  active_sessions          : session list (* not persistent *)
+  jid               : string ; (* user@domain, unique key *)
+  name              : string option ;
+  groups            : string list ;
+  subscription      : subscription ;
+  properties        : property list ;
+  preserve_messages : bool ;
+  message_history   : message list ; (* persistent if preserve_messages is true *)
+  otr_fingerprints  : fingerprint list ;
+  active_sessions   : session list (* not persistent *)
 }
 
 let new_message u dir enc rcvd msg =
-  u.message_history <- (message dir enc rcvd msg) :: u.message_history
+  { u with message_history = (message dir enc rcvd msg) :: u.message_history }
 
 let encrypted ctx =
   match Otr.State.(ctx.state.message_state) with
@@ -416,7 +416,11 @@ let load_users hist_dir bytes =
                  if Users.mem table id then
                    Printf.printf "key %s already present in table, ignoring\n%!" id
                  else
-                   (u.message_history <- load_history (Filename.concat hist_dir id) u.preserve_messages ;
+                   (let message_history =
+                     load_history
+                       (Filename.concat hist_dir id) u.preserve_messages
+                    in
+                    let u = { u with message_history } in
                     Users.add table id u) )
            users
        | _ -> Printf.printf "parse failed while parsing db\n")

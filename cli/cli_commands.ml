@@ -146,11 +146,13 @@ let handle_help msg = function
 
 let handle_connect ?out state config log redraw failure =
   let otr_config = config.Config.otr_config
-  and notify u =
-    if List.mem u state.notifications || state.active_contact = u then
+  and notify indicate u =
+    let id = u.User.jid in
+    if not indicate || List.mem id state.notifications || state.active_contact = id then
       ()
     else
-      state.notifications <- u :: state.notifications ;
+      state.notifications <- id :: state.notifications ;
+    User.Users.replace state.users id u ;
     redraw ()
   and users = state.users
   in
@@ -385,13 +387,19 @@ let exec ?out input state config log redraw =
     msg "session error" (Printexc.to_string reason)
   in
   let contact = User.Users.find state.users state.active_contact in
-  let dump data = User.new_message contact (`Local "") false false data in
+  let dump data =
+    let user = User.new_message contact (`Local "") false false data in
+    User.Users.replace state.users user.User.jid user
+  in
   let self = state.user = contact in
 
   match cmd_arg input with
   (* completely independent *)
   | ("help" , x) -> handle_help (msg ?prefix:None) x
-  | ("clear", _) -> contact.User.message_history <- [] ; return_unit
+  | ("clear", _) ->
+    let user = { contact with User.message_history = [] } in
+    User.Users.replace state.users user.User.jid user ;
+    return_unit
 
   (* connect *)
   | ("connect", _) ->
