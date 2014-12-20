@@ -47,17 +47,7 @@ let message_callback (t : user_data session_data) stanza =
       let ctx, out, ret = Otr.Handshake.handle session.User.otr v in
       session.User.otr <- ctx ;
       List.iter (function
-          | `Established_encrypted_session (high, first, second) ->
-            let ssid =
-              let to_hex x = match Hex.of_string x with `Hex s -> s in
-              Printf.sprintf "%s%s%s %s%s%s"
-                (if high then "[" else "")
-                (to_hex first)
-                (if high then "]" else "")
-                (if high then "" else "[")
-                (to_hex second)
-                (if high then "" else "]")
-            in
+          | `Established_encrypted_session ssid ->
             msg (`Local "OTR") false ("encrypted OTR connection established (session id " ^ ssid ^ ")") ;
             ( match User.find_fp user ctx with
               | _, Some fps ->
