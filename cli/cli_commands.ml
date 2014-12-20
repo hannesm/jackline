@@ -388,10 +388,11 @@ let exec ?out input state config log redraw =
   in
   let contact = User.Users.find state.users state.active_contact in
   let dump data =
+    let contact = User.Users.find state.users state.active_contact in
     let user = User.new_message contact (`Local "") false false data in
     User.Users.replace state.users user.User.jid user
   in
-  let self = state.user = contact in
+  let self = state.user = contact.User.jid in
 
   match cmd_arg input with
   (* completely independent *)

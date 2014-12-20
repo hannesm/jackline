@@ -1,7 +1,7 @@
 
 type ui_state = {
   config_directory            : string                    ; (* set initially *)
-  user                        : User.user                 ; (* set initially *)
+  user                        : string                    ; (* set initially *)
   session                     : User.session              ; (* set initially *)
 
   users                       : User.users                ; (* read from disk, extended by xmpp callbacks *)
@@ -19,7 +19,6 @@ type ui_state = {
 }
 
 let empty_ui_state config_directory user session users =
-  let active = user.User.jid in
   let last_status = (`Local "", "") in
   {
     config_directory              ;
@@ -28,8 +27,8 @@ let empty_ui_state config_directory user session users =
 
     users                         ;
 
-    active_contact      = active  ;
-    last_active_contact = active  ;
+    active_contact      = user    ;
+    last_active_contact = user    ;
 
     notifications       = []      ;
 
@@ -40,10 +39,9 @@ let empty_ui_state config_directory user session users =
     last_status                   ;
 }
 
-let status_log state = state.user.User.message_history
-
 let add_status state dir msg =
-  let user = User.new_message state.user dir false true msg in
-  User.Users.replace state.users user.User.jid user
+  let self = User.Users.find state.users state.user in
+  let user = User.new_message self dir false true msg in
+  User.Users.replace state.users state.user user
 
 let (xmpp_session : Xmpp_callbacks.user_data Xmpp_callbacks.XMPPClient.session_data option ref) = ref None

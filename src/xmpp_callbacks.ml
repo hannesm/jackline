@@ -35,6 +35,7 @@ let message_callback (t : user_data session_data) stanza =
     User.Users.replace t.user_data.users user.User.jid user ;
     let from = JID.string_of_jid jid in
     let msg dir enc txt =
+      let user = User.find_or_add jid t.user_data.users in
       let user = User.new_message user dir enc true txt in
       t.user_data.notify true user
     in
@@ -71,6 +72,7 @@ let message_callback (t : user_data session_data) stanza =
                   | false, false, n -> "unverified key (used " ^ (string_of_int n) ^ " times). please " ^ verify
                 in
                 msg (`Local "OTR key") false otrmsg ;
+                let user = User.Users.find t.user_data.users user.User.jid in
                 let user = User.insert_inc user session.User.resource fps in
                 User.Users.replace t.user_data.users user.User.jid user
               | _, None ->

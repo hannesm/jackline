@@ -22,7 +22,7 @@ let start_client cfgdir debug () =
     User.ensure_session user config.Config.jid `Offline config.Config.otr_config
   in
   User.Users.replace users user.User.jid user ;
-  let state = Cli_state.empty_ui_state cfgdir user session users in
+  let state = Cli_state.empty_ui_state cfgdir user.User.jid session users in
   let n, log = S.create (`Local "welcome to jackline", "use /help for some help") in
 
   ( if debug then

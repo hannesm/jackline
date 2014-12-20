@@ -315,7 +315,8 @@ let make_prompt size time network state redraw =
     eval ([S "need more space"])
   else
     begin
-      let statusses = status_log state in
+      let self = User.Users.find state.users state.user in
+      let statusses = self.User.message_history in
       let logs =
         let entries =
           if List.length statusses > log_size then
@@ -330,7 +331,6 @@ let make_prompt size time network state redraw =
 
       let active = User.Users.find state.users state.active_contact in
       let active_session = User.active_session active in
-      let self = state.user in
       let notifications =
         List.map
           (fun id -> User.Users.find state.users id)
@@ -421,7 +421,8 @@ let navigate_buddy_list state direction =
   let find u = User.Users.find state.users u in
   let active = find state.active_contact in
   let notifications = List.map find state.notifications in
-  let userlist = show_buddies state.users state.show_offline state.user active notifications in
+  let self = find state.user in
+  let userlist = show_buddies state.users state.show_offline self active notifications in
   let set_active idx =
     let user = List.nth userlist idx in
     activate_user state user
@@ -549,7 +550,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
          log (`Local "session error", Printexc.to_string reason) ;
          return_unit
        in
-       (if contact = state.user then err "try `M-x doctor` in emacs instead"
+       (if contact.User.jid = state.user then err "try `M-x doctor` in emacs instead"
        else
          match User.active_session contact, !xmpp_session with
          | Some session, Some t ->
