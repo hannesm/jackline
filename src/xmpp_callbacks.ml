@@ -46,7 +46,17 @@ let message_callback (t : user_data session_data) stanza =
       session.User.otr <- ctx ;
       List.iter (function
           | `Established_encrypted_session (high, first, second) ->
-            msg (`Local "OTR") false "encrypted OTR connection established" ;
+            let ssid =
+              let to_hex x = match Hex.of_string x with `Hex s -> s in
+              Printf.sprintf "%s%s%s %s%s%s"
+                (if high then "[" else "")
+                (to_hex first)
+                (if high then "]" else "")
+                (if high then "" else "[")
+                (to_hex second)
+                (if high then "" else "]")
+            in
+            msg (`Local "OTR") false ("encrypted OTR connection established (session id " ^ ssid ^ ")") ;
             ( match User.find_fp user ctx with
               | _, Some fps ->
                 let verified_key = List.exists (fun x -> x.User.verified) user.User.otr_fingerprints in
@@ -60,17 +70,6 @@ let message_callback (t : user_data session_data) stanza =
                   | false, false, n -> "unverified key (used " ^ (string_of_int n) ^ " times). please " ^ verify
                 in
                 msg (`Local "OTR key") false otrmsg ;
-                let ssid =
-                  let to_hex x = match Hex.of_string x with `Hex s -> s in
-                  Printf.sprintf "%s%s%s %s%s%s"
-                    (if high then "[" else "")
-                    (to_hex first)
-                    (if high then "]" else "")
-                    (if high then "" else "[")
-                    (to_hex second)
-                    (if high then "" else "]")
-                in
-                msg (`Local "OTR") false ("session id (to verify this session over second channel) " ^ ssid) ;
                 User.insert_inc user session.User.resource fps ;
               | _, None ->
                 msg (`Local "PROBLEM") false "shouldn't happen - OTR established but couldn't find fingerprint" )
@@ -132,7 +131,7 @@ let presence_callback t stanza =
            List.filter (fun s -> s <> session) user.User.active_sessions
      in
      let logp txt =
-       User.new_message user (`Local "authorization (reply with /authorization [arg])") false true (txt ^ statstring) ;
+       User.new_message user (`Local txt) false true ("(use /authorization [arg])" ^ statstring) ;
        t.user_data.notify user.User.jid
      in
      match stanza.content.presence_type with
