@@ -161,12 +161,12 @@ let otr_fingerprint otr =
   | None -> ("No OTR", None)
   | Some x -> let fp = fingerprint x in (format_fp fp, Some fp)
 
-let replace u fp =
+let replace_fp u fp =
   u.otr_fingerprints <-
     fp :: (List.filter (fun x -> x.data <> fp.data) u.otr_fingerprints)
 
 let insert_inc u r fp =
-  replace u
+  replace_fp u
     { fp with
       session_count = succ fp.session_count ;
       resources = r :: (List.filter (fun x -> x <> r) fp.resources)
@@ -305,7 +305,7 @@ let ensure_session jid otr_cfg user =
      user.active_sessions <- (sess :: user.active_sessions ) );
   List.find (r_matches lresource) user.active_sessions
 
-let good_session user =
+let active_session user =
   if List.length user.active_sessions = 0 then
     None
   else

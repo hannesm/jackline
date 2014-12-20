@@ -50,21 +50,21 @@ let color_session u su = function
   | Some _ -> red
   | None -> black
 
-let show_buddies state =
+let show_buddies users show_offline self active notifications =
   List.fold_right (fun id acc ->
-      let u = User.Users.find state.users id in
-      let session = User.good_session u in
+      let u = User.Users.find users id in
+      let session = User.active_session u in
       let presence = match session with
         | None -> `Offline
         | Some s -> s.User.presence
       in
-      let rly_show = u = state.user || u = fst state.active_chat || List.mem u state.notifications in
-      match rly_show, state.show_offline, presence with
+      let rly_show = u = self || u = active || List.mem u notifications in
+      match rly_show, show_offline, presence with
       | true,  _    , _        -> id :: acc
       | false, true , _        -> id :: acc
       | false, false, `Offline -> acc
       | false, false, _        -> id :: acc)
-    (User.keys state.users) []
+    (User.keys users) []
 
 let rec line_wrap ~max_length entries acc : string list =
   match entries with
@@ -106,10 +106,10 @@ let log_buffer log width =
   let entries = List.map print_log log in
   line_wrap ~max_length:width entries []
 
-let format_buddies buddies users active self notifications width =
+let format_buddies buddies users self active notifications width =
   List.map (fun id ->
       let u = User.Users.find users id in
-      let session = User.good_session u in
+      let session = User.active_session u in
       let presence = match session with
         | None -> `Offline
         | Some s -> s.User.presence
@@ -160,13 +160,13 @@ let format_messages msgs =
 let message_buffer msgs width =
   line_wrap ~max_length:width (format_messages msgs) []
 
-let buddy_list state length width =
-  let buddies = show_buddies state in
-  let formatted_buddies = format_buddies buddies state.users (fst state.active_chat) state.user state.notifications width in
+let buddy_list users show_offline self active notifications length width =
+  let buddies = show_buddies users show_offline self active notifications in
+  let formatted_buddies = format_buddies buddies users self active notifications width in
 
   let bs = List.length buddies
   and up, down = (length / 2, (length + 1) / 2)
-  and active_idx = find_index (fst state.active_chat).User.jid 0 buddies
+  and active_idx = find_index active.User.jid 0 buddies
   in
   match length >= bs with
   | true  -> let pad = [ S (String.make width ' ') ] in
@@ -192,7 +192,7 @@ let maybe_trim str left =
   else
     ([], 0)
 
-let horizontal_line (user, session) fg_color buddy_width scrollback show_buddy_list width =
+let horizontal_line user session fg_color buddy_width scrollback show_buddy_list width =
   let open User in
   let buddy, presence, status, otr, otrcolor = match session with
     | Some s ->
@@ -299,23 +299,10 @@ let make_prompt size time network state redraw =
        | _ -> () )
    | _ -> () );
 
-  let statusses = status_log state in
   (* network should be an event, then I wouldn't need a check here *)
   (if state.last_status <> network then
      (add_status state (fst network) (snd network) ;
       state.last_status <- network) ) ;
-
-  (* the user in the hashtable might have been replace *)
-  (let user = User.Users.find state.users (fst state.active_chat).User.jid in
-   let session = match snd state.active_chat, User.good_session user with
-     | None, Some y              -> add_status state (`Local "(make_prompt) changed active session") ("none -> " ^ y.User.resource) ; Some y
-     | Some x, Some y when x = y -> Some x
-     | Some x, Some y            -> add_status state (`Local "(make_prompt) changed active session") (x.User.resource ^ " -> " ^ y.User.resource) ; Some y
-     | Some _, None              -> assert false
-     | None, None                -> None
-   in
-   state.active_chat <- (user, session) );
-
 
   let log_size = 6 in
   let main_size = size.rows - log_size - 3 (* status + hline + readline *) in
@@ -331,6 +318,7 @@ let make_prompt size time network state redraw =
     eval ([S "need more space"])
   else
     begin
+      let statusses = status_log state in
       let logs =
         let entries =
           if List.length statusses > log_size then
@@ -343,13 +331,24 @@ let make_prompt size time network state redraw =
         String.concat "\n" data
       in
 
-      let fg_color = color_session (fst state.active_chat) state.user (snd state.active_chat) in
+      let active = User.Users.find state.users state.active_contact in
+      let active_session = User.active_session active in
+      let self = state.user in
+      let notifications =
+        List.map
+          (fun id -> User.Users.find state.users id)
+          state.notifications
+      in
+
+      let fg_color = color_session active self active_session in
 
       let main_window =
         let chat =
-          let data = match fst state.active_chat with
-            | x when x = state.user -> log_buffer statusses chat_width
-            | x                     -> message_buffer x.User.message_history chat_width
+          let data =
+            if active = self then
+              log_buffer statusses chat_width
+            else
+              message_buffer active.User.message_history chat_width
           in
           (* data is already in right order -- but we need to strip scrollback *)
           let elements = drop (state.scrollback * main_size) (List.rev data) in
@@ -357,7 +356,7 @@ let make_prompt size time network state redraw =
         in
 
         if state.show_buddy_list then
-          (let buddies = buddy_list state main_size buddy_width in
+          (let buddies = buddy_list state.users state.show_offline self active notifications main_size buddy_width in
            let comb = List.combine buddies chat in
            let pipe = S (Zed_utf8.singleton (UChar.of_int 0x2502)) in
            List.map (fun (buddy, chat) ->
@@ -367,11 +366,11 @@ let make_prompt size time network state redraw =
           List.map (fun chat -> [ S chat ; S "\n"]) chat
       in
 
-      let hline = horizontal_line state.active_chat fg_color buddy_width state.scrollback state.show_buddy_list size.cols in
+      let hline = horizontal_line active active_session fg_color buddy_width state.scrollback state.show_buddy_list size.cols in
 
-      let notify = List.length state.notifications > 0 in
-      let log = (fst state.active_chat).User.preserve_messages in
-      let status = status_line time state.user state.session notify log redraw fg_color size.cols in
+      let notify = List.length notifications > 0 in
+      let log = active.User.preserve_messages in
+      let status = status_line time self state.session notify log redraw fg_color size.cols in
       let main = List.flatten main_window in
 
       try
@@ -403,17 +402,12 @@ let redraw, force_redraw =
 
 type direction = Up | Down
 
-let activate_user ?session state user =
-  let session = match session with
-    | None   -> User.good_session user
-    | Some x -> Some x
-  in
-  let active = (user, session) in
-  if state.active_chat <> active then
-    (state.last_active_chat <- state.active_chat ;
-     state.active_chat <- active ;
-     state.scrollback <- 0 ;
-     state.notifications <- List.filter (fun a -> a <> user) state.notifications ;
+let activate_user state active =
+  if state.active_contact <> active then
+    (state.last_active_contact <- state.active_contact ;
+     state.active_contact      <- active ;
+     state.scrollback          <- 0 ;
+     state.notifications       <- List.filter (fun a -> a <> active) state.notifications ;
      force_redraw ())
 
 let navigate_message_buffer state direction =
@@ -426,21 +420,24 @@ let navigate_message_buffer state direction =
   | Up, n -> state.scrollback <- n + 1; force_redraw ()
 
 let navigate_buddy_list state direction =
-  let userlist = show_buddies state in
+  let find u = User.Users.find state.users u in
+  let active = find state.active_contact in
+  let notifications = List.map find state.notifications in
+  let userlist = show_buddies state.users state.show_offline state.user active notifications in
   let set_active idx =
-    let user = User.Users.find state.users (List.nth userlist idx) in
+    let user = List.nth userlist idx in
     activate_user state user
-  and active_idx = find_index (fst state.active_chat).User.jid 0 userlist
+  and active_idx = find_index state.active_contact 0 userlist
   in
   match
     direction,
     List.length userlist > succ active_idx,
     pred active_idx >= 0
   with
-  | Down, true, _     -> set_active (succ active_idx)
-  | Down, false, _    -> set_active 0
-  | Up  , _   , true  -> set_active (pred active_idx)
-  | Up  , _   , false -> set_active (pred (List.length userlist))
+  | Down, true , _     -> set_active (succ active_idx)
+  | Down, false, _     -> set_active 0
+  | Up  , _    , true  -> set_active (pred active_idx)
+  | Up  , _    , false -> set_active (pred (List.length userlist))
 
 class read_line ~term ~network ~history ~state = object(self)
   inherit LTerm_read_line.read_line ~history () as super
@@ -476,8 +473,8 @@ class read_line ~term ~network ~history ~state = object(self)
       if List.length state.notifications > 0 then
         activate_user state (List.hd (List.rev state.notifications))
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrlx ->
-      let user, session = state.last_active_chat in
-      activate_user ?session state user
+      let user = state.last_active_contact in
+      activate_user state user
     | action ->
       super#send_action action
 
@@ -536,10 +533,11 @@ let rec loop ?out (config : Config.t) term hist state network log =
     | Some message when String.length message > 0 ->
        LTerm_history.add hist message ;
        let err data = log (`Local "error", data) ; return_unit in
-       let prep_msg user otr_ctx =
+       let contact = User.Users.find state.users state.active_contact in
+       let prep_msg otr_ctx =
          let ctx, out, user_out = Otr.Handshake.send_otr otr_ctx message in
          let add_msg direction enc data =
-           User.new_message user direction enc false data
+           User.new_message contact direction enc false data
          in
          (match user_out with
           | `Warning msg      -> add_msg (`Local "OTR Warning") false msg
@@ -547,39 +545,33 @@ let rec loop ?out (config : Config.t) term hist state network log =
           | `Sent_encrypted m -> add_msg (`To "") true m ) ;
          (ctx, out)
        in
-       ( match fst state.active_chat,
-               (User.good_session (fst state.active_chat)),
-               !xmpp_session
-         with
-         | user, _           , _      when user = state.user ->
-           err "try `M-x doctor` in emacs instead"
-         | user, None        , Some x ->
-           let ctx = Otr.State.new_session config.Config.otr_config () in
-           let _, out = prep_msg user ctx in
-           Xmpp_callbacks.XMPPClient.(send_message x
-                                        ~kind:Chat
-                                        ~jid_to:(JID.of_string user.User.jid)
-                                        ?body:out () )
-         | user, Some session, Some x ->
-           ( match snd state.active_chat with
-             | Some x when x = session -> ()
-             | old                     ->
-               state.active_chat <- (user, Some session) ;
-               let prev = match old with
-               | None   -> "none"
-               | Some y -> y.User.resource
-               in
-               User.new_message user (`Local "(send_msg) switching active session")
-                 false false
-                 ("now " ^ session.User.resource ^ " was " ^ prev)
-           ) ;
-           let ctx, out = prep_msg user session.User.otr in
+       let failure reason =
+         xmpp_session := None ;
+         log (`Local "session error", Printexc.to_string reason) ;
+         return_unit
+       in
+       (if contact = state.user then err "try `M-x doctor` in emacs instead"
+       else
+         match User.active_session contact, !xmpp_session with
+         | Some session, Some t ->
+           let ctx, out = prep_msg session.User.otr in
            session.User.otr <- ctx ;
-           Xmpp_callbacks.XMPPClient.(send_message x
-                                        ~kind:Chat
-                                        ~jid_to:(JID.of_string (User.userid user session))
-                                        ?body:out () )
-         | _   , _           , None ->
+           (try_lwt Xmpp_callbacks.XMPPClient.(
+                send_message t
+                  ~kind:Chat
+                  ~jid_to:(JID.of_string (User.userid contact session))
+                  ?body:out () )
+            with e -> failure e)
+         | None        , Some t ->
+           let ctx = Otr.State.new_session config.Config.otr_config () in
+           let _, out = prep_msg ctx in
+           (try_lwt Xmpp_callbacks.XMPPClient.(
+             send_message t
+               ~kind:Chat
+               ~jid_to:(JID.of_string contact.User.jid)
+               ?body:out () )
+            with e -> failure e)
+         | _           , None ->
            err "no active session, try to connect first" ) >>= fun () ->
        loop ?out config term hist state network log
      | Some _ -> loop ?out config term hist state network log

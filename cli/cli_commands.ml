@@ -147,11 +147,10 @@ let handle_help msg = function
 let handle_connect ?out state config log redraw failure =
   let otr_config = config.Config.otr_config
   and notify u =
-    ( let cmp_user other = u.User.jid = other.User.jid in
-      if List.exists cmp_user state.notifications || cmp_user (fst state.active_chat) then
-        ()
-      else
-        state.notifications <- u :: state.notifications ) ;
+    if List.mem u state.notifications || state.active_contact = u then
+      ()
+    else
+      state.notifications <- u :: state.notifications ;
     redraw ()
   and users = state.users
   in
@@ -208,24 +207,25 @@ let handle_add s failure msg a =
      with e -> failure e)
   with _ -> msg "error" "parsing of jid failed (user@node)"
 
-let handle_fingerprint dump err a = function
-  | user, Some session when User.encrypted session.User.otr ->
-    let manual_fp = string_normalize_fingerprint a in
-    ( match User.otr_fingerprint session.User.otr with
-      | _, Some raw_cur_fp when raw_cur_fp = manual_fp ->
-        let otr_fp = User.find_raw_fp user raw_cur_fp in
-        User.replace user { otr_fp with User.verified = true } ;
-        dump ("fingerprint " ^ a ^ " is now marked verified") ;
-        return_unit
-      | _ -> err "provided fingerprint does not match the one of this active session" )
-  | _ -> err "no active OTR session"
+let handle_fingerprint dump fp user =
+  match User.active_session user with
+  | Some session when User.encrypted session.User.otr ->
+    let manual_fp = string_normalize_fingerprint fp in
+    ( match session.User.otr.Otr.State.their_dsa with
+      | Some key when User.fingerprint key = manual_fp ->
+        let otr_fp = User.find_raw_fp user manual_fp in
+        User.replace_fp user { otr_fp with User.verified = true } ;
+        dump ("fingerprint " ^ fp ^ " is now marked verified") ;
+        None
+      | _ -> Some "provided fingerprint does not match the one of this active session" )
+  | _ -> Some "no active OTR session"
 
-let handle_log dump (user, _) v a =
+let handle_log dump user v a =
   dump ("logging turned " ^ a) ;
   user.User.preserve_messages <- v ;
   return_unit
 
-let handle_authorization s failure dump (user, _) arg =
+let handle_authorization s failure dump user arg =
   let open Xmpp_callbacks.XMPPClient in
   let jid = user.User.jid in
   let doit kind m =
@@ -250,8 +250,8 @@ let dump_otr_fps fps =
   in
   String.concat "\n" (List.map marshal_otr fps)
 
-let handle_otr_info dump (user, active_session) =
-  match active_session with
+let handle_otr_info dump user =
+  match User.active_session user with
   | Some session ->
     dump ("otr session " ^ session.User.resource ^ ": " ^ Otr.State.session_to_string session.User.otr) ;
     dump ("otr fingerprints: " ^ (dump_otr_fps user.User.otr_fingerprints))
@@ -279,7 +279,7 @@ let marshal_session s =
   in
   s.User.resource ^ " (" ^ prio ^ "): " ^ pres ^ status
 
-let handle_info dump (user, active_session) cfgdir =
+let handle_info dump user cfgdir =
   let dump a b = dump (a ^ ": " ^ b) in
   common_info dump user cfgdir ;
   ( match user.User.groups with
@@ -293,8 +293,9 @@ let handle_info dump (user, active_session) cfgdir =
   let add = if String.length add > 0 then " (" ^ (String.trim add) ^ ")" else "" in
   dump "subscription" ((User.subscription_to_string user.User.subscription) ^ add) ;
   dump "otr fingerprints" (dump_otr_fps user.User.otr_fingerprints) ;
+  let active = User.active_session user in
   List.iteri (fun i s ->
-      let act = match active_session with
+      let act = match active with
         | Some x when x = s -> " (active)"
         | _ -> ""
       in
@@ -302,13 +303,14 @@ let handle_info dump (user, active_session) cfgdir =
       dump "otr" (Otr.State.session_to_string s.User.otr))
     user.User.active_sessions
 
-let handle_own_info dump user own_session active_session cfgdir config =
+let handle_own_info dump user own_session cfgdir config =
   let dump a b = dump (a ^ ": " ^ b) in
   common_info dump user cfgdir ;
   let otr_pub = Nocrypto.Dsa.pub_of_priv config.Config.otr_config.Otr.State.dsa in
   dump "own otr fingerprint" (User.format_fp (User.fingerprint otr_pub)) ;
   if List.length user.User.otr_fingerprints > 0 then
     dump "otr fingerprints" (dump_otr_fps user.User.otr_fingerprints) ;
+  let active = User.active_session user in
   List.iteri (fun i s ->
       let act =
         let own = if own_session = s then
@@ -316,7 +318,7 @@ let handle_own_info dump user own_session active_session cfgdir config =
           else
             ""
         in
-        match active_session with
+        match active with
         | Some x when x = s -> own ^ " (active)"
         | _ -> own
       in
@@ -324,7 +326,7 @@ let handle_own_info dump user own_session active_session cfgdir config =
       if own_session <> s then dump "otr" (Otr.State.session_to_string s.User.otr))
     user.User.active_sessions
 
-let handle_otr_start s dump failure otr_cfg (user, active_session) =
+let handle_otr_start s dump failure otr_cfg user =
   let send_over resource body =
     let jid_to =
       let r = if resource = "" then "" else "/" ^ resource in
@@ -333,7 +335,7 @@ let handle_otr_start s dump failure otr_cfg (user, active_session) =
     (try_lwt Xmpp_callbacks.XMPPClient.(send_message s ~kind:Chat ~jid_to ?body ())
      with e -> failure e)
   in
-  match active_session with
+  match User.active_session user with
   | Some session ->
     let ctx, out = Otr.Handshake.start_otr session.User.otr in
     session.User.otr <- ctx ;
@@ -347,21 +349,21 @@ let handle_otr_start s dump failure otr_cfg (user, active_session) =
     dump "starting OTR session" ;
     send_over "" (Some out)
 
-let handle_otr_stop s dump err failure (user, active_session) =
-  let send_over resource body =
-    let jid_to =
-      let r = if resource = "" then "" else "/" ^ resource in
-      JID.of_string (user.User.jid ^ r)
-    in
-    (try_lwt Xmpp_callbacks.XMPPClient.(send_message s ~kind:Chat ~jid_to ?body ())
-     with e -> failure e)
-  in
-  match active_session with
+let handle_otr_stop s dump err failure user =
+  match User.active_session user with
   | Some session ->
-    let ctx, out = Otr.Handshake.end_otr session.User.otr in
-    session.User.otr <- ctx ;
-    dump "finished OTR session" ;
-    send_over session.User.resource out
+    ( match Otr.State.(session.User.otr.state.message_state) with
+      | `MSGSTATE_ENCRYPTED _ | `MSGSTATE_FINISHED ->
+        let ctx, out = Otr.Handshake.end_otr session.User.otr in
+        session.User.otr <- ctx ;
+        dump "finished OTR session" ;
+        ( match out with
+          | None   -> return_unit
+          | Some body ->
+            let jid_to = JID.of_string (User.userid user session) in
+            (try_lwt Xmpp_callbacks.XMPPClient.(send_message s ~kind:Chat ~jid_to ~body ())
+             with e -> failure e) )
+      | _ -> err "no OTR session" )
   | None -> err "no active session"
 
 let tell_user (log:(User.direction * string) -> unit) ?(prefix:string option) (from:string) (msg:string) =
@@ -379,26 +381,14 @@ let exec ?out input state config log redraw =
     xmpp_session := None ;
     msg "session error" (Printexc.to_string reason)
   in
-  let dump data = User.new_message (fst state.active_chat) (`Local "") false false data in
-  let self = state.user = fst state.active_chat in
-  (match User.good_session (fst state.active_chat), snd state.active_chat with
-   | None  , _                 -> ()
-   | Some x, Some y when x = y -> ()
-   | Some x, old               ->
-     state.active_chat <- ((fst state.active_chat), Some x) ;
-     let prev = match old with
-     | None   -> "none"
-     | Some y -> y.User.resource
-     in
-     User.new_message (fst state.active_chat)
-       (`Local "(cmd) switching active session") false false
-       ("now " ^ x.User.resource ^ " was " ^ prev)
-  ) ;
+  let contact = User.Users.find state.users state.active_contact in
+  let dump data = User.new_message contact (`Local "") false false data in
+  let self = state.user = contact in
 
   match cmd_arg input with
   (* completely independent *)
-  | ("help", x) -> handle_help (msg ?prefix:None) x
-  | ("clear", _ ) -> (fst state.active_chat).User.message_history <- [] ; return_unit
+  | ("help" , x) -> handle_help (msg ?prefix:None) x
+  | ("clear", _) -> contact.User.message_history <- [] ; return_unit
 
   (* connect *)
   | ("connect", _) ->
@@ -433,48 +423,50 @@ let exec ?out input state config log redraw =
   | ("log", x) ->
     ( match x with
       | None   -> handle_help (msg ~prefix:"argument required") (Some "log")
-      | Some a when a = "on"  -> handle_log dump state.active_chat true a
-      | Some a when a = "off" -> handle_log dump state.active_chat false a
+      | Some a when a = "on"  -> handle_log dump contact true a
+      | Some a when a = "off" -> handle_log dump contact false a
       | Some _ -> handle_help (msg ~prefix:"unknown argument") (Some "log") )
 
   | ("info", _) ->
     ( if self then
-        handle_own_info dump state.user state.session (snd state.active_chat) state.config_directory config
+        handle_own_info dump contact state.session state.config_directory config
       else
-        handle_info dump state.active_chat state.config_directory );
+        handle_info dump contact state.config_directory );
     return_unit
   | ("otr", x) ->
     ( match x with
       | None -> handle_help (msg ~prefix:"arguent required") (Some "otr")
       | Some x when x = "info" ->
         ( if self then
-            handle_own_info dump state.user state.session (snd state.active_chat) state.config_directory config
+            handle_own_info dump contact state.session state.config_directory config
           else
-            handle_otr_info dump state.active_chat ) ;
+            handle_otr_info dump contact ) ;
         return_unit
       | Some x -> (match !xmpp_session with
           | None -> err "not connected"
           | Some s when x = "start" ->
             if self then err "do not like to talk to myself" else
-              handle_otr_start s dump failure config.Config.otr_config state.active_chat
+              handle_otr_start s dump failure config.Config.otr_config contact
           | Some s when x = "stop" ->
             if self then err "do not like to talk to myself" else
-              handle_otr_stop s dump err failure state.active_chat
+              handle_otr_stop s dump err failure contact
           | Some _ -> handle_help (msg ~prefix:"unknown argument") (Some "otr") ) )
 
   | ("fingerprint", x) ->
     ( match x with
       | None   -> handle_help (msg ~prefix:"argument required") (Some "fingerprint")
-      | Some a ->
+      | Some fp ->
         if self then err "won't talk to myself" else
-          handle_fingerprint dump err a state.active_chat )
+          match handle_fingerprint dump fp contact with
+          | None -> return_unit
+          | Some x -> err x )
   | ("authorization", x) ->
     ( match !xmpp_session, x with
       | None  , _      -> err "not connected"
       | Some _, None   -> handle_help (msg ~prefix:"argument required") (Some "authorization")
       | Some s, Some a ->
         if self then err "won't authorize myself" else
-          handle_authorization s failure dump state.active_chat a >>= (function
+          handle_authorization s failure dump contact a >>= (function
               | None   -> handle_help (msg ~prefix:"unknown argument") (Some "authorization")
               | Some _ -> return_unit ) )
 

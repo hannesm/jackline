@@ -20,10 +20,10 @@ open Lwt
 
 type user_data = {
   otr_config : Otr.State.config ;
-  users : User.users ;
-  received : (User.direction * string) -> unit ;
-  notify : User.user -> unit ;
-  failure : exn -> unit Lwt.t ;
+  users      : User.users       ;
+  received   : (User.direction * string) -> unit ;
+  notify     : string -> unit ;
+  failure    : exn -> unit Lwt.t ;
 }
 
 let message_callback (t : user_data session_data) stanza =
@@ -35,7 +35,7 @@ let message_callback (t : user_data session_data) stanza =
     let from = JID.string_of_jid jid in
     let msg dir enc txt =
       User.new_message user dir enc true txt ;
-      t.user_data.notify user
+      t.user_data.notify user.User.jid
     in
     match stanza.content.body with
     | None ->
@@ -133,7 +133,7 @@ let presence_callback t stanza =
      in
      let logp txt =
        User.new_message user (`Local "authorization (reply with /authorization [arg])") false true (txt ^ statstring) ;
-       t.user_data.notify user
+       t.user_data.notify user.User.jid
      in
      match stanza.content.presence_type with
      | None ->
@@ -238,7 +238,7 @@ let session_callback t =
            if List.length items = 1 then
              let users = t.user_data.users in
              let mods = List.map (roster_callback users) items in
-             List.iter (function None -> () | Some x -> t.user_data.notify x) mods ;
+             List.iter (function None -> () | Some x -> t.user_data.notify x.User.jid) mods ;
              return (IQResult None)
            else
              fail BadRequest
