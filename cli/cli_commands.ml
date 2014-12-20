@@ -159,7 +159,8 @@ let handle_connect ?out state config log redraw failure =
     let user = User.Users.find state.users bare in
     let user = User.new_message user dir enc true txt in
     User.Users.replace state.users bare user ;
-    state.notifications <- bare :: state.notifications ;
+    if not (List.mem bare state.notifications || state.active_contact = bare) then
+      state.notifications <- bare :: state.notifications ;
     redraw ()
   and users = state.users
   in
