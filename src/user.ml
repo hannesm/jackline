@@ -229,6 +229,11 @@ let find_or_add jid users =
     Users.add users id t ;
     t
 
+let increase_fp users jid fps =
+  let bare, res = bare_jid jid in
+  let user = Users.find users bare in
+  let user = insert_inc user res fps in
+  Users.replace users bare user
 
 (*
    xmpp resources should be unique for each client, thus multiple
