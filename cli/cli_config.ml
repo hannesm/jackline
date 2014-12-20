@@ -40,14 +40,14 @@ let exactly_one char s =
 let configure term () =
   (new read_inputline ~term ~prompt:"enter jabber id (user@host/resource): " ())#run >>= fun jid ->
   (if not (exactly_one '@' jid) then
-     fail (Invalid_argument "not a valid jabber ID (exactly one @ character)")
+     fail (Invalid_argument "invalid jabber ID (needs exactly one @ character)")
    else return_unit) >>= fun () ->
   (if not (exactly_one '/' jid) then
-     fail (Invalid_argument "not a valid jabber ID (exactly one / character)")
+     fail (Invalid_argument "invalid jabber ID (needs exactly one / character)")
    else return_unit ) >>= fun () ->
   let jid = try Some (JID.of_string (String.lowercase jid)) with _ -> None in
   (match jid with
-   | None -> fail (Invalid_argument "bad jabber ID")
+   | None -> fail (Invalid_argument "invalid jabber ID")
    | Some x -> return x) >>= fun jid ->
   let { JID.ldomain ; _ } = jid in
   (new read_inputline ~term ~prompt:"enter port [5222]: " ())#run >>= fun port ->
@@ -60,7 +60,7 @@ let configure term () =
   read_yes_no term "Provide trust anchor (alternative: tls server fingerprint)?" >>= fun ta ->
   ( if ta then
       begin
-        (new read_inputline ~term ~prompt:"enter path to trust anchors: " ())#run >>= fun trust_anchor ->
+        (new read_inputline ~term ~prompt:"enter path to trust anchor file: " ())#run >>= fun trust_anchor ->
         Lwt_unix.access trust_anchor [ Unix.F_OK ; Unix.R_OK ] >>= fun () ->
         X509_lwt.certs_of_pem trust_anchor >>= fun tas ->
         let tas = Certificate.valid_cas ~time:(Unix.time ()) tas in
@@ -71,7 +71,7 @@ let configure term () =
       end
     else
       begin
-        (new read_inputline ~term ~prompt:("enter server certificate fingerprint (by running for example `openssl s_client -connect " ^ ldomain ^ ":" ^ (string_of_int port) ^ " -starttls xmpp | openssl x509 -sha256 -fingerprint -noout`): ") ())#run >>= fun fp ->
+        (new read_inputline ~term ~prompt:("enter server certificate fingerprint (run `openssl s_client -connect " ^ ldomain ^ ":" ^ (string_of_int port) ^ " -starttls xmpp | openssl x509 -sha256 -fingerprint -noout`): ") ())#run >>= fun fp ->
         (try
            let binary = X509.Cs.dotted_hex_to_cs fp in
            if Cstruct.len binary <> 32 then
