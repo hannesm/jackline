@@ -541,7 +541,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
        let handle_otr_out user_out =
          let add_msg direction enc data =
            let user = User.Users.find state.users state.active_contact in
-           let user = User.new_message user direction enc false data in
+           let user = User.insert_message user direction enc false data in
            User.Users.replace state.users user.User.jid user
          in
          (match user_out with
@@ -559,7 +559,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
          match User.active_session contact, !xmpp_session with
          | Some session, Some t ->
            let ctx, out, user_out = Otr.Handshake.send_otr session.User.otr message in
-           User.update_otr state.users contact session ctx ;
+           User.replace_session state.users contact { session with User.otr = ctx } ;
            handle_otr_out user_out ;
            (try_lwt Xmpp_callbacks.XMPPClient.(
                 send_message t

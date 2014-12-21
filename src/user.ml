@@ -63,22 +63,27 @@ type session = {
   dispose  : bool ;
 }
 
-let empty_session resource presence config () = {
-  resource ;
-  presence ;
-  status = None ;
-  priority = 0 ;
-  otr = Otr.State.new_session config () ;
-  dispose = false ;
-}
+let empty_session ~resource ?(presence=`Offline) ?otr ?config ?(priority=0) ?(status=None) ?(dispose=false) () =
+  let otr = match otr, config with
+    | Some otr, _         -> otr
+    | None    , Some conf -> Otr.State.new_session conf ()
+    | _ -> assert false
+  in {
+    resource ;
+    presence ;
+    status ;
+    priority ;
+    otr ;
+    dispose ;
+  }
 
 open Sexplib
 open Sexplib.Conv
 
 type fingerprint = {
-  data : string ;
-  verified : bool ;
-  resources : string list ;
+  data          : string ;
+  verified      : bool ;
+  resources     : string list ;
   session_count : int
 } with sexp
 
@@ -136,7 +141,11 @@ type user = {
   active_sessions   : session list (* not persistent *)
 }
 
-let new_message u dir enc rcvd msg =
+let new_user ~jid ?(name=None) ?(groups=[]) ?(subscription=`None) ?(otr_fingerprints=[]) ?(preserve_messages=false) ?(properties=[]) ?(active_sessions=[]) () =
+  let message_history = [] in
+  { jid ; name ; groups ; subscription ; properties ; otr_fingerprints ; preserve_messages ; active_sessions ; message_history }
+
+let insert_message u dir enc rcvd msg =
   { u with message_history = (message dir enc rcvd msg) :: u.message_history }
 
 let encrypted ctx =
@@ -167,40 +176,17 @@ let replace_fp u fp =
   in
   { u with otr_fingerprints }
 
-let insert_inc u r fp =
-  replace_fp u
-    { fp with
-      session_count = succ fp.session_count ;
-      resources = r :: (List.filter (fun x -> x <> r) fp.resources)
-    }
-
 let find_raw_fp u raw =
   try List.find (fun x -> x.data = raw) u.otr_fingerprints with
     Not_found -> { data = raw ; verified = false ; resources = []; session_count = 0 }
-
-let find_fp u otr =
-  match otr_fingerprint otr with
-  | fp, Some raw ->
-    let fps = find_raw_fp u raw in
-    (fp, Some fps)
-  | fp, None -> (fp, None)
 
 let verified_fp u raw =
   let fps = find_raw_fp u raw in
   fps.verified
 
-
-let empty = {
-  name              = None ;
-  jid               = "a@b" ;
-  groups            = [] ;
-  subscription      = `None ;
-  properties        = [] ;
-  message_history   = [] ;
-  preserve_messages = false ;
-  otr_fingerprints  = [] ;
-  active_sessions   = []
-}
+let bare_jid jid =
+  let { JID.lnode ; JID.ldomain ; JID.lresource ; _ } = jid in
+  (lnode ^ "@" ^ ldomain, lresource)
 
 module StringHash =
   struct
@@ -216,24 +202,19 @@ let keys users =
   let us = Users.fold (fun k _ acc -> k :: acc) users [] in
   List.sort compare us
 
-let bare_jid jid =
-  let { JID.lnode ; JID.ldomain ; JID.lresource ; _ } = jid in
-  (lnode ^ "@" ^ ldomain, lresource)
-
-let find_or_add jid users =
-  let id, _ = bare_jid jid in
-  if Users.mem users id then
-    Users.find users id
+let find users jid =
+  if Users.mem users jid then
+    Some (Users.find users jid)
   else
-    let t = { empty with jid = id } in
-    Users.add users id t ;
-    t
+    None
 
-let increase_fp users jid fps =
-  let bare, res = bare_jid jid in
-  let user = Users.find users bare in
-  let user = insert_inc user res fps in
-  Users.replace users bare user
+let find_or_create users jid =
+  match find users jid with
+    | Some x -> x
+    | None   ->
+      let user = new_user ~jid () in
+      Users.replace users jid user ;
+      user
 
 (*
    xmpp resources should be unique for each client, thus multiple
@@ -294,21 +275,16 @@ let resource_similar a b =
     let prefix_len = equal 0 in
     hex prefix_len a && hex prefix_len b
 
-let retrieve test lst =
-  let item = List.find test lst in
-  (item, List.filter (fun s -> s <> item) lst)
-
-let update_otr users user session otr =
-  let active_sessions = List.filter (fun s -> s <> session) user.active_sessions in
-  let session = { session with otr } in
-  let user = { user with active_sessions = session :: active_sessions } in
-  Users.replace users user.jid user
-
 let replace_session users user session =
   let others = List.filter (fun s -> s.resource <> session.resource) user.active_sessions in
-  let user = { user with active_sessions = session :: others } in
-  Users.replace users user.jid user ;
-  user
+  let active_sessions =
+    if session.dispose && session.presence = `Offline then
+      others
+    else
+      session :: others
+  in
+  let user = { user with active_sessions } in
+  Users.replace users user.jid user
 
 let get_session user tst =
   if List.exists tst user.active_sessions then
@@ -324,56 +300,24 @@ let find_similar_session user resource =
   let r_similar s = resource_similar s.resource resource in
   get_session user r_similar
 
-let maybe_dispose users user = function
-  | Some x when x.dispose && x.presence = `Offline ->
-    let active_sessions = List.filter (fun s -> s <> x) user.active_sessions in
-    let user = { user with active_sessions } in
-    Users.replace users user.jid user
-  | _ -> ()
-
-let ensure_session users user jid presence otr_cfg =
-  let { JID.lresource ; _ } = jid in
-  let r_matches l s = s.resource = l in
-  (* there might be an exact match *)
-  let addme session =
-    not (session.dispose && session.presence = `Offline)
-  in
-  let user, session =
-    if List.exists (r_matches lresource) user.active_sessions then
-      let session, active_sessions =
-        retrieve (r_matches lresource) user.active_sessions
-      in
-      let session = { session with presence } in
-      let active_sessions =
-        if addme session then
-          session :: active_sessions
-        else
-          active_sessions
-      in
-      ({ user with active_sessions }, session)
-    else
-      let session = empty_session lresource presence otr_cfg () in
-      (* it may be similar enough such that we carry over otr state *)
-      let r_similar s = resource_similar s.resource lresource in
-      let session, active_sessions =
-        if List.exists r_similar user.active_sessions then
-          let similar, active_sessions =
-            retrieve r_similar user.active_sessions
-          in
-          let similar = { similar with dispose = true } in
-          ({ session with otr = similar.otr },
-           if addme similar then
-             similar :: active_sessions
-           else
-             active_sessions)
-        else
-          (session, user.active_sessions)
-      in
-      let active_sessions = session :: active_sessions in
-      ({ user with active_sessions }, session)
-  in
-  Users.replace users user.jid user ;
-  session
+let find_or_create_session user resource config =
+  match find_session user resource with
+  | Some x -> (user, x)
+  | None   ->
+    let session = empty_session ~resource ~config () in
+    let session, similar = match find_similar_session user resource with
+      | None         -> (session, None)
+      | Some similar -> ({ session with otr = similar.otr }, Some similar)
+    in
+    let others = match similar with
+      | None   -> user.active_sessions
+      | Some x ->
+        let others = List.filter (fun s -> x.resource <> s.resource) user.active_sessions in
+        if x.presence = `Offline then others else
+          { x with dispose = true } :: others
+    in
+    ({ user with active_sessions = session :: others },
+     session)
 
 let active_session user =
   if List.length user.active_sessions = 0 then
@@ -396,32 +340,47 @@ let db_version = 1
 let t_of_sexp t version =
   match t with
   | Sexp.List l ->
-      let u = List.fold_left (fun t v -> match v with
-        | Sexp.List [ Sexp.Atom "name" ; nam ] ->
-          let name = match version with
-            | 0 -> let str = string_of_sexp nam in
-                   if str = "" then None else Some str
-            | _ -> option_of_sexp string_of_sexp nam
-          in
-          { t with name }
-        | Sexp.List [ Sexp.Atom "jid" ; Sexp.Atom jid ] ->
-          { t with jid }
-        | Sexp.List [ Sexp.Atom "groups" ; gps ] ->
-          { t with groups = list_of_sexp string_of_sexp gps }
-        (* TODO: rename to preserve_messages and bump version *)
-        | Sexp.List [ Sexp.Atom "preserve_history" ; hf ] ->
-          { t with preserve_messages = bool_of_sexp hf }
-        | Sexp.List [ Sexp.Atom "properties" ; p ] ->
-          { t with properties = list_of_sexp property_of_sexp p }
-        | Sexp.List [ Sexp.Atom "subscription" ; s ] ->
-          { t with subscription = subscription_of_sexp s }
-        | Sexp.List [ Sexp.Atom "otr_fingerprints" ; fps ] ->
-          { t with otr_fingerprints = list_of_sexp fingerprint_of_sexp fps }
-        | _ -> assert false)
-        empty l
-      in
-      Some u
-  | _ -> Printf.printf "ignoring unknown user\n" ; None
+    (match
+       List.fold_left (fun (name, jid, groups, preserve_messages, properties, subscription, otr_fingerprints) v -> match v with
+           | Sexp.List [ Sexp.Atom "name" ; nam ] ->
+             assert (name = None);
+             let name = match version with
+               | 0 -> let str = string_of_sexp nam in
+                 if str = "" then None else Some str
+               | _ -> option_of_sexp string_of_sexp nam
+             in
+             (Some name, jid, groups, preserve_messages, properties, subscription, otr_fingerprints)
+           | Sexp.List [ Sexp.Atom "jid" ; Sexp.Atom jabberid ] ->
+             assert (jid = None);
+             (name, Some jabberid, groups, preserve_messages, properties, subscription, otr_fingerprints)
+           | Sexp.List [ Sexp.Atom "groups" ; gps ] ->
+             assert (groups = None);
+             let groups = list_of_sexp string_of_sexp gps in
+             (name, jid, Some groups, preserve_messages, properties, subscription, otr_fingerprints)
+           (* TODO: rename to preserve_messages and bump version *)
+           | Sexp.List [ Sexp.Atom "preserve_history" ; hf ] ->
+             assert (preserve_messages = None) ;
+             let preserve_messages = bool_of_sexp hf in
+             (name, jid, groups, Some preserve_messages, properties, subscription, otr_fingerprints)
+           | Sexp.List [ Sexp.Atom "properties" ; p ] ->
+             assert (properties = None) ;
+             let properties = list_of_sexp property_of_sexp p in
+             (name, jid, groups, preserve_messages, Some properties, subscription, otr_fingerprints)
+           | Sexp.List [ Sexp.Atom "subscription" ; s ] ->
+             assert (subscription = None) ;
+             let subscription = subscription_of_sexp s in
+             (name, jid, groups, preserve_messages, properties, Some subscription, otr_fingerprints)
+           | Sexp.List [ Sexp.Atom "otr_fingerprints" ; fps ] ->
+             assert (otr_fingerprints = None);
+             let otr_fingerprints = list_of_sexp fingerprint_of_sexp fps in
+             (name, jid, groups, preserve_messages, properties, subscription, Some otr_fingerprints)
+           | _ -> assert false)
+         (None, None, None, None, None, None, None) l
+     with
+     | Some name, Some jid, Some groups, Some preserve_messages, Some properties, Some subscription, Some otr_fingerprints ->
+       Some (new_user ~jid ~name ~groups ~subscription ~properties ~otr_fingerprints ~preserve_messages ())
+     | _ -> None )
+  | _ -> None
 
 
 let record kvs =

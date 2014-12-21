@@ -145,32 +145,60 @@ let handle_help msg = function
     msg "available commands (try [/help cmd])" cmds
 
 let handle_connect ?out state config log redraw failure =
-  let otr_config = config.Config.otr_config
-  and notify indicate u =
-    let id = u.User.jid in
-    if not indicate || List.mem id state.notifications || state.active_contact = id then
+  let maybe_notify jid =
+    if List.mem jid state.notifications || state.active_contact = jid then
       ()
     else
-      state.notifications <- id :: state.notifications ;
-    User.Users.replace state.users id u ;
+      state.notifications <- jid :: state.notifications
+  in
+  let notify indicate u =
+    let jid = u.User.jid in
+    if indicate then maybe_notify jid ;
+    User.Users.replace state.users jid u ;
     redraw ()
-  and message jid dir enc txt =
-    let bare, _ = User.bare_jid jid in
-    let user = User.Users.find state.users bare in
-    let user = User.new_message user dir enc true txt in
-    User.Users.replace state.users bare user ;
-    if not (List.mem bare state.notifications || state.active_contact = bare) then
-      state.notifications <- bare :: state.notifications ;
+  and received dir txt =
+    log (dir, txt)
+  and message user dir enc txt =
+    let user = User.insert_message user dir enc true txt in
+    let jid = user.User.jid in
+    User.Users.replace state.users jid user ;
+    maybe_notify jid ;
     redraw ()
-  and users = state.users
+  and find = User.find state.users
+  and find_or_create = User.find_or_create state.users
+  and find_session user resource =
+    User.find_session user resource
+  and find_or_create_session user resource =
+    let otr_config = config.Config.otr_config in
+    let user, session = User.find_or_create_session user resource otr_config in
+    User.Users.replace state.users user.User.jid user ;
+    session
+  and update_session user session =
+    User.replace_session state.users user session
+  and find_inc_fp user resource raw_fp =
+    let fp = User.find_raw_fp user raw_fp in
+    let resources =
+      if List.mem resource fp.User.resources then
+        fp.User.resources
+      else
+        resource :: fp.User.resources
+    in
+    let fp = { fp with User.session_count = succ fp.User.session_count ; User.resources = resources } in
+    let u = User.replace_fp user fp in
+    User.Users.replace state.users u.User.jid u ;
+    fp
   in
   let (user_data : Xmpp_callbacks.user_data) = {
-      Xmpp_callbacks.otr_config = otr_config ;
-      Xmpp_callbacks.users      = users      ;
-      Xmpp_callbacks.received   = log        ;
-      Xmpp_callbacks.notify     = notify     ;
-      Xmpp_callbacks.message    = message    ;
-      Xmpp_callbacks.failure    = failure    ;
+      Xmpp_callbacks.find                   = find                   ;
+      Xmpp_callbacks.find_or_create         = find_or_create         ;
+      Xmpp_callbacks.find_inc_fp            = find_inc_fp            ;
+      Xmpp_callbacks.find_session           = find_session           ;
+      Xmpp_callbacks.find_or_create_session = find_or_create_session ;
+      Xmpp_callbacks.update_session         = update_session         ;
+      Xmpp_callbacks.received               = received               ;
+      Xmpp_callbacks.notify                 = notify                 ;
+      Xmpp_callbacks.message                = message                ;
+      Xmpp_callbacks.failure                = failure                ;
   } in
   Xmpp_callbacks.connect ?out config user_data () >|= (function
       | None   -> ()
@@ -248,8 +276,8 @@ let handle_authorization s failure dump user arg =
      Some ()
   in
   match arg with
-  | "allow"               -> doit Subscribed "is allowed to receive your presence updates"
-  | "cancel"              -> doit Unsubscribed "won't receive your presence updates"
+  | "allow"               -> doit Subscribed "is now allowed to receive your presence updates"
+  | "cancel"              -> doit Unsubscribed "won't receive your presence updates anymore"
   | "request"             -> doit Subscribe "has been asked to sent presence updates to you"
   | "request_unsubscribe" -> doit Unsubscribe "has been asked to no longer sent presence updates to you"
   | _                     -> return None
@@ -348,7 +376,7 @@ let handle_otr_start s users dump failure otr_cfg user =
     dump "session is already encrypted, please finish first (/otr stop)!" ; return_unit
   | Some session ->
     let ctx, out = Otr.Handshake.start_otr session.User.otr in
-    User.update_otr users user session ctx ;
+    User.replace_session users user { session with User.otr = ctx } ;
     dump "starting OTR session" ;
     send_over session.User.resource (Some out)
   | None ->
@@ -365,7 +393,7 @@ let handle_otr_stop s users dump err failure user =
     ( match Otr.State.(session.User.otr.state.message_state) with
       | `MSGSTATE_ENCRYPTED _ | `MSGSTATE_FINISHED ->
         let ctx, out = Otr.Handshake.end_otr session.User.otr in
-        User.update_otr users user session ctx ;
+        User.replace_session users user { session with User.otr = ctx } ;
         dump "finished OTR session" ;
         ( match out with
           | None   -> return_unit
@@ -394,10 +422,14 @@ let exec ?out input state config log redraw =
   let contact = User.Users.find state.users state.active_contact in
   let dump data =
     let contact = User.Users.find state.users state.active_contact in
-    let user = User.new_message contact (`Local "") false false data in
+    let user = User.insert_message contact (`Local "") false false data in
     User.Users.replace state.users user.User.jid user
   in
   let self = state.user = contact.User.jid in
+  let own_session () =
+    let user = User.Users.find state.users state.user in
+    List.find (fun s -> s.User.resource = state.resource) user.User.active_sessions
+  in
 
   match cmd_arg input with
   (* completely independent *)
@@ -419,11 +451,7 @@ let exec ?out input state config log redraw =
       | None  , _      -> err "not connected"
       | Some _, None   -> handle_help (msg ~prefix:"argument required") (Some "status")
       | Some s, Some a ->
-        let session = List.find
-            (fun s -> s.User.resource = state.resource)
-            contact.User.active_sessions
-        in
-        handle_status s session failure a >>= (function
+        handle_status s (own_session ()) failure a >>= (function
           | None   -> handle_help (msg ~prefix:"unknown argument") (Some "status")
           | Some _ -> return_unit ) )
   | ("priority", x) ->
@@ -431,11 +459,7 @@ let exec ?out input state config log redraw =
       | None  , _      -> err "not connected"
       | Some _, None   -> handle_help (msg ~prefix:"argument required") (Some "priority")
       | Some s, Some p ->
-        let session = List.find
-            (fun s -> s.User.resource = state.resource)
-            contact.User.active_sessions
-        in
-        handle_priority s session failure p >>= (function
+        handle_priority s (own_session ()) failure p >>= (function
           | None   -> handle_help (msg ~prefix:"unknown argument") (Some "priority")
           | Some _ -> return_unit ) )
 

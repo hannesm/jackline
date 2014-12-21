@@ -41,7 +41,7 @@ let empty_ui_state config_directory user resource users =
 
 let add_status state dir msg =
   let self = User.Users.find state.users state.user in
-  let user = User.new_message self dir false true msg in
+  let user = User.insert_message self dir false true msg in
   User.Users.replace state.users state.user user
 
 let (xmpp_session : Xmpp_callbacks.user_data Xmpp_callbacks.XMPPClient.session_data option ref) = ref None

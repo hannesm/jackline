@@ -19,57 +19,56 @@ module Roster = Roster.Make (XMPPClient)
 open Lwt
 
 type user_data = {
-  otr_config : Otr.State.config ;
-  users      : User.users       ;
-  received   : (User.direction * string) -> unit ;
-  notify     : bool -> User.user -> unit ;
-  message    : JID.t -> User.direction -> bool -> string -> unit ;
-  failure    : exn -> unit Lwt.t ;
+  received               : User.direction -> string -> unit ;
+  notify                 : bool -> User.user -> unit ;
+  message                : User.user -> User.direction -> bool -> string -> unit ;
+  find                   : string -> User.user option ;
+  find_or_create         : string -> User.user ;
+  find_inc_fp            : User.user -> string -> string -> User.fingerprint ;
+  find_session           : User.user -> string -> User.session option ;
+  find_or_create_session : User.user -> string -> User.session ;
+  update_session         : User.user -> User.session -> unit ;
+  failure                : exn -> unit Lwt.t ;
 }
 
 let message_callback (t : user_data session_data) stanza =
   match stanza.jid_from with
-  | None -> t.user_data.received ((`Local "error"), "no from in stanza") ; return_unit
-  | Some jid ->
-    let user = User.find_or_add jid t.user_data.users in
-    let session = User.ensure_session
-        t.user_data.users user jid `Offline t.user_data.otr_config
-    in
-    let from = JID.string_of_jid jid in
+  | None -> t.user_data.received (`Local "error") "no from in stanza" ; return_unit
+  | Some jidt ->
+    let jid, resource = User.bare_jid jidt in
+    let user = t.user_data.find_or_create jid in
+    let session = t.user_data.find_or_create_session user resource in
     let msg dir enc txt =
-      t.user_data.message jid dir enc txt
+      let user = match t.user_data.find jid with Some x -> x | None -> assert false in
+      t.user_data.message user dir enc txt
     in
     match stanza.content.body with
-    | None ->
-      (*    msg (`Local "") false "**empty message**" ; *)
-      return_unit
+    | None -> return_unit
     | Some v ->
       let ctx, out, ret = Otr.Handshake.handle session.User.otr v in
-      let user = User.find_or_add jid t.user_data.users in
-      User.update_otr t.user_data.users user session ctx ;
+      t.user_data.update_session user { session with User.otr = ctx } ;
+      let from = `From (JID.string_of_jid jidt) in
       List.iter (function
           | `Established_encrypted_session ssid ->
             msg (`Local "OTR") false ("encrypted connection established (ssid " ^ ssid ^ ")") ;
-            ( match User.find_fp user ctx with
-              | _, Some fps ->
-                let verified_key = List.exists (fun x -> x.User.verified) user.User.otr_fingerprints in
-                let verify = "verify /fingerprint [fp] over second channel" in
-                let otrmsg =
-                  match verified_key, fps.User.verified, fps.User.session_count with
-                  | _, true, _ -> "verified OTR key"
-                  | true, false, 0 -> "POSSIBLE BREAKIN ATTEMPT! new unverified key with a different verified key on disk! " ^ verify
-                  | true, false, n -> "unverified key (used " ^ (string_of_int n) ^ " times) with a different verified key on disk! please " ^ verify
-                  | false, false, 0 -> "new unverified key! please " ^ verify
-                  | false, false, n -> "unverified key (used " ^ (string_of_int n) ^ " times). please " ^ verify
-                in
-                msg (`Local "OTR key") false otrmsg ;
-                User.increase_fp t.user_data.users jid fps ;
-              | _, None ->
-                msg (`Local "PROBLEM") false "shouldn't happen - OTR established but couldn't find fingerprint" )
-          | `Warning w -> msg (`Local "OTR warning") false w
-          | `Received_error e -> msg (`From from) false e
-          | `Received m -> msg (`From from) false m
-          | `Received_encrypted e -> msg (`From from) true e)
+            let raw_fp = match User.otr_fingerprint ctx with _, Some fp -> fp | _ -> assert false in
+            let user = match t.user_data.find jid with Some x -> x | None -> assert false in
+            let fp = t.user_data.find_inc_fp user resource raw_fp in
+            let verified_key = List.exists (fun x -> x.User.verified) user.User.otr_fingerprints in
+            let verify = "verify /fingerprint [fp] over second channel" in
+            let otrmsg =
+              match verified_key, fp.User.verified, pred fp.User.session_count with
+              | _, true, _ -> "verified OTR key"
+              | true, false, 0 -> "POSSIBLE BREAKIN ATTEMPT! new unverified key with a different verified key on disk! " ^ verify
+              | true, false, n -> "unverified key (used " ^ (string_of_int n) ^ " times) with a different verified key on disk! please " ^ verify
+              | false, false, 0 -> "new unverified key! please " ^ verify
+              | false, false, n -> "unverified key (used " ^ (string_of_int n) ^ " times). please " ^ verify
+            in
+            msg (`Local "OTR key") false otrmsg
+          | `Warning w            -> msg (`Local "OTR warning") false w
+          | `Received_error e     -> msg from false e
+          | `Received m           -> msg from false m
+          | `Received_encrypted e -> msg from true e)
         ret ;
       match out with
       | None -> return ()
@@ -93,76 +92,65 @@ let message_error t ?id ?jid_from ?jid_to ?lang error =
     | x when x = "" -> err
     | x -> err ^ ": " ^ x
   in
-  t.user_data.received ((`From jid), msg) ;
+  t.user_data.received (`From jid) msg ;
   return_unit
 
 let presence_callback t stanza =
   let log = t.user_data.received in
   (match stanza.jid_from with
-   | None     -> log ((`Local "error"), "presence received without sending jid, ignoring")
-   | Some jid ->
-     let user = User.find_or_add jid t.user_data.users in
-     let stat, statstring = match stanza.content.status with
+   | None     -> log (`Local "error") "presence received without sending jid, ignoring"
+   | Some jidt ->
+     let jid, resource = User.bare_jid jidt in
+     let status, statstring = match stanza.content.status with
        | None -> (None, "")
        | Some x when x = "" -> (None, "")
        | Some x -> (Some x, " - " ^ x)
      in
-     let userid, resource = User.bare_jid jid in
-     let handle_presence newp () =
+     let handle_presence newp =
+       let user = t.user_data.find_or_create jid in
+       let session = t.user_data.find_or_create_session user resource in
        let prio = match stanza.content.priority with
-           | None -> 0
-           | Some x -> x
+         | None -> 0
+         | Some x -> x
        in
-       let session = {
-         User.resource = resource ;
-         User.presence = newp ;
-         User.status   = stat ;
-         User.priority = prio ;
-         User.otr      = Otr.State.new_session t.user_data.otr_config () ;
-         User.dispose  = false ;
-       } in
-       let session, old, similar =
-         match User.find_session user resource with
-         | Some s -> ({ session with User.otr = s.User.otr }, Some s, None)
-         | None -> match User.find_similar_session user resource with
-           | Some s -> ({ session with User.otr = s.User.otr }, None, Some s)
-           | None -> (session, None, None)
+       let old = User.presence_to_char session.User.presence in
+       let session =
+         { session with
+           User.presence = newp ;
+           User.status   = status ;
+           User.priority = prio ;
+         }
        in
-
-       let user = User.replace_session t.user_data.users user session in
-       let old = match old with
-         | None   -> "_"
-         | Some o -> User.presence_to_char o.User.presence
-       in
-       User.maybe_dispose t.user_data.users user similar ;
+       let user = match t.user_data.find jid with Some x -> x | None -> assert false in
+       t.user_data.update_session user session ;
 
        let n = User.presence_to_char newp in
        let nl = User.presence_to_string newp in
        let info =
          "presence changed: [" ^ old ^ ">" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring
        in
-       log (`From (userid ^ "/" ^ resource), info)
+       log (`From (JID.string_of_jid jidt)) info
      in
-     let auth_info txt =
-       let hlp = ("(use /authorization [arg])" ^ statstring) in
-       t.user_data.message jid (`Local txt) false hlp
+     let handle_subscription txt hlp =
+       let user = t.user_data.find_or_create jid in
+       t.user_data.message user (`Local txt) false hlp
      in
      match stanza.content.presence_type with
      | None ->
        begin
          match stanza.content.show with
-         | None -> handle_presence `Online ()
-         | Some ShowChat -> handle_presence `Free ()
-         | Some ShowAway -> handle_presence `Away ()
-         | Some ShowDND -> handle_presence `DoNotDisturb ()
-         | Some ShowXA -> handle_presence `ExtendedAway ()
+         | None          -> handle_presence `Online
+         | Some ShowChat -> handle_presence `Free
+         | Some ShowAway -> handle_presence `Away
+         | Some ShowDND  -> handle_presence `DoNotDisturb
+         | Some ShowXA   -> handle_presence `ExtendedAway
        end
-     | Some Probe -> auth_info "probed"
-     | Some Subscribe -> auth_info "subscription request"
-     | Some Subscribed -> auth_info "successfully subscribed"
-     | Some Unsubscribe -> auth_info "shouldn't see this unsubscribe"
-     | Some Unsubscribed -> auth_info "you're so off my buddy list"
-     | Some Unavailable -> handle_presence `Offline ()
+     | Some Probe        -> handle_subscription "probed" statstring
+     | Some Subscribe    -> handle_subscription "subscription request" ("(use /authorization allow cancel) to accept/deny" ^ statstring)
+     | Some Subscribed   -> handle_subscription "you successfully subscribed to their presence update" statstring
+     | Some Unsubscribe  -> handle_subscription "wants to unsubscribe from your presence" ("(use /authorization cancel allow) to accept/deny" ^ statstring)
+     | Some Unsubscribed -> handle_subscription "you have been unsubscribed from their buddy list" statstring
+     | Some Unavailable  -> handle_presence `Offline
   ) ;
   return_unit
 
@@ -178,13 +166,12 @@ let presence_error t ?id ?jid_from ?jid_to ?lang error =
     | x when x = "" -> err
     | x -> err ^ ": " ^ x
   in
-  t.user_data.received ((`From jid), msg) ;
+  t.user_data.received (`From jid) msg ;
   return_unit
 
 
-let roster_callback users item =
+let roster_callback find item =
   try
-    let user = User.find_or_add item.Roster.jid users in
     let subscription =
       match item.Roster.subscription with
       | Roster.SubscriptionRemove -> assert false
@@ -199,17 +186,20 @@ let roster_callback users item =
       app @ ask
     in
     let name = if item.Roster.name = "" then None else Some item.Roster.name in
-    let t = { user with
-              User.name = name ;
-              User.groups = item.Roster.group ;
-              subscription ; properties }
-    in
-    Some t
+    let groups = item.Roster.group in
+    let jid, _ = User.bare_jid item.Roster.jid in
+    match find jid with
+    | Some user -> Some { user with User.name = name ;
+                                    User.groups = groups ;
+                                    User.subscription = subscription ;
+                                    User.properties = properties }
+    | None ->
+      Some (User.new_user ~jid ~name ~groups ~subscription ~properties ())
   with
   _ -> None
 
 let session_callback t =
-  let err txt = t.user_data.received ((`Local "handling error"), txt)
+  let err txt = t.user_data.received (`Local "handling error") txt
   in
   register_iq_request_handler t Version.ns_version
     (fun ev _jid_from _jid_to _lang () ->
@@ -247,8 +237,7 @@ let session_callback t =
          | Xml.Xmlelement ((ns_roster, "query"), attrs, els) when ns_roster = Roster.ns_roster ->
            let _, items = Roster.decode attrs els in
            if List.length items = 1 then
-             let users = t.user_data.users in
-             let mods = List.map (roster_callback users) items in
+             let mods = List.map (roster_callback t.user_data.find) items in
              List.iter (function None -> () | Some x -> t.user_data.notify true x) mods ;
              return (IQResult None)
            else
@@ -275,8 +264,7 @@ let session_callback t =
 
   Roster.get t (fun ?jid_from ?jid_to ?lang ?ver items ->
       ignore jid_from ; ignore jid_to ; ignore lang ; ignore ver ;
-      let users = t.user_data.users in
-      let mods = List.map (roster_callback users) items in
+      let mods = List.map (roster_callback t.user_data.find) items in
       List.iter (function None -> () | Some x -> t.user_data.notify false x) mods ;
       return () ) >>= fun () ->
 
@@ -302,8 +290,8 @@ let connect ?out config user_data _ =
   and port = config.port
   in
 
-  let err_log msg data = user_data.received ((`Local "error", (msg ^ ": " ^ data))) in
-  let info info data = user_data.received (`Local info, data) in
+  let err_log msg data = user_data.received (`Local "error") (msg ^ ": " ^ data) in
+  let info info data = user_data.received (`Local info) data in
 
   match
     ( try Some ((Unix.gethostbyname server).Unix.h_addr_list.(0))

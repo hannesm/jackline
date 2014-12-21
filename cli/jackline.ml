@@ -17,11 +17,14 @@ let start_client cfgdir debug () =
   Persistency.load_users cfgdir >>= fun (users) ->
 
   let history = LTerm_history.create [] in
-  let user = User.find_or_add config.Config.jid users in
-  let session =
-    User.ensure_session users user config.Config.jid `Offline config.Config.otr_config
-  in
-  let state = Cli_state.empty_ui_state cfgdir user.User.jid session.User.resource users in
+
+  (* setup self contact *)
+  let jid, resource = User.bare_jid config.Config.jid in
+  let user = User.find_or_create users jid in
+  let user, _ = User.find_or_create_session user resource config.Config.otr_config in
+  User.Users.replace users jid user ;
+
+  let state = Cli_state.empty_ui_state cfgdir jid resource users in
   let n, log = S.create (`Local "welcome to jackline", "use /help for some help") in
 
   ( if debug then
