@@ -31,6 +31,10 @@ type user_data = {
   failure                : exn -> unit Lwt.t ;
 }
 
+let validate_utf8 txt =
+  try let _ = Zed_utf8.validate txt in txt
+  with Zed_utf8.Invalid (err, esc) -> err ^ ": " ^ esc
+
 let message_callback (t : user_data session_data) stanza =
   match stanza.jid_from with
   | None -> t.user_data.received (`Local "error") "no from in stanza" ; return_unit
@@ -39,10 +43,7 @@ let message_callback (t : user_data session_data) stanza =
     let user = t.user_data.find_or_create jid in
     let session = t.user_data.find_or_create_session user resource in
     let msg dir enc txt =
-      let txt =
-        try let _ = Zed_utf8.validate txt in txt
-        with Zed_utf8.Invalid (err, esc) -> err ^ ": " ^ esc
-      in
+      let txt = validate_utf8 txt in
       let user = match t.user_data.find jid with Some x -> x | None -> assert false in
       t.user_data.message user dir enc txt ;
     in
@@ -108,7 +109,7 @@ let presence_callback t stanza =
      let status, statstring = match stanza.content.status with
        | None -> (None, "")
        | Some x when x = "" -> (None, "")
-       | Some x -> (Some x, " - " ^ x)
+       | Some x -> let data = validate_utf8 x in (Some data, " - " ^ data)
      in
      let handle_presence newp =
        let user = t.user_data.find_or_create jid in
