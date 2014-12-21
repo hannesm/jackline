@@ -25,6 +25,7 @@ depends: [
   "x509" {>= "0.2.1"}
   "lwt"
   "otr"
+  "zed"
   "lambda-term"
   "react"
   "type_conv"
