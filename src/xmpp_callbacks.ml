@@ -49,16 +49,16 @@ let message_callback (t : user_data session_data) stanza =
       User.update_otr t.user_data.users user session ctx ;
       List.iter (function
           | `Established_encrypted_session ssid ->
-            msg (`Local "OTR") false ("encrypted OTR connection established (session id " ^ ssid ^ ")") ;
+            msg (`Local "OTR") false ("encrypted connection established (ssid " ^ ssid ^ ")") ;
             ( match User.find_fp user ctx with
               | _, Some fps ->
                 let verified_key = List.exists (fun x -> x.User.verified) user.User.otr_fingerprints in
-                let verify = "verify the fingerprint over second channel" in
+                let verify = "verify /fingerprint [fp] over second channel" in
                 let otrmsg =
                   match verified_key, fps.User.verified, fps.User.session_count with
-                  | _, true, _ -> "verified OTR fingerprint"
-                  | true, false, 0 -> "POSSIBLE BREAKIN ATTEMPT! new unverified OTR fingerprint, verified fingerprint present for contact! " ^ verify
-                  | true, false, n -> "unverified OTR fingerprint (used " ^ (string_of_int n) ^ " times), verified fingerprint present for contact! please " ^ verify
+                  | _, true, _ -> "verified OTR key"
+                  | true, false, 0 -> "POSSIBLE BREAKIN ATTEMPT! new unverified key with a different verified key on disk! " ^ verify
+                  | true, false, n -> "unverified key (used " ^ (string_of_int n) ^ " times) with a different verified key on disk! please " ^ verify
                   | false, false, 0 -> "new unverified key! please " ^ verify
                   | false, false, n -> "unverified key (used " ^ (string_of_int n) ^ " times). please " ^ verify
                 in
