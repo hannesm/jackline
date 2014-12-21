@@ -51,7 +51,7 @@ let message_callback (t : user_data session_data) stanza =
       List.iter (function
           | `Established_encrypted_session ssid ->
             msg (`Local "OTR") false ("encrypted connection established (ssid " ^ ssid ^ ")") ;
-            let raw_fp = match User.otr_fingerprint ctx with _, Some fp -> fp | _ -> assert false in
+            let raw_fp = match User.otr_fingerprint ctx with Some fp -> fp | _ -> assert false in
             let user = match t.user_data.find jid with Some x -> x | None -> assert false in
             let fp = t.user_data.find_inc_fp user resource raw_fp in
             let verified_key = List.exists (fun x -> x.User.verified) user.User.otr_fingerprints in

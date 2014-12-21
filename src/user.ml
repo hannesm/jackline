@@ -125,10 +125,6 @@ type message = {
   persistent : bool ; (* internal use only (mark whether this needs to be written) *)
 } with sexp
 
-let message direction encrypted received message =
-  { direction ; encrypted ; received ;
-    timestamp = Unix.time () ; message ; persistent = false }
-
 type user = {
   jid               : string ; (* user@domain, unique key *)
   name              : string option ;
@@ -144,6 +140,10 @@ type user = {
 let new_user ~jid ?(name=None) ?(groups=[]) ?(subscription=`None) ?(otr_fingerprints=[]) ?(preserve_messages=false) ?(properties=[]) ?(active_sessions=[]) () =
   let message_history = [] in
   { jid ; name ; groups ; subscription ; properties ; otr_fingerprints ; preserve_messages ; active_sessions ; message_history }
+
+let message direction encrypted received message =
+  { direction ; encrypted ; received ;
+    timestamp = Unix.time () ; message ; persistent = false }
 
 let insert_message u dir enc rcvd msg =
   { u with message_history = (message dir enc rcvd msg) :: u.message_history }
@@ -166,8 +166,8 @@ let fingerprint dsa_pub =
 
 let otr_fingerprint otr =
   match otr.Otr.State.their_dsa with
-  | None -> ("No OTR", None)
-  | Some x -> let fp = fingerprint x in (format_fp fp, Some fp)
+  | None   -> None
+  | Some x -> Some (fingerprint x)
 
 let replace_fp u fp =
   let otr_fingerprints =

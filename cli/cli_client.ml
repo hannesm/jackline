@@ -204,9 +204,9 @@ let horizontal_line user session fg_color buddy_width scrollback show_buddy_list
           " - " ^ stripped
       in
       let otrcolor, otr = match otr_fingerprint s.otr with
-        | _ , Some raw when verified_fp user raw -> (fg_color, " - OTR verified")
-        | fp, Some _                             -> (red, " - unverified OTR: " ^ fp)
-        | _ , None                               -> (red, " - no OTR")
+        | Some raw when verified_fp user raw -> (fg_color, " - OTR verified")
+        | Some raw                           -> (red, " - unverified OTR: " ^ (User.format_fp raw))
+        | None                               -> (red, " - no OTR")
       in
       (userid user s, " -- " ^ presence, status, otr, otrcolor)
     | None -> (user.jid, "", "", "", black)
