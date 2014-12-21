@@ -246,7 +246,7 @@ let handle_add s failure msg a =
      with e -> failure e)
   with _ -> msg "error" "parsing of jid failed (user@node)"
 
-let handle_fingerprint users dump fp user =
+let handle_fingerprint users dump err fp user =
   match User.active_session user with
   | Some session when User.encrypted session.User.otr ->
     let manual_fp = string_normalize_fingerprint fp in
@@ -256,9 +256,9 @@ let handle_fingerprint users dump fp user =
         let user = User.replace_fp user { otr_fp with User.verified = true } in
         User.Users.replace users user.User.jid user ;
         dump ("fingerprint " ^ fp ^ " is now marked verified") ;
-        None
-      | _ -> Some "provided fingerprint does not match the one of this active session" )
-  | _ -> Some "no active OTR session"
+        return_unit
+      | _ -> err "provided fingerprint does not match the one of this active session" )
+  | _ -> err "no active OTR session"
 
 let handle_log users dump user v a =
   if user.User.preserve_messages <> v then
@@ -508,9 +508,7 @@ let exec ?out input state config log redraw =
       | None   -> handle_help (msg ~prefix:"argument required") (Some "fingerprint")
       | Some fp ->
         if self then err "won't talk to myself" else
-          match handle_fingerprint state.users dump fp contact with
-          | None -> return_unit
-          | Some x -> err x )
+          handle_fingerprint state.users dump err fp contact )
   | ("authorization", x) ->
     ( match !xmpp_session, x with
       | None  , _      -> err "not connected"
