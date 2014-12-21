@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: f6a8f2c6e4b777cfa79d677ce4a05520)
+# DO NOT EDIT (digest: f73f8f08125d6156ce239eb1f1c87126)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -33,6 +33,7 @@ true: annot, bin_annot
 <src/*.ml{,i,y}>: pkg_sexplib.syntax
 <src/*.ml{,i,y}>: pkg_tls
 <src/*.ml{,i,y}>: pkg_tls.lwt
+<src/*.ml{,i,y}>: pkg_zed
 # Library xmpp_client_cli
 "cli/xmpp_client_cli.cmxs": use_xmpp_client_cli
 "cli/cli_config.cmx": for-pack(Xmpp_client_cli)
@@ -54,6 +55,7 @@ true: annot, bin_annot
 "cli/jackline.native": pkg_sexplib.syntax
 "cli/jackline.native": pkg_tls
 "cli/jackline.native": pkg_tls.lwt
+"cli/jackline.native": pkg_zed
 "cli/jackline.native": use_xmpp_client
 "cli/jackline.native": use_xmpp_client_cli
 <cli/*.ml{,i,y}>: pkg_erm_xmpp
@@ -68,6 +70,7 @@ true: annot, bin_annot
 <cli/*.ml{,i,y}>: pkg_sexplib.syntax
 <cli/*.ml{,i,y}>: pkg_tls
 <cli/*.ml{,i,y}>: pkg_tls.lwt
+<cli/*.ml{,i,y}>: pkg_zed
 <cli/*.ml{,i,y}>: use_xmpp_client
 <cli/*.ml{,i,y}>: use_xmpp_client_cli
 # OASIS_STOP
