@@ -21,7 +21,7 @@ remove: [
 depends: [
   "ocamlfind"
   "erm_xmpp" {>= "0.3"}
-  "tls" {>= "0.2.1"}
+  "tls" {>= "0.3.0"}
   "x509" {>= "0.2.1"}
   "lwt"
   "otr"
