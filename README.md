@@ -2,6 +2,8 @@
 
 ### [Jackline](https://en.wikipedia.org/wiki/Jackline)
 
+![Screenshot](https://berlin.ccc.de/~hannes/jackline.png)
+
 This is unreleased alpha software... Testers and feedback welcome!
 
 The goal is a minimalistic graphical user interface for a secure (fail hard!) and trustworthy XMPP client.
