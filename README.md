@@ -2,7 +2,7 @@
 
 ### [Jackline](https://en.wikipedia.org/wiki/Jackline)
 
-![Screenshot](https://berlin.ccc.de/~hannes/jackline.png)
+![Screenshot](http://berlin.ccc.de/~hannes/jackline.png)
 
 This is unreleased alpha software... Testers and feedback welcome!
 
