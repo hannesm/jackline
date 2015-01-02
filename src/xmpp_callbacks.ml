@@ -311,16 +311,17 @@ let connect ?out config user_data _ =
   | None -> err_log "couldn't resolve hostname" server ; return None
   | Some inet_addr ->
     let sockaddr = Unix.ADDR_INET (inet_addr, port) in
-    (try_lwt PlainSocket.open_connection sockaddr >>= fun s -> return (Some s)
-     with _ -> return None ) >>= fun socket ->
     let txt =
       let addr = Unix.string_of_inet_addr inet_addr in
       addr ^ " (" ^ server ^ ") on port " ^ (string_of_int port)
     in
+    info "trying to connect to" txt ;
+    (try_lwt PlainSocket.open_connection sockaddr >>= fun s -> return (Some s)
+     with _ -> return None ) >>= fun socket ->
     match socket with
-    | None -> err_log "failed to open a connection to" txt ; return None
+    | None -> err_log "failed to connect to" txt ; return None
     | Some socket_data ->
-        info "opened connection to" txt ;
+        info "connected to" txt ;
         let module Socket_module = struct type t = PlainSocket.socket
           let socket = socket_data
           include PlainSocket
