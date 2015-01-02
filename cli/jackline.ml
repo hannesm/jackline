@@ -25,7 +25,7 @@ let start_client cfgdir debug () =
   User.Users.replace users jid user ;
 
   let state = Cli_state.empty_ui_state cfgdir jid resource users in
-  let n, log = S.create (`Local "welcome to jackline", "use /help for some help") in
+  let n, log = S.create (`Local "welcome to jackline", "type /help for help") in
 
   ( if debug then
       Persistency.open_append (Unix.getenv "PWD") "out.txt" >|= fun fd ->
