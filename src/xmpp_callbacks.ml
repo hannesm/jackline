@@ -315,7 +315,7 @@ let connect ?out config user_data _ =
       let addr = Unix.string_of_inet_addr inet_addr in
       addr ^ " (" ^ server ^ ") on port " ^ (string_of_int port)
     in
-    info "trying to connect to" txt ;
+    info "connecting" txt ;
     (try_lwt PlainSocket.open_connection sockaddr >>= fun s -> return (Some s)
      with _ -> return None ) >>= fun socket ->
     match socket with
