@@ -98,7 +98,7 @@ let rec line_wrap ~max_length entries acc : string list =
     line_wrap ~max_length remaining (entry::acc)
   | [] -> acc
 
-let log_buffer log width =
+let format_log log =
   let open User in
   let print_log { direction ; timestamp ; message ; _ } =
     let time =
@@ -114,8 +114,7 @@ let log_buffer log width =
     in
     time ^ from ^ " " ^ message
   in
-  let entries = List.map print_log log in
-  line_wrap ~max_length:width entries []
+  List.map print_log log
 
 let format_buddies buddies users self active notifications width =
   List.map (fun id ->
@@ -320,10 +319,9 @@ let make_prompt size time network state redraw =
   let main_size = size.rows - log_size - 3 (* status + hline + readline *) in
   let buddy_width = 24 in
   let chat_width =
-    if state.show_buddy_list then
-      size.cols - buddy_width - 1
-    else
-      size.cols
+    match state.window_mode with
+    | BuddyList        -> size.cols - buddy_width - 1
+    | FullScreen | Raw -> size.cols
   in
 
   if main_size <= 6 || chat_width <= 10 then
@@ -339,7 +337,10 @@ let make_prompt size time network state redraw =
           else
             statusses
         in
-        let entries = log_buffer entries size.cols in
+        let entries =
+          let entries = format_log entries in
+          line_wrap ~max_length:size.cols entries []
+        in
         let data = pad_l_rev "" log_size entries in
         String.concat "\n" data
       in
@@ -355,31 +356,59 @@ let make_prompt size time network state redraw =
       let fg_color = color_session active self active_session in
 
       let main_window =
-        let chat =
-          let data =
-            if active = self then
-              log_buffer statusses chat_width
-            else
-              let messages = active.User.message_history in
-              line_wrap ~max_length:chat_width (format_messages messages) []
-          in
+        let data =
+          if active = self then
+            format_log statusses
+          else
+            format_messages active.User.message_history
+        in
+        let scroll data =
           (* data is already in right order -- but we need to strip scrollback *)
           let elements = drop (state.scrollback * main_size) (List.rev data) in
           pad_l_rev "" main_size (List.rev elements)
         in
 
-        if state.show_buddy_list then
-          (let buddies = buddy_list state.users state.show_offline self active notifications main_size buddy_width in
-           let comb = List.combine buddies chat in
-           let pipe = S (Zed_utf8.singleton (UChar.of_int 0x2502)) in
-           List.map (fun (buddy, chat) ->
-               buddy @ [ B_fg fg_color ; pipe ; E_fg ; S chat ; S "\n" ])
-             comb)
-        else
+        match state.window_mode with
+        | BuddyList ->
+          let chat = line_wrap ~max_length:chat_width data [] in
+          let chat = scroll chat in
+
+          let buddies = buddy_list state.users state.show_offline self active notifications main_size buddy_width in
+          let comb = List.combine buddies chat in
+          let pipe = S (Zed_utf8.singleton (UChar.of_int 0x2502)) in
+          List.map (fun (buddy, chat) ->
+              buddy @ [ B_fg fg_color ; pipe ; E_fg ; S chat ; S "\n" ])
+            comb
+
+        | FullScreen ->
+          let chat = line_wrap ~max_length:chat_width data [] in
+          let chat = scroll chat in
           List.map (fun chat -> [ S chat ; S "\n"]) chat
+
+        | Raw ->
+          let data = List.map (fun x -> x.User.message) active.User.message_history in
+          let rec str_to_lst = function
+            | x when String.contains x '\n' ->
+              let pre = String.(sub x 0 (index x '\n')) in
+              let plen = succ (String.length pre) in
+              let post = String.(sub x plen (length x - plen)) in
+              str_to_lst pre @ str_to_lst post
+            | x when Zed_utf8.length x > chat_width ->
+              let part1, part2 = Zed_utf8.break x chat_width in
+              str_to_lst part1 @ str_to_lst part2
+            | x -> [ x ]
+          in
+          let wrapped = List.fold_left (fun acc msg -> acc @ str_to_lst msg) [] data in
+          let elements = drop (state.scrollback * main_size) wrapped in
+          let chat = pad_l_rev "" main_size (List.rev elements) in
+          List.map (fun x -> [ S x ; S "\n" ]) chat
       in
 
-      let hline = horizontal_line active active_session fg_color buddy_width state.scrollback state.show_buddy_list size.cols in
+      let showing_buddies = match state.window_mode with
+        | BuddyList -> true
+        | FullScreen | Raw -> false
+      in
+      let hline = horizontal_line active active_session fg_color buddy_width state.scrollback showing_buddies size.cols in
 
       let notify = List.length notifications > 0 in
       let log = active.User.preserve_messages in
@@ -422,6 +451,7 @@ let activate_user state active =
      state.active_contact      <- active ;
      state.scrollback          <- 0 ;
      state.notifications       <- List.filter (fun a -> a <> active) state.notifications ;
+     state.window_mode         <- BuddyList ;
      force_redraw ())
 
 let navigate_message_buffer state direction =
@@ -482,7 +512,7 @@ class read_line ~term ~network ~history ~state = object(self)
       state.show_offline <- not state.show_offline ;
       force_redraw ()
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = f12 ->
-      state.show_buddy_list <- not state.show_buddy_list ;
+      state.window_mode <- next_display_mode state.window_mode ;
       force_redraw ()
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrlq ->
       if List.length state.notifications > 0 then

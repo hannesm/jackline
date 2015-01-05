@@ -1,4 +1,14 @@
 
+type display_mode =
+  | BuddyList
+  | FullScreen
+  | Raw
+
+let next_display_mode = function
+  | BuddyList  -> FullScreen
+  | FullScreen -> Raw
+  | Raw        -> BuddyList
+
 type ui_state = {
   config_directory            : string                    ; (* set initially *)
   user                        : string                    ; (* set initially *)
@@ -12,7 +22,7 @@ type ui_state = {
   mutable notifications       : string list               ; (* list to blink *)
 
   mutable show_offline        : bool                      ; (* F5 stuff *)
-  mutable show_buddy_list     : bool                      ; (* F12 stuff *)
+  mutable window_mode         : display_mode              ; (* F12 stuff *)
   mutable scrollback          : int                       ; (* scroll-pgup/down state *)
 
   mutable last_status         : (User.direction * string) ; (* internal use only *)
@@ -21,22 +31,22 @@ type ui_state = {
 let empty_ui_state config_directory user resource users =
   let last_status = (`Local "", "") in
   {
-    config_directory              ;
-    user                          ;
-    resource                      ;
+    config_directory                ;
+    user                            ;
+    resource                        ;
 
-    users                         ;
+    users                           ;
 
-    active_contact      = user    ;
-    last_active_contact = user    ;
+    active_contact      = user      ;
+    last_active_contact = user      ;
 
-    notifications       = []      ;
+    notifications       = []        ;
 
-    show_offline        = true    ;
-    show_buddy_list     = true    ;
-    scrollback          = 0       ;
+    show_offline        = true      ;
+    window_mode         = BuddyList ;
+    scrollback          = 0         ;
 
-    last_status                   ;
+    last_status                     ;
 }
 
 let add_status state dir msg =
