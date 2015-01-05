@@ -66,36 +66,50 @@ let show_buddies users show_offline self active notifications =
       | false, false, _        -> id :: acc)
     (User.keys users) []
 
-let rec line_wrap ~max_length entries acc : string list =
+let rec line_wrap ?raw ~max_length entries acc : string list =
+  let pre = match raw with
+    | None   -> "  "
+    | Some _ -> ""
+  in
   match entries with
   | entry::remaining when String.contains entry '\n' ->
-    let part1     = String.sub entry 0 (String.index entry '\n') in
-    let part1_len = 1 + String.length part1 in (* +1: account for \n *)
-    let part2     = "  " ^ String.sub entry part1_len ((String.length entry) - part1_len) in
+    let part1     = String.(sub entry 0 (index entry '\n')) in
+    let part1_len = succ (String.length part1) in
+    let part2     = pre ^ String.sub entry part1_len ((String.length entry) - part1_len) in
     let remaining =
-      match String.trim part1 = "", String.trim part2 = "" with
-      | true , true  -> remaining
-      | false, true  -> part1::remaining
-      | true , false -> part2::remaining
-      | false, false -> part2::part1::remaining
+      match raw with
+      | Some _ -> part2::part1::remaining
+      | None   ->
+        match String.trim part1 = "", String.trim part2 = "" with
+        | true , true  -> remaining
+        | false, true  -> part1::remaining
+        | true , false -> part2::remaining
+        | false, false -> part2::part1::remaining
     in
-    line_wrap ~max_length remaining acc
+    line_wrap ?raw ~max_length remaining acc
   | entry::remaining when (Zed_utf8.length entry) > max_length ->
-    let wrap_point =
-      let last_space =
-        try String.rindex_from entry max_length ' '
-        with | Not_found -> max_length
-             | Invalid_argument _ -> max_length
-      in
-      if last_space > max_length - 10 then
-        last_space
-      else
-        max_length
+    let part1, part2 =
+      let p1, p2 = Zed_utf8.break entry max_length in
+      match raw with
+      | None ->
+        let n = 10 in
+        let last_10 = Zed_utf8.sub p1 (max_length - n) n in
+        let rec find_space idx =
+          match Zed_utf8.get last_10 idx with
+          | x when x = UChar.of_int 0x20 -> Some idx
+          | _ when idx = 0               -> None
+          | _                            -> find_space (pred idx)
+        in
+        ( match find_space 10 with
+          | None   -> (p1, pre ^ String.trim p2)
+          | Some x ->
+            let p1, p2 = Zed_utf8.break entry (x + (max_length - n)) in
+            (p1, pre ^ String.trim p2) )
+      | Some _ -> (p1, p2)
     in
-    let part1, part2 = Zed_utf8.break entry wrap_point in
-    line_wrap ~max_length (("  " ^ String.trim part2)::part1::remaining) acc
+    line_wrap ?raw ~max_length (part2::part1::remaining) acc
   | entry::remaining ->
-    line_wrap ~max_length remaining (entry::acc)
+    line_wrap ?raw ~max_length remaining (entry::acc)
   | [] -> acc
 
 let format_log log =
@@ -386,21 +400,12 @@ let make_prompt size time network state redraw =
           List.map (fun chat -> [ S chat ; S "\n"]) chat
 
         | Raw ->
-          let data = List.map (fun x -> x.User.message) active.User.message_history in
-          let rec str_to_lst = function
-            | x when String.contains x '\n' ->
-              let pre = String.(sub x 0 (index x '\n')) in
-              let plen = succ (String.length pre) in
-              let post = String.(sub x plen (length x - plen)) in
-              str_to_lst pre @ str_to_lst post
-            | x when Zed_utf8.length x > chat_width ->
-              let part1, part2 = Zed_utf8.break x chat_width in
-              str_to_lst part1 @ str_to_lst part2
-            | x -> [ x ]
+          let data = List.map
+              (fun x -> x.User.message)
+              active.User.message_history
           in
-          let wrapped = List.fold_left (fun acc msg -> acc @ str_to_lst msg) [] data in
-          let elements = drop (state.scrollback * main_size) wrapped in
-          let chat = pad_l_rev "" main_size (List.rev elements) in
+          let wrapped = line_wrap ~raw:() ~max_length:chat_width data [] in
+          let chat = scroll wrapped in
           List.map (fun x -> [ S x ; S "\n" ]) chat
       in
 
