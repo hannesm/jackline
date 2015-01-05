@@ -400,9 +400,12 @@ let make_prompt size time network state redraw =
           List.map (fun chat -> [ S chat ; S "\n"]) chat
 
         | Raw ->
-          let data = List.map
-              (fun x -> x.User.message)
-              active.User.message_history
+          let data = List.map (fun x -> x.User.message)
+              (List.filter (fun x -> match x.User.direction with
+                   | `Local _ -> false
+                   | `From _ -> true
+                   | `To _ -> false)
+                  active.User.message_history)
           in
           let wrapped = line_wrap ~raw:() ~max_length:chat_width data [] in
           let chat = scroll wrapped in
