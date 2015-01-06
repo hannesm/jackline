@@ -35,13 +35,18 @@ let start_client cfgdir debug () =
 
   Cli_client.init_system (log ?step:None) ;
 
+  ignore (LTerm.save_state term);  (* save the terminal state *)
+
   Cli_client.loop ?out config term history state n (log ?step:None) >>= fun state ->
 
   ( match out with
     | None -> return_unit
     | Some fd -> Lwt_unix.close fd ) >>= fun () ->
 
-  Persistency.dump_users cfgdir state.Cli_state.users
+  Persistency.dump_users cfgdir state.Cli_state.users >>
+
+  LTerm.load_state term   (* restore the terminal state *)
+
 
 
 let config_dir = ref ""
