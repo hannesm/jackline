@@ -64,7 +64,7 @@ Active keys:
 - `Ctrl-q` jumps to next notification
 - `Ctrl-x` jumps to last active user
 - `F5` toggles display of offline contacts
-- `F12` toggles display of contact list
+- `F12` toggles between display of contact list, full screen chat, and raw (only received messages)
 - `Ctrl-PgUp`, `Ctrl-PgDown` scrolls chat
 - `<tab>` tab completion (largest prefix)
 - `Ctrl-a`, `Ctrl-e`, `Ctrl-k`, `Ctrl-left`, `Ctrl-right`, `Ctrl-f`, `Ctrl-b`, `Ctrl-n`, `Ctrl-p` usual moving commands
