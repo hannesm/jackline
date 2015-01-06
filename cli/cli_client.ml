@@ -139,7 +139,7 @@ let format_buddies buddies users self active notifications width =
         | Some s -> s.User.presence
       in
       let fg = color_session u self session in
-      let bg = if u = active then lblack else default in
+      let bg = if u = active then white else default in
       let f, t =
         if u = self then
           ("{", "}")
