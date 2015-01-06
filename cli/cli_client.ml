@@ -46,9 +46,9 @@ let rec find_index id i = function
 
 let color_session u su = function
   | Some x when User.(encrypted x.otr) -> green
-  | Some _ when u = su -> black
+  | Some _ when u = su -> default
   | Some _ -> red
-  | None -> black
+  | None -> default
 
 let show_buddies users show_offline self active notifications =
   List.fold_right (fun id acc ->
@@ -139,7 +139,7 @@ let format_buddies buddies users self active notifications width =
         | Some s -> s.User.presence
       in
       let fg = color_session u self session in
-      let bg = if u = active then white else lwhite in
+      let bg = if u = active then lblack else default in
       let f, t =
         if u = self then
           ("{", "}")
@@ -233,7 +233,7 @@ let horizontal_line user session fg_color buddy_width scrollback show_buddy_list
         | None                               -> (red, " - no OTR")
       in
       (userid user s, " -- " ^ presence, status, otr, otrcolor)
-    | None -> (user.jid, "", "", "", black)
+    | None -> (user.jid, "", "", "", default)
   in
   let pre =
     if show_buddy_list then
