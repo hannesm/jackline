@@ -212,18 +212,6 @@ let roster_callback find item =
 let session_callback t =
   let err txt = t.user_data.received (`Local "handling error") txt
   in
-  register_iq_request_handler t Version.ns_version
-    (fun ev _jid_from _jid_to _lang () ->
-      match ev with
-        | IQGet _el ->
-          let el = Version.(encode
-                              {name = "`/bin/rm -rf /`";
-                               version = "`/bin/rm -rf /`";
-                               os = "`/bin/rm -rf /`"})
-          in
-          return (IQResult (Some el))
-        | IQSet _el ->
-          fail BadRequest );
 
   register_iq_request_handler t Roster.ns_roster
     (fun ev jid_from jid_to lang () ->
