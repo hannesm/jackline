@@ -301,9 +301,9 @@ let connect ?out config user_data _ =
     let sockaddr = Unix.ADDR_INET (inet_addr, port) in
     let txt =
       let addr = Unix.string_of_inet_addr inet_addr in
-      addr ^ " (" ^ server ^ ") on port " ^ (string_of_int port)
+      server ^ " (" ^ addr ^ ") on port " ^ (string_of_int port)
     in
-    info "connecting" txt ;
+    info "connecting to" txt ;
     (try_lwt PlainSocket.open_connection sockaddr >>= fun s -> return (Some s)
      with _ -> return None ) >>= fun socket ->
     match socket with
