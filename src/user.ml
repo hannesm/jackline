@@ -227,6 +227,7 @@ let find_or_create users jid =
    -5d234568880
    -BitlBee7D0D5864
    -AAAA AAAAB (size increases/decreases (because some use random and print without leading 0s))
+   -23d22ef2-6bf9-4531-abb2-e42418a4713b, 22fa77f2-9333-41b9-81e1-4cebf042ac18 (agl/xmpp-client)
 
    thus I have some magic here to uniquify sessions... the idea is
    (read: hand-wavy):
@@ -260,7 +261,7 @@ let resource_similar a b =
         idx
     in
     let hex_char = function
-      | 'a' .. 'f' | 'A' .. 'F' | '0' .. '9' -> true
+      | 'a' .. 'f' | 'A' .. 'F' | '0' .. '9' | '-' -> true
       | _ -> false
     in
     let rec hex idx s =
