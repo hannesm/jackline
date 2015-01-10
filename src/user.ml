@@ -260,21 +260,21 @@ let resource_similar a b =
       else
         idx
     in
-    let hex_char = function
+    let random_char = function
       | 'a' .. 'f' | 'A' .. 'F' | '0' .. '9' | '-' -> true
       | _ -> false
     in
-    let rec hex idx s =
+    let rec random_chars idx s =
       if idx < String.length s then
-        if hex_char (String.get s idx) then
-          hex (succ idx) s
+        if random_char (String.get s idx) then
+          random_chars (succ idx) s
         else
           false
       else
         true
     in
     let prefix_len = equal 0 in
-    hex prefix_len a && hex prefix_len b
+    random_chars prefix_len a && random_chars prefix_len b
 
 let replace_session users user session =
   let others = List.filter (fun s -> s.resource <> session.resource) user.active_sessions in
