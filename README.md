@@ -57,7 +57,7 @@ Left is the contact list (24 characters wide), in the middle the chat window, be
 
 In the contact list, presence subscription information is indicated by `[` and `]` (if subscription is both, `F` for from (contact is subscribed to your presence updates), `T` for to (you are subscribed to the presence updates of the contact), `?` for no presence subscription). The self-contact uses curly braces `{` and `}` and has initial focus.
 The presence is indicated by a single character (o = online, f = free, a = away, d = do not disturb, x = extended away, _ = offline).
-The focussed contact is marked by a grey background. Blinking (and prepended `*`) of a contact indicates that a new message arrived (also, a blue # on the left bottom appears).
+The focussed contact reverses foreground and background color. Blinking (and prepended `*`) of a contact indicates that a new message arrived (also, a blue # on the left bottom appears).
 
 Active keys:
 - `PgUp`, `PgDown` navigates through the contact list
