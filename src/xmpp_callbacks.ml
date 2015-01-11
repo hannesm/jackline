@@ -335,7 +335,10 @@ let connect ?out config user_data _ =
           session_callback >|= fun s ->
         Some s
 
-let parse_loop session_data =
-  XMPPClient.parse session_data >>= fun () ->
+let close session_data =
   let module S = (val session_data.socket : Socket) in
   S.close S.socket
+
+let parse_loop session_data =
+  XMPPClient.parse session_data >>= fun () ->
+  close session_data

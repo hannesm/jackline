@@ -40,6 +40,8 @@ let _ =
   new_command
     "connect" "/connect" "connects to the server" [] ;
   new_command
+    "disconnect" "/disconnect" "disconnects from the server" [] ;
+  new_command
     "quit" "/quit" "exits this client" [] ;
 
   (* global roster commands *)
@@ -205,7 +207,11 @@ let handle_connect ?out state config log redraw failure =
       | Some s -> xmpp_session := Some s ;
                   Lwt.async (fun () -> Xmpp_callbacks.parse_loop s))
 
-
+let handle_disconnect s msg =
+  Xmpp_callbacks.close s >>= fun () ->
+  xmpp_session := None ;
+  msg "session error" "disconnected" ;
+  return_unit
 
 let send_status s presence status priority failure =
   let open Xmpp_callbacks.XMPPClient in
@@ -444,6 +450,12 @@ let exec ?out input state config log redraw =
     ( match !xmpp_session with
       | None   -> handle_connect ?out state config log redraw failure
       | Some _ -> err "already connected" )
+
+  (* disconnect *)
+  | ("disconnect", _) ->
+    ( match !xmpp_session with
+      | Some x -> handle_disconnect x msg
+      | None   -> err "not connected" )
 
   (* own things *)
   | ("status", x) ->
