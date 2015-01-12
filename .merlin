@@ -1,0 +1,21 @@
+S src/
+S cli/
+
+B _build/src
+B _build/cli
+
+PKG erm_xmpp
+PKG otr
+PKG tls
+PKG tls.lwt
+PKG lwt
+PKG lwt.syntax
+PKG sexplib
+PKG sexplib.syntax
+PKG hex
+PKG nocrypto
+PKG lambda-term
+PKG react
+
+EXT sexplib
+EXT lwt
