@@ -461,7 +461,7 @@ let store_users users =
   let data = Users.fold (fun _ s acc -> (sexp_of_t s, marshal_history s) :: acc) users [] in
   let users, histories = List.split data in
   let hist_version = sexp_of_int 0 in
-  Sexp.(to_string_mach (List [ sexp_of_int db_version ; List users ]),
+  Sexp.(to_string_hum (List [ sexp_of_int db_version ; List users ]),
         List.fold_left (fun acc v ->
             match v with
             | None -> acc
