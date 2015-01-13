@@ -158,12 +158,14 @@ let handle_connect ?out state config log redraw failure =
     else
       state.notifications <- jid :: state.notifications
   in
+  let update_session_state () =
+    update_session_state_file state !xmpp_session
+  in
   let notify indicate u =
     let jid = u.User.jid in
-    if indicate then (
-      update_session_state_file state !xmpp_session ;
-      maybe_notify jid ) ;
+    if indicate then maybe_notify jid ;
     User.Users.replace state.users jid u ;
+    update_session_state () ;
     redraw ()
   and remove jid =
     User.Users.remove state.users jid ;
@@ -173,12 +175,14 @@ let handle_connect ?out state config log redraw failure =
       state.last_active_contact <- state.user ;
     redraw ()
   and received dir txt =
-    log (dir, txt)
+    log (dir, txt) ;
+    update_session_state ()
   and message user dir enc txt =
     let user = User.insert_message user dir enc true txt in
     let jid = user.User.jid in
     User.Users.replace state.users jid user ;
     maybe_notify jid ;
+    update_session_state () ;
     redraw ()
   and find = User.find state.users
   and find_or_create = User.find_or_create state.users
@@ -188,9 +192,11 @@ let handle_connect ?out state config log redraw failure =
     let otr_config = config.Config.otr_config in
     let user, session = User.find_or_create_session user resource otr_config in
     User.Users.replace state.users user.User.jid user ;
+    update_session_state () ;
     session
   and update_session user session =
-    User.replace_session state.users user session
+    User.replace_session state.users user session ;
+    update_session_state ()
   and find_inc_fp user resource raw_fp =
     let fp = User.find_raw_fp user raw_fp in
     let resources =
@@ -226,7 +232,7 @@ let handle_disconnect state s msg =
   Xmpp_callbacks.close s >>= fun () ->
   xmpp_session := None ;
   msg "session error" "disconnected" ;
-  lwt _ = update_session_state_file state !xmpp_session in
+  update_session_state_file state !xmpp_session ;
   return_unit
 
 let send_status s presence status priority failure =

@@ -1,4 +1,3 @@
-open Lwt_io
 
 type display_mode =
   | BuddyList
@@ -15,23 +14,21 @@ type session_status =
   | Disconnected
   | Notifications
   | Quit
-  | Default
 
 let string_of_session_status = function
   | Connected     -> "connected"
   | Disconnected  -> "disconnected"
   | Notifications -> "notifications"
   | Quit          -> "quit"
-  | Default       -> "undefinedDEFAULT"
 
 type ui_state = {
   config_directory            : string                    ; (* set initially *)
   user                        : string                    ; (* set initially *)
   resource                    : string                    ; (* set initially *)
 
-  session_state_out_channel   : Lwt_io.output_channel Lwt.t  ; (* file handle for session_status reporting*)
-
   users                       : User.users                ; (* read from disk, extended by xmpp callbacks *)
+
+  mutable session_status      : session_status            ; (* keeps track of /ui.state file *)
 
   mutable active_contact      : string                    ; (* modified by scrolling *)
   mutable last_active_contact : string                    ; (* modified by scrolling *)
@@ -49,56 +46,61 @@ let get_session_state ui_state xmpp_session = match xmpp_session with
   | None   -> Disconnected
   | Some _ ->
     begin try let _ = List.hd ui_state.notifications
-         in Connected
+         in Notifications 
     with
-    | _  -> Notifications
+    | _  -> Connected
     end
 
-let do_write_session_state oc session_state =
+let do_write_session_state config_directory session_state =
   (* this function should be private; not included in the mli *)
+  let lwt_crap () =
   let s  = string_of_session_status session_state in
-  lwt _ = 
+  lwt _ =
   Lwt.bind
     (Lwt.bind
       (Lwt.bind
-        (Lwt.return oc)
-        (fun oc -> Lwt_io.set_position oc Int64.zero; Lwt.return oc)
+        (Lwt.bind
+          (Lwt.bind
+            (Lwt_unix.openfile
+              (config_directory ^ Filename.dir_sep ^ "ui.state")
+              Lwt_unix.[ O_WRONLY ; O_TRUNC ; O_CREAT]
+              0o640 (* user: RW, group: r, other: no access *)
+            )
+            (fun fd ->
+              Lwt.return (Lwt_io.of_fd Output fd)
+            )
+          )
+          (fun oc -> Lwt_io.set_position oc Int64.zero; Lwt.return oc)
+        )
+        (fun oc -> Lwt_io.write_line oc s; Lwt.return oc)
       )
-      (fun oc -> Lwt_io.write_line oc s; Lwt.return oc)
+      (fun oc -> Lwt_io.flush oc; Lwt.return oc)
     )
-    (fun oc -> Lwt.join [(Lwt_io.flush oc)])
+    (fun oc -> Lwt.join [(Lwt_io.close oc)])
   in
     Lwt.return_unit
+  in
+    lwt_crap (); ()
 
 let update_session_state_file ui_state xmpp_session =
-  lwt oc = ui_state.session_state_out_channel in
-  let s  = get_session_state ui_state xmpp_session
-  in
-   lwt _ = do_write_session_state oc s in
-   Lwt.return_unit
+  let s  = get_session_state ui_state xmpp_session in
+  if s <> ui_state.session_status then (
+    do_write_session_state ui_state.config_directory s ;
+    ui_state.session_status <- s)
+  else ()
 
 let empty_ui_state config_directory user resource users =
-  (*let _ = Lwt.join [(do_write_session_state session_state_out_channel Disconnected)] in*)
-  let session_state_out_channel =
-  let x =
-     lwt fd = 
-      Lwt_unix.openfile
-        (config_directory ^ Filename.dir_sep ^ "ui.state")
-        Lwt_unix.[ O_WRONLY ; O_TRUNC ; O_CREAT]
-        0o640 (* user: RW, group: r, other: no access *)
-     in
-       Lwt.return (Lwt_io.of_fd Output fd)
-    in x
-  in
+  let session_status = Disconnected in
+  let () = do_write_session_state config_directory session_status in
   let last_status = (`Local "", "") in
   {
     config_directory                ;
     user                            ;
     resource                        ;
 
-    session_state_out_channel       ;
-
     users                           ;
+
+    session_status                  ;
 
     active_contact      = user      ;
     last_active_contact = user      ;

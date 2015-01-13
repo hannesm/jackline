@@ -462,7 +462,12 @@ let activate_user state active =
     (state.last_active_contact <- state.active_contact ;
      state.active_contact      <- active ;
      state.scrollback          <- 0 ;
-     state.notifications       <- List.filter (fun a -> a <> active) state.notifications ;
+     (let old_notifications = List.length state.notifications in let () = 
+       state.notifications     <- List.filter (fun a -> a <> active) state.notifications 
+       in if old_notifications >  List.length state.notifications then
+         (* go from Notifications -> Connected *)
+         update_session_state_file state !xmpp_session
+     ) ;
      state.window_mode         <- BuddyList ;
      force_redraw ())
 
@@ -565,8 +570,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
          loop ?out config term hist state network log
        else
          (
- (*          do_write_session_state state.session_state_out_channel Quit ;
-           Lwt_io.close_out state.session_state_out_channel ;*)
+           do_write_session_state state.config_directory Quit ;
            begin
              match !xmpp_session with
                | None -> return_unit
