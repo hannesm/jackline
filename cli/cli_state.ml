@@ -9,13 +9,13 @@ let next_display_mode = function
   | FullScreen -> Raw
   | Raw        -> BuddyList
 
-type session_status =
+type notification_state =
   | Connected
   | Disconnected
   | Notifications
   | Quit
 
-let string_of_session_status = function
+let string_of_notification_state = function
   | Connected     -> "connected"
   | Disconnected  -> "disconnected"
   | Notifications -> "notifications"
@@ -28,7 +28,7 @@ type ui_state = {
 
   users                       : User.users                ; (* read from disk, extended by xmpp callbacks *)
 
-  mutable session_status      : session_status            ; (* keeps track of /ui.state file *)
+  mutable notification_state  : notification_state        ; (* keeps track of /notification.state file *)
 
   mutable active_contact      : string                    ; (* modified by scrolling *)
   mutable last_active_contact : string                    ; (* modified by scrolling *)
@@ -42,7 +42,7 @@ type ui_state = {
   mutable last_status         : (User.direction * string) ; (* internal use only *)
 }
 
-let get_session_state ui_state xmpp_session = match xmpp_session with
+let get_notification_state ui_state xmpp_session = match xmpp_session with
   | None   -> Disconnected
   | Some _ ->
     begin try let _ = List.hd ui_state.notifications
@@ -51,47 +51,34 @@ let get_session_state ui_state xmpp_session = match xmpp_session with
     | _  -> Connected
     end
 
-let do_write_session_state config_directory session_state =
-  (* this function should be private; not included in the mli *)
-  let lwt_crap () =
-  let s  = string_of_session_status session_state in
-  lwt _ =
-  Lwt.bind
-    (Lwt.bind
-      (Lwt.bind
-        (Lwt.bind
-          (Lwt.bind
-            (Lwt_unix.openfile
-              (config_directory ^ Filename.dir_sep ^ "ui.state")
-              Lwt_unix.[ O_WRONLY ; O_TRUNC ; O_CREAT]
-              0o640 (* user: RW, group: r, other: no access *)
-            )
-            (fun fd ->
-              Lwt.return (Lwt_io.of_fd Output fd)
-            )
-          )
-          (fun oc -> Lwt_io.set_position oc Int64.zero; Lwt.return oc)
-        )
-        (fun oc -> Lwt_io.write_line oc s; Lwt.return oc)
-      )
-      (fun oc -> Lwt_io.flush oc; Lwt.return oc)
-    )
-    (fun oc -> Lwt.join [(Lwt_io.close oc)])
-  in
-    Lwt.return_unit
-  in
-    lwt_crap (); ()
+let flush_notification_state_file config_directory notification_state =
+  let _ =
+  let s  = string_of_notification_state notification_state in
+  let open Lwt in
+    lwt _ =
+    Lwt_unix.openfile 
+      (config_directory ^ Filename.dir_sep ^ "notification.state")
+      Lwt_unix.[ O_WRONLY ; O_TRUNC ; O_CREAT]
+      0o640 (* user: RW, group: r, other: no access *)
+    >>= fun fd ->
+      let oc = Lwt_io.of_fd ~mode:Lwt_io.Output fd in
+        Lwt_io.set_position oc Int64.zero >>= fun () ->
+        Lwt_io.write_line oc s >>= fun () ->
+        Lwt_io.flush oc >>= fun () ->
+        Lwt.join [(Lwt_io.close oc)]
+    in Lwt.return_unit
+  in ()
 
-let update_session_state_file ui_state xmpp_session =
-  let s  = get_session_state ui_state xmpp_session in
-  if s <> ui_state.session_status then (
-    do_write_session_state ui_state.config_directory s ;
-    ui_state.session_status <- s)
+let update_notification_state_file ui_state xmpp_session =
+  let s  = get_notification_state ui_state xmpp_session in
+  if s <> ui_state.notification_state then (
+    flush_notification_state_file ui_state.config_directory s ;
+    ui_state.notification_state <- s)
   else ()
 
 let empty_ui_state config_directory user resource users =
-  let session_status = Disconnected in
-  let () = do_write_session_state config_directory session_status in
+  let notification_state = Disconnected in
+  let () = flush_notification_state_file config_directory notification_state in
   let last_status = (`Local "", "") in
   {
     config_directory                ;
@@ -100,7 +87,7 @@ let empty_ui_state config_directory user resource users =
 
     users                           ;
 
-    session_status                  ;
+    notification_state              ;
 
     active_contact      = user      ;
     last_active_contact = user      ;

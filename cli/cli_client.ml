@@ -466,7 +466,7 @@ let activate_user state active =
        state.notifications     <- List.filter (fun a -> a <> active) state.notifications 
        in if old_notifications >  List.length state.notifications then
          (* go from Notifications -> Connected *)
-         update_session_state_file state !xmpp_session
+         update_notification_state_file state !xmpp_session
      ) ;
      state.window_mode         <- BuddyList ;
      force_redraw ())
@@ -570,7 +570,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
          loop ?out config term hist state network log
        else
          (
-           do_write_session_state state.config_directory Quit ;
+           flush_notification_state_file state.config_directory Quit ;
            begin
              match !xmpp_session with
                | None -> return_unit
