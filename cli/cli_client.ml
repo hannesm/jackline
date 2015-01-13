@@ -564,7 +564,10 @@ let rec loop ?out (config : Config.t) term hist state network log =
          Cli_commands.exec ?out command state config log force_redraw >>= fun () ->
          loop ?out config term hist state network log
        else
-         ( begin
+         (
+ (*          do_write_session_state state.session_state_out_channel Quit ;
+           Lwt_io.close_out state.session_state_out_channel ;*)
+           begin
              match !xmpp_session with
                | None -> return_unit
                | Some x ->
