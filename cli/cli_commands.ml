@@ -157,6 +157,13 @@ let handle_connect ?out state config log redraw failure =
     let jid = u.User.jid in
     if indicate then maybe_notify jid ;
     User.Users.replace state.users jid u ;
+    if u.User.subscription = `Remove then (
+      User.Users.remove state.users jid ;
+      if state.active_contact = jid then
+        state.active_contact <- state.user ;
+      if state.last_active_contact = jid then
+        state.last_active_contact <- state.user ;
+    ) ;
     redraw ()
   and received dir txt =
     log (dir, txt)

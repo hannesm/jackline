@@ -185,7 +185,7 @@ let roster_callback find item =
   try
     let subscription =
       match item.Roster.subscription with
-      | Roster.SubscriptionRemove -> assert false
+      | Roster.SubscriptionRemove -> `Remove
       | Roster.SubscriptionBoth   -> `Both
       | Roster.SubscriptionNone   -> `None
       | Roster.SubscriptionFrom   -> `From
