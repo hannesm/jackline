@@ -193,7 +193,7 @@ let handle_connect ?out state config log redraw failure =
     User.Users.replace state.users user.User.jid user ;
     session
   and update_session user session =
-    User.replace_session state.users user session ;
+    User.replace_session state.users user session
   and find_inc_fp user resource raw_fp =
     let fp = User.find_raw_fp user raw_fp in
     let resources =
