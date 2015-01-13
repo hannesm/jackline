@@ -92,19 +92,22 @@ type subscription = [
   | `From
   | `To
   | `Both
+  | `Remove
 ] with sexp
 
 let subscription_to_string = function
-  | `Both -> "both"
-  | `From -> "from (they see your presence updates)"
-  | `To -> "to (you see their presence updates)"
-  | `None -> "none"
+  | `Both   -> "both"
+  | `From   -> "from (they see your presence updates)"
+  | `To     -> "to (you see their presence updates)"
+  | `None   -> "none"
+  | `Remove -> "removed from roster"
 
 let subscription_to_chars = function
-  | `Both -> ("[", "]")
-  | `From -> ("F", "F")
-  | `To   -> ("T", "T")
-  | `None -> ("?", "?")
+  | `Both   -> ("[", "]")
+  | `From   -> ("F", "F")
+  | `To     -> ("T", "T")
+  | `None   -> ("?", "?")
+  | `Remove -> ("R", "R")
 
 type property = [
   | `Pending | `PreApproved

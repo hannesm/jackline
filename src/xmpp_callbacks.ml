@@ -21,6 +21,7 @@ open Lwt
 type user_data = {
   received               : User.direction -> string -> unit ;
   notify                 : bool -> User.user -> unit ;
+  remove                 : string -> unit ;
   message                : User.user -> User.direction -> bool -> string -> unit ;
   find                   : string -> User.user option ;
   find_or_create         : string -> User.user ;
@@ -185,7 +186,7 @@ let roster_callback find item =
   try
     let subscription =
       match item.Roster.subscription with
-      | Roster.SubscriptionRemove -> assert false
+      | Roster.SubscriptionRemove -> `Remove
       | Roster.SubscriptionBoth   -> `Both
       | Roster.SubscriptionNone   -> `None
       | Roster.SubscriptionFrom   -> `From
@@ -237,7 +238,13 @@ let session_callback t =
            let _, items = Roster.decode attrs els in
            if List.length items = 1 then
              let mods = List.map (roster_callback t.user_data.find) items in
-             List.iter (function None -> () | Some x -> t.user_data.notify true x) mods ;
+             List.iter (function 
+                          None -> () 
+                        | Some x -> if x.User.subscription = `Remove then (
+                                      t.user_data.received (`From x.User.jid) "Removed from roster" ;
+                                      t.user_data.remove x.User.jid )
+                                    else
+                                      t.user_data.notify true x) mods ;
              return (IQResult None)
            else
              fail BadRequest

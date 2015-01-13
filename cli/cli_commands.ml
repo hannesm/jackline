@@ -158,6 +158,13 @@ let handle_connect ?out state config log redraw failure =
     if indicate then maybe_notify jid ;
     User.Users.replace state.users jid u ;
     redraw ()
+  and remove jid =
+    User.Users.remove state.users jid ;
+    if state.active_contact = jid then
+      state.active_contact <- state.user ;
+    if state.last_active_contact = jid then
+      state.last_active_contact <- state.user ;
+    redraw ()
   and received dir txt =
     log (dir, txt)
   and message user dir enc txt =
@@ -199,6 +206,7 @@ let handle_connect ?out state config log redraw failure =
       Xmpp_callbacks.update_session         = update_session         ;
       Xmpp_callbacks.received               = received               ;
       Xmpp_callbacks.notify                 = notify                 ;
+      Xmpp_callbacks.remove                 = remove                 ;
       Xmpp_callbacks.message                = message                ;
       Xmpp_callbacks.failure                = failure                ;
   } in
