@@ -240,8 +240,9 @@ let session_callback t =
              let mods = List.map (roster_callback t.user_data.find) items in
              List.iter (function 
                           None -> () 
-                        | Some x -> if x.User.subscription = `Remove then
-                                      t.user_data.remove x.User.jid
+                        | Some x -> if x.User.subscription = `Remove then (
+                                      t.user_data.received (`From x.User.jid) "Removed from roster" ;
+                                      t.user_data.remove x.User.jid )
                                     else
                                       t.user_data.notify true x) mods ;
              return (IQResult None)
