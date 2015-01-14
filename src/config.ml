@@ -89,4 +89,4 @@ let load_config bytes =
   t_of_sexp (Sexp.of_string bytes)
 
 let store_config t =
-  Sexp.to_string_mach (sexp_of_t t)
+  Sexp.to_string_hum (sexp_of_t t)
