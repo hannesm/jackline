@@ -423,9 +423,10 @@ let handle_otr_stop s users dump err failure user =
 let handle_remove s dump user failure =
   (try_lwt
     Xmpp_callbacks.Roster.remove s user.User.jid 
-      (fun ?jid_from ?jid_to ?lang -> dump "Removal successful" ; return_unit)
-  with e -> failure e ;
-  return_unit)
+      (fun ?jid_from ?jid_to ?lang -> 
+        ignore jid_from ; ignore jid_to ; ignore lang ;
+        dump "Removal successful" ; return_unit)
+  with e -> failure e)
 
 let tell_user (log:(User.direction * string) -> unit) ?(prefix:string option) (from:string) (msg:string) =
   let f = match prefix with
@@ -534,8 +535,7 @@ let exec ?out input state config log redraw =
   | ("remove", _) ->
     (match !xmpp_session with
      | Some s -> handle_remove s dump contact failure 
-     | None   -> err "not connected" ;
-    return_unit)
+     | None   -> err "not connected")
 
   | ("fingerprint", x) ->
     ( match x with
