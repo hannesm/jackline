@@ -43,7 +43,7 @@ let start_client cfgdir debug () =
     | None -> return_unit
     | Some fd -> Lwt_unix.close fd ) >>= fun () ->
 
-  Persistency.dump_users cfgdir state.Cli_state.users >>
+  Persistency.dump_users cfgdir state.Cli_state.users >>= fun () ->
 
   LTerm.load_state term   (* restore the terminal state *)
 
