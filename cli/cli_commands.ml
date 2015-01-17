@@ -74,6 +74,8 @@ let _ =
   new_command
     "otr" "/otr [argument]" "manages OTR session by argument -- one of 'start' 'stop' or 'info'"
     [ "start" ; "stop" ; "info" ] ;
+  new_command
+    "remove" "/remove" "remove current user from roster" [] ;
 
   (* nothing below here, please *)
   new_command
@@ -418,6 +420,14 @@ let handle_otr_stop s users dump err failure user =
       | _ -> err "no OTR session" )
   | None -> err "no active session"
 
+let handle_remove s dump user failure =
+  (try_lwt
+    Xmpp_callbacks.Roster.remove s user.User.jid 
+      (fun ?jid_from ?jid_to ?lang -> 
+        ignore jid_from ; ignore jid_to ; ignore lang ;
+        dump "Removal successful" ; return_unit)
+  with e -> failure e)
+
 let tell_user (log:(User.direction * string) -> unit) ?(prefix:string option) (from:string) (msg:string) =
   let f = match prefix with
     | None -> from
@@ -522,6 +532,10 @@ let exec ?out input state config log redraw =
             if self then err "do not like to talk to myself" else
               handle_otr_stop s state.users dump err failure contact
           | Some _ -> handle_help (msg ~prefix:"unknown argument") (Some "otr") ) )
+  | ("remove", _) ->
+    (match !xmpp_session with
+     | Some s -> handle_remove s dump contact failure 
+     | None   -> err "not connected")
 
   | ("fingerprint", x) ->
     ( match x with
