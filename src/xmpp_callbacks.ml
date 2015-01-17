@@ -37,6 +37,8 @@ let validate_utf8 txt =
        (* filter <0x20 except if it's tab (x09) or newline (x0a) *)
       | '\x09' | '\x0a'
           -> c
+      | '\x0d' (* CR, turn it into a LF / newline *)
+          -> '\n'
       | '\x00' .. '\x1f'
           -> '?'
       | _ -> c
