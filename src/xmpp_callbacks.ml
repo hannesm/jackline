@@ -33,18 +33,21 @@ type user_data = {
 }
 
 let validate_utf8 txt =
-  let txt = String.map (fun c -> match c with
-       (* filter <0x20 except if it's tab (x09) or newline (x0a) *)
-      | '\x09' | '\x0a'
-          -> c
-      | '\x0d' (* CR, turn it into a LF / newline *)
-          -> '\n'
-      | '\x00' .. '\x1f'
-          -> '?'
-      | _ -> c
-    ) txt in
-  try let _ = Zed_utf8.validate txt in txt
-  with Zed_utf8.Invalid (err, esc) -> err ^ ": " ^ esc
+  let open CamomileLibrary.UPervasives in
+  let check_uchar c = match int_of_uchar c with
+  (* filter <0x20 except if it's tab (x09) or newline (x0a) *)
+  | 0x09 | 0x0a
+      -> Some c
+  | 0x0d (* Carriage return; ignore *)
+      -> None
+  | c when c < 0x20
+      -> Some (uchar_of_int 0xFFfd) (* 0xFFfd; unknown char question mark *)
+  | _ -> Some c
+  in try
+    Zed_utf8.filter_map check_uchar txt
+  with
+  | Zed_utf8.Invalid (err, esc) ->
+    err ^ ": " ^ esc
 
 let message_callback (t : user_data session_data) stanza =
   match stanza.jid_from with
