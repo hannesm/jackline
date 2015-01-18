@@ -422,11 +422,12 @@ let handle_otr_stop s users dump err failure user =
 
 let handle_remove s dump user failure =
   (try_lwt
-    Xmpp_callbacks.Roster.remove s user.User.jid 
-      (fun ?jid_from ?jid_to ?lang -> 
-        ignore jid_from ; ignore jid_to ; ignore lang ;
-        dump "Removal successful" ; return_unit)
-  with e -> failure e)
+     Xmpp_callbacks.Roster.put ~remove:() s user.User.jid
+       (fun ?jid_from ?jid_to ?lang el ->
+         ignore jid_from ; ignore jid_to ; ignore lang ; ignore el ;
+         dump ("Removal of " ^ user.User.jid ^ " successful") ;
+         return_unit)
+   with e -> failure e)
 
 let tell_user (log:(User.direction * string) -> unit) ?(prefix:string option) (from:string) (msg:string) =
   let f = match prefix with
@@ -472,7 +473,7 @@ let exec ?out input state config log redraw =
   (* disconnect *)
   | ("disconnect", _) ->
     ( match !xmpp_session with
-      | Some x -> handle_disconnect x msg
+      | Some x -> handle_disconnect x (msg ?prefix:None)
       | None   -> err "not connected" )
 
   (* own things *)
@@ -534,7 +535,7 @@ let exec ?out input state config log redraw =
           | Some _ -> handle_help (msg ~prefix:"unknown argument") (Some "otr") ) )
   | ("remove", _) ->
     (match !xmpp_session with
-     | Some s -> handle_remove s dump contact failure 
+     | Some s -> handle_remove s dump contact failure
      | None   -> err "not connected")
 
   | ("fingerprint", x) ->
