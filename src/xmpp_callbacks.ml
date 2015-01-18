@@ -35,19 +35,16 @@ type user_data = {
 let validate_utf8 txt =
   let open CamomileLibrary.UPervasives in
   let check_uchar c = match int_of_uchar c with
-  (* filter <0x20 except if it's tab (x09) or newline (x0a) *)
-  | 0x09 | 0x0a
-      -> Some c
-  | 0x0d (* Carriage return; ignore *)
-      -> None
-  | c when c < 0x20
-      -> Some (uchar_of_int 0xFFfd) (* 0xFFfd; unknown char question mark *)
-  | _ -> Some c
-  in try
+    | 0x09 | 0x0a -> Some c (* allow tab (0x09) and newline (0x0a) *)
+    | 0x0d -> None (* ignore carriage return *)
+    | c when c < 0x20 -> Some (uchar_of_int 0xFFFD)
+    (* replace characters < 0x20 with unicode replacement character (0xFFFD) *)
+    | _ -> Some c
+  in
+  try
     Zed_utf8.filter_map check_uchar txt
   with
-  | Zed_utf8.Invalid (err, esc) ->
-    err ^ ": " ^ esc
+  | Zed_utf8.Invalid (err, esc) -> err ^ ": " ^ esc
 
 let message_callback (t : user_data session_data) stanza =
   match stanza.jid_from with
