@@ -237,6 +237,8 @@ let find_or_create users jid =
     if two resources share a common prefix and have some random hex numbers,
     they are similar!
 
+    or, if they are both UUIDs (some servers use UUID if the client doesn't come up with a resource)
+
    this naive obviously fails:
      user X with AAAA comes online, user X with AAAB comes online
      (read: these are similar) -- then AAAA goes offline.. AAAB is
@@ -246,12 +248,44 @@ let find_or_create users jid =
    thus only the otr ctx is copied over, and the dispose flag is set...
    when a contact goes offline where dispose is set, the session is removed
  *)
+
+let hex_chars start s =
+  let hex_char = function
+    | 'a' .. 'f' | 'A' .. 'F' | '0' .. '9' -> true
+    | _ -> false
+  in
+  let rec go idx s =
+    if idx < String.length s then
+      if hex_char (String.get s idx) then
+        go (succ idx) s
+      else
+        false
+    else
+      true
+  in
+  go start s
+
+let is_uuid s =
+  let open String in
+  length s = 36 &&
+  hex_chars 0 (sub s 0 8) &&
+  get s 8 = '-' &&
+  hex_chars 0 (sub s 9 4) &&
+  get s 13 = '-' &&
+  hex_chars 0 (sub s 14 4) &&
+  get s 18 = '-' &&
+  hex_chars 0 (sub s 19 4) &&
+  get s 23 = '-' &&
+  hex_chars 0 (sub s 24 12)
+
 let resource_similar a b =
   let alen = String.length a
   and blen = String.length b
   in
   if abs (alen - blen) > 2 then
     false (* they're a bit too much off *)
+  else if is_uuid a && is_uuid b then
+    true
   else
     let stop = min alen blen in
     let rec equal idx =
@@ -263,21 +297,8 @@ let resource_similar a b =
       else
         idx
     in
-    let random_char = function
-      | 'a' .. 'f' | 'A' .. 'F' | '0' .. '9' | '-' -> true
-      | _ -> false
-    in
-    let rec random_chars idx s =
-      if idx < String.length s then
-        if random_char (String.get s idx) then
-          random_chars (succ idx) s
-        else
-          false
-      else
-        true
-    in
     let prefix_len = equal 0 in
-    random_chars prefix_len a && random_chars prefix_len b
+    hex_chars prefix_len a && hex_chars prefix_len b
 
 let replace_session users user session =
   let others = List.filter (fun s -> s.resource <> session.resource) user.active_sessions in
