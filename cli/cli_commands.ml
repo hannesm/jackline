@@ -75,6 +75,9 @@ let _ =
     "otr" "/otr [argument]" "manages OTR session by argument -- one of 'start' 'stop' or 'info'"
     [ "start" ; "stop" ; "info" ] ;
   new_command
+    "smp" "/smp [argument]" "manages SMP session by argument -- one of 'start' 'answer' or 'abort'"
+    [ "start" ; "answer" ; "abort" ] ;
+  new_command
     "remove" "/remove" "remove current user from roster" [] ;
 
   (* nothing below here, please *)
@@ -420,6 +423,52 @@ let handle_otr_stop s users dump err failure user =
       | _ -> err "no OTR session" )
   | None -> err "no active session"
 
+let handle_smp_abort users s session user dump failure =
+  let ctx, out, ret = Otr.Engine.abort_smp session.User.otr in
+  User.replace_session users user { session with User.otr = ctx } ;
+  List.iter (function
+      | `Warning x -> dump ("warning: " ^ x)
+      | _ -> () )
+    ret ;
+  match out with
+  | None   -> return_unit
+  | Some body ->
+    let jid_to = JID.of_string (User.userid user session) in
+    (try_lwt Xmpp_callbacks.XMPPClient.(send_message s ~kind:Chat ~jid_to ~body ())
+     with e -> failure e)
+
+let handle_smp_start users s session user dump failure args =
+  let secret, question = match split_ws args with
+  | question, Some secret -> (secret, Some question)
+  | secret, None -> (secret, None)
+  in
+  let ctx, out, ret = Otr.Engine.start_smp session.User.otr ?question secret in
+  User.replace_session users user { session with User.otr = ctx } ;
+  List.iter (function
+      | `Warning x -> dump ("warning: " ^ x)
+      | _ -> () )
+    ret ;
+  match out with
+  | None   -> return_unit
+  | Some body ->
+    let jid_to = JID.of_string (User.userid user session) in
+    (try_lwt Xmpp_callbacks.XMPPClient.(send_message s ~kind:Chat ~jid_to ~body ())
+     with e -> failure e)
+
+let handle_smp_answer users s session user dump failure secret =
+  let ctx, out, ret = Otr.Engine.answer_smp session.User.otr secret in
+  User.replace_session users user { session with User.otr = ctx } ;
+  List.iter (function
+      | `Warning x -> dump ("warning: " ^ x)
+      | _ -> () )
+    ret ;
+  match out with
+  | None   -> return_unit
+  | Some body ->
+    let jid_to = JID.of_string (User.userid user session) in
+    (try_lwt Xmpp_callbacks.XMPPClient.(send_message s ~kind:Chat ~jid_to ~body ())
+     with e -> failure e)
+
 let handle_remove s dump user failure =
   (try_lwt
      Xmpp_callbacks.Roster.put ~remove:() s user.User.jid
@@ -533,6 +582,22 @@ let exec ?out input state config log redraw =
             if self then err "do not like to talk to myself" else
               handle_otr_stop s state.users dump err failure contact
           | Some _ -> handle_help (msg ~prefix:"unknown argument") (Some "otr") ) )
+  | ("smp", x) ->
+    ( if self then
+        err "do not like to talk to myself"
+      else
+        match !xmpp_session with
+        | Some s -> ( match User.active_session contact with
+            | Some session when User.encrypted session.User.otr -> ( match x with
+                | None -> handle_help (msg ~prefix:"argument required") (Some "smp")
+                | Some x when x = "abort" -> handle_smp_abort state.users s session contact dump failure
+                | Some x ->
+                  match split_ws x with
+                  | x, Some arg when x = "start" -> handle_smp_start state.users s session contact dump failure arg
+                  | x, Some arg when x = "answer" -> handle_smp_answer state.users s session contact dump failure arg
+                  | _ -> handle_help (msg ~prefix:"argument required") (Some "smp") )
+            | _ -> err "need a secure session, use /otr start first" )
+        | None -> err "not connected" )
   | ("remove", _) ->
     (match !xmpp_session with
      | Some s -> handle_remove s dump contact failure
