@@ -579,7 +579,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
                   in
                   Lwt_list.iter_s
                     (fun (jid_to, ctx) ->
-                       let _, out = Otr.Handshake.end_otr ctx in
+                       let _, out = Otr.Engine.end_otr ctx in
                        Xmpp_callbacks.XMPPClient.(send_message x
                                                     ~kind:Chat
                                                     ~jid_to:(JID.of_string jid_to)
@@ -611,7 +611,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
        else
          match User.active_session contact, !xmpp_session with
          | Some session, Some t ->
-           let ctx, out, user_out = Otr.Handshake.send_otr session.User.otr message in
+           let ctx, out, user_out = Otr.Engine.send_otr session.User.otr message in
            User.replace_session state.users contact { session with User.otr = ctx } ;
            handle_otr_out user_out ;
            (try_lwt Xmpp_callbacks.XMPPClient.(
@@ -622,7 +622,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
             with e -> failure e)
          | None        , Some t ->
            let ctx = Otr.State.new_session config.Config.otr_config () in
-           let _, out, user_out = Otr.Handshake.send_otr ctx message in
+           let _, out, user_out = Otr.Engine.send_otr ctx message in
            handle_otr_out user_out ;
            (try_lwt Xmpp_callbacks.XMPPClient.(
              send_message t

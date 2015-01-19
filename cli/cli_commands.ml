@@ -391,7 +391,7 @@ let handle_otr_start s users dump failure otr_cfg user =
   | Some session when User.encrypted session.User.otr ->
     dump "session is already encrypted, please finish first (/otr stop)!" ; return_unit
   | Some session ->
-    let ctx, out = Otr.Handshake.start_otr session.User.otr in
+    let ctx, out = Otr.Engine.start_otr session.User.otr in
     User.replace_session users user { session with User.otr = ctx } ;
     dump "starting OTR session" ;
     send_over session.User.resource (Some out)
@@ -399,7 +399,7 @@ let handle_otr_start s users dump failure otr_cfg user =
     (* no OTR context, but we're sending only an OTR query anyways
        (and if we see a reply, we'll get some resource from the other side) *)
     let ctx = Otr.State.new_session otr_cfg () in
-    let _, out = Otr.Handshake.start_otr ctx in
+    let _, out = Otr.Engine.start_otr ctx in
     dump "starting OTR session" ;
     send_over "" (Some out)
 
@@ -408,7 +408,7 @@ let handle_otr_stop s users dump err failure user =
   | Some session ->
     ( match Otr.State.(session.User.otr.state.message_state) with
       | `MSGSTATE_ENCRYPTED _ | `MSGSTATE_FINISHED ->
-        let ctx, out = Otr.Handshake.end_otr session.User.otr in
+        let ctx, out = Otr.Engine.end_otr session.User.otr in
         User.replace_session users user { session with User.otr = ctx } ;
         dump "finished OTR session" ;
         ( match out with
