@@ -90,51 +90,61 @@ let flatten_buddies us =
 let show_buddies users show_offline self active notifications =
   flatten_buddies (show_buddy_list users show_offline self active notifications)
 
-let rec line_wrap ?raw ~max_length entries acc : string list =
+let line_wrap_with_tags ?raw ~(tags : 'a list) ~max_length entries : ('a * Zed_utf8.t) list =
   let pre = match raw with
     | None   -> "  "
     | Some _ -> ""
   in
-  match entries with
-  | entry::remaining when String.contains entry '\n' ->
-    let part1     = String.(sub entry 0 (index entry '\n')) in
-    let part1_len = succ (String.length part1) in
-    let part2     = pre ^ String.sub entry part1_len ((String.length entry) - part1_len) in
-    let remaining =
-      match raw with
-      | Some _ -> part2::part1::remaining
-      | None   ->
-        match String.trim part1 = "", String.trim part2 = "" with
-        | true , true  -> remaining
-        | false, true  -> part1::remaining
-        | true , false -> part2::remaining
-        | false, false -> part2::part1::remaining
-    in
-    line_wrap ?raw ~max_length remaining acc
-  | entry::remaining when (Zed_utf8.length entry) > max_length ->
-    let part1, part2 =
-      let p1, p2 = Zed_utf8.break entry max_length in
-      match raw with
-      | None ->
-        let n = 10 in
-        let last_10 = Zed_utf8.sub p1 (max_length - n) n in
-        let rec find_space idx =
-          match Zed_utf8.get last_10 idx with
-          | x when x = UChar.of_int 0x20 -> Some idx
-          | _ when idx = 0               -> None
-          | _                            -> find_space (pred idx)
-        in
-        ( match find_space 10 with
-          | None   -> (p1, pre ^ String.trim p2)
-          | Some x ->
-            let p1, p2 = Zed_utf8.break entry (x + (max_length - n)) in
-            (p1, pre ^ String.trim p2) )
-      | Some _ -> (p1, p2)
-    in
-    line_wrap ?raw ~max_length (part2::part1::remaining) acc
-  | entry::remaining ->
-    line_wrap ?raw ~max_length remaining (entry::acc)
-  | [] -> acc
+  let rec line_wrap_with_tags ~(acc : ('a * Zed_utf8.t) list) = function
+    | (tag, entry)::remaining when String.contains entry '\n' ->
+      let part1     = String.(sub entry 0 (index entry '\n')) in
+      let part1_len = succ (String.length part1) in
+      let part2     = pre ^ String.sub entry part1_len ((String.length entry) - part1_len) in
+      let remaining =
+        match raw with
+        | Some _ -> (tag,part2)::(tag,part1)::remaining
+        | None   ->
+          match String.trim part1 = "", String.trim part2 = "" with
+          | true , true  -> remaining
+          | false, true  -> (tag,part1)::remaining
+          | true , false -> (tag,part2)::remaining
+          | false, false -> (tag,part2)::(tag,part1)::remaining
+      in
+      line_wrap_with_tags ~acc remaining
+    | (tag, entry)::remaining when (Zed_utf8.length entry) > max_length ->
+      let part1, part2 =
+        let p1, p2 = Zed_utf8.break entry max_length in
+        match raw with
+        | None ->
+          let n = 10 in
+          let last_10 = Zed_utf8.sub p1 (max_length - n) n in
+          let rec find_space idx =
+            match Zed_utf8.get last_10 idx with
+            | x when x = UChar.of_int 0x20 -> Some idx
+            | _ when idx = 0               -> None
+            | _                            -> find_space (pred idx)
+          in
+          ( match find_space 10 with
+            | None   -> (p1, pre ^ String.trim p2)
+            | Some x ->
+              let p1, p2 = Zed_utf8.break entry (x + (max_length - n)) in
+              (p1, pre ^ String.trim p2) )
+        | Some _ -> (p1, p2)
+      in
+      line_wrap_with_tags ~acc ((tag,part2)::(tag,part1)::remaining)
+    | (tag, entry)::remaining ->
+      line_wrap_with_tags ~acc:((tag,entry)::acc) remaining
+    | [] -> acc
+  in
+    line_wrap_with_tags ~acc:[] (List.combine tags entries)
+
+let line_wrap ?raw ~max_length entries : Zed_utf8.t list =
+  let _ , lines = List.split (
+    line_wrap_with_tags ?raw
+      ~tags:(List.map (fun _ -> `Default_color) entries)
+    ~max_length entries )
+  in lines
+
 
 let print_time ?now timestamp =
   let open Unix in
@@ -239,11 +249,15 @@ let format_messages user jid msgs =
   let printmsg { User.direction ; encrypted ; received ; timestamp ; message ; _ } =
     let time = print_time ~now timestamp in
     let en = if encrypted then "O" else "-" in
-    let pre = match direction with
-      | `From _ -> "<" ^ en ^ "- "
-      | `To _   -> (if received then "-" else "?") ^ en ^ "> "
-      | `Local (_, x) when x = "" -> "*** "
-      | `Local (_, x) -> "***" ^ x ^ "*** "
+    let msg_color , pre = match direction with
+      | `From _ -> `Highlight_color ,
+                   "<" ^ en ^ "- "
+      | `To _   -> `Default_color   ,
+                   (if received then "-" else "?") ^ en ^ "> "
+      | `Local (_, x) when x = "" ->
+                   `Default_color , "*** "
+      | `Local (_, x) ->
+                   `Default_color , "***" ^ x ^ "*** "
     in
     let r =
       let other = User.jid_of_direction direction in
@@ -260,7 +274,7 @@ let format_messages user jid msgs =
                        | Some x when x = r -> None
                        | Some x -> Some x)
     in
-    time ^ r ^ pre ^ message
+    msg_color , time ^ r ^ pre ^ message
   in
   let jid_tst o =
     if List.length user.User.active_sessions < 2 then
@@ -446,7 +460,7 @@ let make_prompt size network state redraw =
         in
         let entries =
           let entries = format_log entries in
-          line_wrap ~max_length:size.cols entries []
+          line_wrap ~max_length:size.cols entries
         in
         let data = pad_l_rev "" log_size entries in
         String.concat "\n" data
@@ -463,34 +477,42 @@ let make_prompt size network state redraw =
       let fg_color = color_session (self = active) session in
 
       let main_window =
-        let data =
+        let msg_colors, data = List.split (
           if active = self then
-            format_log statusses
+            List.map (fun s -> `Default_color , s) (format_log statusses)
           else
             format_messages active state.active_contact active.User.message_history
+          )
         in
-        let scroll data =
+        let scroll default lines =
           (* data is already in right order -- but we need to strip scrollback *)
-          let elements = drop (state.scrollback * main_size) (List.rev data) in
-          pad_l_rev "" main_size (List.rev elements)
+          let elements = drop (state.scrollback * main_size) (List.rev lines) in
+          pad_l_rev default main_size (List.rev elements)
         in
-
+        let render_msg color_line =
+          let color , line = color_line in
+            begin match color with
+            | `Default_color    -> E_fg
+            | `Highlight_color  -> B_fg lblue
+            end
+            :: [ S (line ^ "\n"); E_fg ]
+        in
         match state.window_mode with
         | BuddyList ->
-          let chat = line_wrap ~max_length:chat_width data [] in
-          let chat = scroll chat in
+          let chat = line_wrap_with_tags ~max_length:chat_width ~tags:msg_colors data in
+          let chat = scroll (`Default_color, "") chat in
 
           let buddies = buddy_list state.users state.show_offline state.config.Config.jid state.active_contact state.notifications main_size buddy_width in
           let comb = List.combine buddies chat in
           let pipe = S (Zed_utf8.singleton (UChar.of_int 0x2502)) in
           List.map (fun (buddy, chat) ->
-              buddy @ [ B_fg fg_color ; pipe ; E_fg ; S chat ; S "\n" ])
+              buddy @ [ B_fg fg_color ; pipe ; E_fg; ] @ (render_msg chat))
             comb
 
         | FullScreen ->
-          let chat = line_wrap ~max_length:chat_width data [] in
-          let chat = scroll chat in
-          List.map (fun chat -> [ S chat ; S "\n"]) chat
+          let chat = line_wrap_with_tags ~max_length:chat_width ~tags:msg_colors data in
+          let chat = scroll (`Default_color, "") chat in
+          List.map render_msg chat
 
         | Raw ->
           let data = List.map (fun x -> x.User.message)
@@ -500,8 +522,8 @@ let make_prompt size network state redraw =
                    | `To _ -> false)
                   active.User.message_history)
           in
-          let wrapped = line_wrap ~raw:() ~max_length:chat_width data [] in
-          let chat = scroll wrapped in
+          let wrapped = line_wrap ~raw:() ~max_length:chat_width data in
+          let chat = scroll "" wrapped in
           List.map (fun x -> [ S x ; S "\n" ]) chat
       in
 
