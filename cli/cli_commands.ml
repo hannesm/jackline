@@ -269,7 +269,7 @@ let handle_fingerprint users dump err fp user =
   match User.active_session user with
   | Some session when User.encrypted session.User.otr ->
     let manual_fp = string_normalize_fingerprint fp in
-    ( match session.User.otr.Otr.State.their_dsa with
+    ( match Otr.State.their_dsa session.User.otr with
       | Some key when User.fingerprint key = manual_fp ->
         let otr_fp = User.find_raw_fp user manual_fp in
         let user = User.replace_fp user { otr_fp with User.verified = true } in
@@ -409,18 +409,15 @@ let handle_otr_start s users dump failure otr_cfg user =
 let handle_otr_stop s users dump err failure user =
   match User.active_session user with
   | Some session ->
-    ( match Otr.State.(session.User.otr.state.message_state) with
-      | `MSGSTATE_ENCRYPTED _ | `MSGSTATE_FINISHED ->
-        let ctx, out = Otr.Engine.end_otr session.User.otr in
-        User.replace_session users user { session with User.otr = ctx } ;
+    let ctx, out = Otr.Engine.end_otr session.User.otr in
+    User.replace_session users user { session with User.otr = ctx } ;
+    ( match out with
+      | None   -> return_unit
+      | Some body ->
         dump "finished OTR session" ;
-        ( match out with
-          | None   -> return_unit
-          | Some body ->
-            let jid_to = JID.of_string (User.userid user session) in
-            (try_lwt Xmpp_callbacks.XMPPClient.(send_message s ~kind:Chat ~jid_to ~body ())
-             with e -> failure e) )
-      | _ -> err "no OTR session" )
+        let jid_to = JID.of_string (User.userid user session) in
+        (try_lwt Xmpp_callbacks.XMPPClient.(send_message s ~kind:Chat ~jid_to ~body ())
+         with e -> failure e) )
   | None -> err "no active session"
 
 let handle_smp_abort users s session user dump failure =

@@ -151,10 +151,7 @@ let message direction encrypted received message =
 let insert_message u dir enc rcvd msg =
   { u with message_history = (message dir enc rcvd msg) :: u.message_history }
 
-let encrypted ctx =
-  match Otr.State.(ctx.state.message_state) with
-  | `MSGSTATE_ENCRYPTED _ -> true
-  | _ -> false
+let encrypted = Otr.State.is_encrypted
 
 let userid u s = match s.resource with
   | r when r = "" -> u.jid
@@ -168,7 +165,7 @@ let fingerprint dsa_pub =
   hex (Otr.Crypto.OtrDsa.fingerprint dsa_pub)
 
 let otr_fingerprint otr =
-  match otr.Otr.State.their_dsa with
+  match Otr.State.their_dsa otr with
   | None   -> None
   | Some x -> Some (fingerprint x)
 
