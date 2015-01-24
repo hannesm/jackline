@@ -160,14 +160,13 @@ let userid u s = match s.resource with
 let format_fp e =
   String.((sub e 0 8) ^ " " ^ (sub e 8 8) ^ " " ^ (sub e 16 8) ^ " " ^ (sub e 24 8) ^ " " ^ (sub e 32 8))
 
-let fingerprint dsa_pub =
-  let hex x = match Hex.of_string (Cstruct.to_string x) with `Hex e -> e in
-  hex (Otr.Crypto.OtrDsa.fingerprint dsa_pub)
+let hex_fingerprint fp =
+  match Hex.of_string fp with `Hex e -> e
 
 let otr_fingerprint otr =
-  match Otr.State.their_dsa otr with
+  match Otr.Utils.their_fingerprint otr with
   | None   -> None
-  | Some x -> Some (fingerprint x)
+  | Some x -> Some (hex_fingerprint x)
 
 let replace_fp u fp =
   let otr_fingerprints =

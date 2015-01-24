@@ -269,8 +269,8 @@ let handle_fingerprint users dump err fp user =
   match User.active_session user with
   | Some session when User.encrypted session.User.otr ->
     let manual_fp = string_normalize_fingerprint fp in
-    ( match Otr.State.their_dsa session.User.otr with
-      | Some key when User.fingerprint key = manual_fp ->
+    ( match Otr.Utils.their_fingerprint session.User.otr with
+      | Some key when User.hex_fingerprint key = manual_fp ->
         let otr_fp = User.find_raw_fp user manual_fp in
         let user = User.replace_fp user { otr_fp with User.verified = true } in
         User.Users.replace users user.User.jid user ;
@@ -319,8 +319,8 @@ let handle_otr_info dump user =
     dump ("(no active session) OTR fingerprints: " ^ (dump_otr_fps user.User.otr_fingerprints))
 
 let handle_own_otr_info dump config =
-  let otr_pub = Nocrypto.Dsa.pub_of_priv config.Config.otr_config.Otr.State.dsa in
-  dump ("own otr fingerprint: " ^ (User.format_fp (User.fingerprint otr_pub)))
+  let otr_fp = Otr.Utils.own_fingerprint config.Config.otr_config in
+  dump ("own otr fingerprint: " ^ (User.format_fp (User.hex_fingerprint otr_fp)))
 
 let common_info dump user cfgdir =
   dump "jid" user.User.jid ;
@@ -368,8 +368,8 @@ let handle_info dump user cfgdir =
 let handle_own_info dump user cfgdir config res =
   let dump a b = dump (a ^ ": " ^ b) in
   common_info dump user cfgdir ;
-  let otr_pub = Nocrypto.Dsa.pub_of_priv config.Config.otr_config.Otr.State.dsa in
-  dump "own otr fingerprint" (User.format_fp (User.fingerprint otr_pub)) ;
+  let otr_fp = Otr.Utils.own_fingerprint config.Config.otr_config in
+  dump "own otr fingerprint" (User.format_fp (User.hex_fingerprint otr_fp)) ;
   let active = User.active_session user in
   List.iteri (fun i s ->
       let own = if s.User.resource = res then " (own)" else "" in

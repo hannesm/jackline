@@ -107,11 +107,7 @@ let configure term () =
     ""
     " (recommended)" >|= fun policies ->
   let dsa = Nocrypto.Dsa.generate `Fips1024 in
-  let otr_config = {
-    Otr.State.versions = versions ;
-    Otr.State.policies = policies ;
-    Otr.State.dsa = dsa
-  } in
+  let otr_config = Otr.State.config versions policies dsa in
   let config = Config.({
       version = current_version ;
       jid ;
