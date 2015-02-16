@@ -85,8 +85,8 @@ let message_callback (t : user_data session_data) stanza =
           | `Received_error e        -> msg from false e
           | `Received m              -> msg from false m
           | `Received_encrypted e    -> msg from true e
-          | `SMP_awaiting_secret     -> msg (`Local "OTR SMP") false "awaiting SMP secret"
-          | `SMP_received_question q -> msg (`Local "OTR SMP") false ("received SMP question " ^ q)
+          | `SMP_awaiting_secret     -> msg (`Local "OTR SMP") false "awaiting SMP secret, answer with /smp answer [secret]"
+          | `SMP_received_question q -> msg (`Local "OTR SMP") false ("received SMP question (answer with /smp answer [secret]) " ^ q)
           | `SMP_success             -> msg (`Local "OTR SMP") false "successfully verified!"
           | `SMP_failure             -> msg (`Local "OTR SMP") false "failure" )
         ret ;

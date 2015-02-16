@@ -75,7 +75,7 @@ let _ =
     "otr" "/otr [argument]" "manages OTR session by argument -- one of 'start' 'stop' or 'info'"
     [ "start" ; "stop" ; "info" ] ;
   new_command
-    "smp" "/smp [argument]" "manages SMP session by argument -- one of 'start' 'answer' or 'abort'"
+    "smp" "/smp [argument]" "manages SMP session by argument -- one of 'start [?question] [secret]' 'answer' or 'abort' - question is optional and may _NOT_ include a whitespace!"
     [ "start" ; "answer" ; "abort" ] ;
   new_command
     "remove" "/remove" "remove current user from roster" [] ;
