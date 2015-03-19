@@ -5,6 +5,11 @@ let start_client cfgdir debug () =
   ignore (LTerm_inputrc.load ());
   Tls_lwt.rng_init () >>= fun () ->
 
+  Printexc.register_printer (function
+      | Tls_lwt.Tls_alert x -> Some ("TLS alert: " ^ Tls.Packet.alert_type_to_string x)
+      | Tls_lwt.Tls_failure f -> Some ("TLS failure: " ^ Tls.Engine.string_of_failure f)
+      | _ -> None) ;
+
   Lazy.force LTerm.stdout >>= fun term ->
 
   Persistency.load_config cfgdir >>= ( function

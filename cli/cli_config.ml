@@ -63,7 +63,7 @@ let configure term () =
         (new read_inputline ~term ~prompt:"enter path to trust anchor file: " ())#run >>= fun trust_anchor ->
         Lwt_unix.access trust_anchor [ Unix.F_OK ; Unix.R_OK ] >>= fun () ->
         X509_lwt.certs_of_pem trust_anchor >>= fun tas ->
-        let tas = Certificate.valid_cas ~time:(Unix.time ()) tas in
+        let tas = X509.Validation.valid_cas ~time:(Unix.time ()) tas in
         if List.length tas = 0 then
           fail (Invalid_argument "trust anchors are empty!")
         else
@@ -73,7 +73,11 @@ let configure term () =
       begin
         (new read_inputline ~term ~prompt:("enter server certificate fingerprint (run `openssl s_client -connect " ^ ldomain ^ ":" ^ (string_of_int port) ^ " -starttls xmpp | openssl x509 -sha256 -fingerprint -noout`): ") ())#run >>= fun fp ->
         (try
-           let binary = X509.Cs.dotted_hex_to_cs fp in
+           let dotted_hex_to_cs hex =
+             Nocrypto.Uncommon.Cs.of_hex
+               (String.map (function ':' -> ' ' | x -> x) hex)
+           in
+           let binary = dotted_hex_to_cs fp in
            if Cstruct.len binary <> 32 then
              fail (Invalid_argument "fingerprint is either too short or too long")
            else
