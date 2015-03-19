@@ -18,7 +18,7 @@ The features I plan to support:
 - strict TLS certificate verification (trust chain, server name)
 - plain text (no HTML!)
 - XEP-0184 (Message Delivery Receipts)
-- no OTR or config import
+- no import of OTR or configuration
 
 The interface is strongly inspired by mcabber.
 
