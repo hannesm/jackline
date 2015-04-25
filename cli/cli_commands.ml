@@ -445,6 +445,7 @@ let handle_smp_start users s session user dump failure args =
       | `Warning x -> dump ("warning: " ^ x)
       | _ -> () )
     ret ;
+  dump "initiated SMP" ;
   match out with
   | None   -> return_unit
   | Some body ->
