@@ -11,7 +11,7 @@ class read_inputline ~term ~prompt () = object(self)
     self#set_prompt (S.const (LTerm_text.of_string prompt))
 end
 
-class read_password term = object(self)
+class read_password term ~prompt = object(self)
   inherit LTerm_read_line.read_password () as super
   inherit [Zed_utf8.t] LTerm_read_line.term term
 
@@ -23,7 +23,7 @@ class read_password term = object(self)
         super#send_action action
 
   initializer
-    self#set_prompt (S.const (LTerm_text.of_string "password: "))
+    self#set_prompt (S.const (LTerm_text.of_string prompt))
 end
 
 let rec read_yes_no term msg =
@@ -49,13 +49,41 @@ let configure term () =
   (match jid with
    | None -> fail (Invalid_argument "invalid jabber ID")
    | Some x -> return x) >>= fun jid ->
-  let { JID.ldomain ; _ } = jid in
-  (new read_inputline ~term ~prompt:"enter port [5222]: " ())#run >>= fun port ->
-  let port = if port = "" then 5222 else int_of_string port in
-  (if port <= 0 || port > 65535 then
-     fail (Invalid_argument "invalid port number")
-   else return_unit ) >>= fun () ->
-  (new read_password term)#run >>= fun password ->
+
+  (new read_inputline ~term ~prompt:"enter priority (default: 0): " ())#run >>= fun prio ->
+  (if prio = "" then
+     return None
+   else
+     let prio = int_of_string prio in
+     if prio < 0 || prio > 127 then
+       fail (Invalid_argument "invalid priority (range allowed is from 0 to 127)")
+     else return (Some prio)) >>= fun priority ->
+
+  read_yes_no term "Configure hostname manually (no need for this)?" >>= fun hostname ->
+  ( if hostname then
+      begin
+        (new read_inputline ~term ~prompt:"enter hostname or IP: " ())#run >>= fun hostname ->
+        (* XXX: check that hostname is valid! *)
+        let hostname = match hostname with
+          | "" -> None
+          | x -> Some x
+        in
+        (new read_inputline ~term ~prompt:"enter port [5222]: " ())#run >>= fun port ->
+        (if port = "" then
+           return None
+         else
+           let port = int_of_string port in
+           if port <= 0 || port > 65535 then
+             fail (Invalid_argument "invalid port number")
+           else return (Some port)) >>= fun (port) ->
+        return (hostname, port)
+      end
+    else
+      return (None, None) ) >>= fun (hostname, port) ->
+
+  (new read_password term ~prompt:"password (if empty, you are asked at every startup): ")#run >>= fun password ->
+  let password = if password = "" then None else Some password in
+
   (* trust anchor *)
   read_yes_no term "Provide trust anchor (alternative: tls server fingerprint)?" >>= fun ta ->
   ( if ta then
@@ -71,7 +99,17 @@ let configure term () =
       end
     else
       begin
-        (new read_inputline ~term ~prompt:("enter server certificate fingerprint (run `openssl s_client -connect " ^ ldomain ^ ":" ^ (string_of_int port) ^ " -starttls xmpp | openssl x509 -sha256 -fingerprint -noout`): ") ())#run >>= fun fp ->
+         (* XXX: actually ASK whether we should try to connect now *)
+        let pre = " (run `openssl s_client -connect "
+        and post = " -starttls xmpp | openssl x509 -sha256 -fingerprint -noout`)"
+        in
+        let hostport = match hostname, port with
+          | Some h, Some p -> pre ^ h ^ ":" ^ (string_of_int p) ^ post
+          | None, Some p -> pre ^ jid.JID.ldomain ^ ":" ^ (string_of_int p) ^ post
+          | Some h, None -> pre ^ h ^ ":5222" ^ post
+          | None, None -> ""
+        in
+        (new read_inputline ~term ~prompt:("enter server certificate fingerprint" ^ hostport ^ ": ") ())#run >>= fun fp ->
         (try
            let dotted_hex_to_cs hex =
              Nocrypto.Uncommon.Cs.of_hex
@@ -86,6 +124,7 @@ let configure term () =
            fail (Invalid_argument "please provide only hex characters (or whitespace or colon)") ) >|= fun fp ->
         `Fingerprint fp
       end ) >>= fun authenticator ->
+
   (* otr config *)
   LTerm.fprintl term "OTR config" >>= fun () ->
   let ask_list xs to_string prefix suffix =
@@ -115,6 +154,8 @@ let configure term () =
   let config = Config.({
       version = current_version ;
       jid ;
+      priority ;
+      hostname ;
       port ;
       password ;
       authenticator ;

@@ -80,19 +80,36 @@ let message_history_dir dir = Filename.concat dir "histories"
 let dump_config cfgdir cfg =
   write cfgdir config (Config.store_config cfg)
 
+let load_config dsa cfg =
+  read cfg config >|= function
+  | Some x ->  Some (Config.load_config dsa x)
+  | None   -> None
+
 let dump_users cfgdir data =
   let userdb, histories = User.store_users data in
   write cfgdir users userdb >>= fun () ->
   let histo = message_history_dir cfgdir in
   Lwt_list.iter_p (fun (id, data) -> append histo id data) histories
 
-let load_config cfg =
-  read cfg config >|= function
-  | Some x ->  Some (Config.load_config x)
-  | None   -> None
-
 let load_users cfg =
   read cfg users >|= function
   | Some x ->  (try User.load_users (message_history_dir cfg) x with _ -> User.Users.create 100)
   | None -> User.Users.create 100
 
+let pass_file = "password"
+
+let dump_password cfgdir password =
+  write cfgdir pass_file password
+
+let load_password cfgdir =
+  read cfgdir pass_file
+
+let otr_dsa = "otr_dsa.sexp"
+
+let dump_dsa cfgdir dsa =
+  write cfgdir otr_dsa (Sexp.to_string_hum (Nocrypto.Dsa.sexp_of_priv dsa))
+
+let load_dsa cfgdir =
+  read cfgdir otr_dsa >|= function
+  | None -> None
+  | Some x -> Some (Nocrypto.Dsa.priv_of_sexp (Sexp.of_string x))

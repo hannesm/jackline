@@ -24,7 +24,7 @@ depends: [
   "tls" {>= "0.4.0"}
   "x509" {>= "0.3.0"}
   "lwt"
-  "otr"
+  "otr" {> "0.1.0"}
   "zed"
   "lambda-term"
   "react"

@@ -12,12 +12,30 @@ let start_client cfgdir debug () =
 
   Lazy.force LTerm.stdout >>= fun term ->
 
-  Persistency.load_config cfgdir >>= ( function
+  Persistency.load_dsa cfgdir >>= fun dsa ->
+
+  Persistency.load_config dsa cfgdir >>= ( function
       | None ->
         Cli_config.configure term () >>= fun config ->
-        Persistency.dump_config cfgdir config >|= fun () ->
+        Persistency.dump_config cfgdir config >>= fun () ->
+        ( match config.Config.password with
+          | None -> return_unit
+          | Some x -> Persistency.dump_password cfgdir x ) >>= fun () ->
+        Persistency.dump_dsa cfgdir config.Config.otr_config.Otr.State.dsa >|= fun () ->
         config
       | Some cfg -> return cfg ) >>= fun config ->
+
+  ( match config.Config.password with
+    | None -> Persistency.load_password cfgdir
+    | Some x -> return (Some x)) >>= fun password ->
+  let config = { config with Config.password = password } in
+
+  ( match config.Config.password with
+    | None ->
+        (new Cli_config.read_password term ~prompt:"password: ")#run >|= fun password ->
+        Some password
+    | Some x -> return (Some x)) >>= fun password ->
+  let config = { config with Config.password = password } in
 
   Persistency.load_users cfgdir >>= fun (users) ->
 

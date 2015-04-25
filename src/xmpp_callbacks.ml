@@ -297,26 +297,46 @@ let tls_epoch_to_line t =
         Ciphersuite.sexp_of_ciphersuite cipher ]))
   | `Error -> "error while fetching TLS parameters"
 
+
 let connect ?out config user_data _ =
   debug_out := out ;
-  let open Config in
-  let server = JID.to_idn config.jid
-  and port = config.port
-  in
 
   let err_log msg data = user_data.received (`Local "error") (msg ^ ": " ^ data) in
   let info info data = user_data.received (`Local info) data in
 
-  match
-    ( try Some ((Unix.gethostbyname server).Unix.h_addr_list.(0))
-      with _ -> None )
-  with
-  | None -> err_log "couldn't resolve hostname" server ; return None
-  | Some inet_addr ->
-    let sockaddr = Unix.ADDR_INET (inet_addr, port) in
+  let open Config in
+  let open Unix in
+  let server = config.jid.JID.ldomain in
+  let is_ipv4 str = try Some (inet_addr_of_string str) with _ -> None in
+  let port = match config.port with Some p -> p | None -> 5222 in
+  let resolve hostname port = match is_ipv4 hostname with
+    | None ->
+      (match
+         (try Some ((gethostbyname hostname).h_addr_list.(0))
+          with _ -> None )
+       with
+       | None -> err_log "couldn't resolve hostname" hostname ; return None
+       | Some ip -> return (Some (ADDR_INET (ip, port))))
+    | Some x -> return (Some (ADDR_INET (x, port)))
+  in
+  ( match config.hostname with
+    | Some x -> resolve x port
+    | None ->
+      match
+        getaddrinfo (JID.to_idn config.jid) "xmpp-client"
+          [AI_SOCKTYPE SOCK_STREAM ; AI_FAMILY PF_INET]
+      with
+      | [] -> resolve server port
+      | addr_info::cs -> return (Some addr_info.ai_addr) ) >>= function
+  | None -> err_log "couldn't resolve hostname" "" ; return None
+  | Some sockaddr ->
     let txt =
-      let addr = Unix.string_of_inet_addr inet_addr in
-      server ^ " (" ^ addr ^ ") on port " ^ (string_of_int port)
+      let post = match sockaddr with
+        | ADDR_INET (inet_addr, port) ->
+          string_of_inet_addr inet_addr ^ " on port " ^ string_of_int port
+        | ADDR_UNIX str -> str
+      in
+      server ^ " (" ^ post ^ ")"
     in
     info "connecting to" txt ;
     (try_lwt PlainSocket.open_connection sockaddr >>= fun s -> return (Some s)
@@ -341,14 +361,17 @@ let connect ?out config user_data _ =
           end in
           return (module TLS_module : XMPPClient.Socket)
         in
-        XMPPClient.setup_session
-          ~user_data
-          ~myjid:config.jid
-          ~plain_socket:(module Socket_module : XMPPClient.Socket)
-          ~tls_socket:make_tls
-          ~password:config.password
-          session_callback >|= fun s ->
-        Some s
+        match config.password with
+          | None -> err_log "no password provided" "please restart" ; return None
+          | Some password ->
+            XMPPClient.setup_session
+              ~user_data
+              ~myjid:config.jid
+              ~plain_socket:(module Socket_module : XMPPClient.Socket)
+              ~tls_socket:make_tls
+              ~password
+              session_callback >|= fun s ->
+            Some s
 
 let close session_data =
   let module S = (val session_data.socket : Socket) in
