@@ -327,7 +327,7 @@ let connect ?out config user_data _ =
           [AI_SOCKTYPE SOCK_STREAM ; AI_FAMILY PF_INET]
       with
       | [] -> resolve server port
-      | addr_info::cs -> return (Some addr_info.ai_addr) ) >>= function
+      | addr_info::_ -> return (Some addr_info.ai_addr) ) >>= function
   | None -> err_log "couldn't resolve hostname" "" ; return None
   | Some sockaddr ->
     let txt =
