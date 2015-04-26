@@ -218,9 +218,8 @@ let roster_callback find item =
   with
   _ -> None
 
-let session_callback t =
-  let err txt = t.user_data.received (`Local "handling error") txt
-  in
+let session_callback ?priority t =
+  let err txt = t.user_data.received (`Local "handling error") txt in
 
   register_iq_request_handler t Roster.ns_roster
     (fun ev jid_from jid_to lang () ->
@@ -246,13 +245,13 @@ let session_callback t =
            let _, items = Roster.decode attrs els in
            if List.length items = 1 then
              let mods = List.map (roster_callback t.user_data.find) items in
-             List.iter (function 
-                          None -> () 
-                        | Some x -> if x.User.subscription = `Remove then (
-                                      t.user_data.received (`From x.User.jid) "Removed from roster" ;
-                                      t.user_data.remove x.User.jid )
-                                    else
-                                      t.user_data.notify true x) mods ;
+             List.iter (function
+                 | None -> ()
+                 | Some x -> if x.User.subscription = `Remove then (
+                     t.user_data.received (`From x.User.jid) "Removed from roster" ;
+                     t.user_data.remove x.User.jid )
+                   else
+                     t.user_data.notify true x) mods ;
              return (IQResult None)
            else
              fail BadRequest
@@ -282,7 +281,7 @@ let session_callback t =
       List.iter (function None -> () | Some x -> t.user_data.notify false x) mods ;
       return () ) >>= fun () ->
 
-  try_lwt send_presence t ()
+  try_lwt send_presence t ?priority ()
   with e -> t.user_data.failure e
 
 let tls_epoch_to_line t =
@@ -304,11 +303,10 @@ let connect ?out config user_data _ =
   let err_log msg data = user_data.received (`Local "error") (msg ^ ": " ^ data) in
   let info info data = user_data.received (`Local info) data in
 
-  let open Config in
   let open Unix in
-  let server = config.jid.JID.ldomain in
+  let server = config.Config.jid.JID.ldomain in
   let is_ipv4 str = try Some (inet_addr_of_string str) with _ -> None in
-  let port = match config.port with Some p -> p | None -> 5222 in
+  let port = match config.Config.port with Some p -> p | None -> 5222 in
   let resolve hostname port = match is_ipv4 hostname with
     | None ->
       (match
@@ -319,11 +317,11 @@ let connect ?out config user_data _ =
        | Some ip -> return (Some (ADDR_INET (ip, port))))
     | Some x -> return (Some (ADDR_INET (x, port)))
   in
-  ( match config.hostname with
+  ( match config.Config.hostname with
     | Some x -> resolve x port
     | None ->
       match
-        getaddrinfo (JID.to_idn config.jid) "xmpp-client"
+        getaddrinfo (JID.to_idn config.Config.jid) "xmpp-client"
           [AI_SOCKTYPE SOCK_STREAM ; AI_FAMILY PF_INET]
       with
       | [] -> resolve server port
@@ -350,7 +348,7 @@ let connect ?out config user_data _ =
           include PlainSocket
         end in
         let make_tls () =
-          (match config.authenticator with
+          (match config.Config.authenticator with
            | `Trust_anchor x -> X509_lwt.authenticator (`Ca_file x)
            | `Fingerprint fp -> X509_lwt.authenticator (`Hex_fingerprints (`SHA256, [(server, fp)])) ) >>= fun authenticator ->
           TLSSocket.switch (PlainSocket.get_fd socket_data) server authenticator >>= fun socket_data ->
@@ -361,16 +359,17 @@ let connect ?out config user_data _ =
           end in
           return (module TLS_module : XMPPClient.Socket)
         in
-        match config.password with
+        match config.Config.password with
           | None -> err_log "no password provided" "please restart" ; return None
           | Some password ->
+            let priority = config.Config.priority in
             XMPPClient.setup_session
               ~user_data
-              ~myjid:config.jid
+              ~myjid:config.Config.jid
               ~plain_socket:(module Socket_module : XMPPClient.Socket)
               ~tls_socket:make_tls
               ~password
-              session_callback >|= fun s ->
+              (session_callback ?priority) >|= fun s ->
             Some s
 
 let close session_data =
