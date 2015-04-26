@@ -337,35 +337,34 @@ let connect ?out config user_data _ =
   and port = config.Config.port
   in
 
-  (try_lwt
-    resolve hostname port domain >>= fun sockaddr -> return (Some sockaddr)
-   with | Invalid_argument x -> (err_log "failure" x ; return None)
-        | _ -> return None) >>= function
-    | None -> return None
-    | Some sockaddr ->
-      let txt =
-        let post = match sockaddr with
-          | Unix.ADDR_INET (inet_addr, port) ->
-            Unix.string_of_inet_addr inet_addr ^ " on port " ^ string_of_int port
-          | Unix.ADDR_UNIX str -> str
-        in
-        domain ^ " (" ^ post ^ ")"
-      in
-      info "connecting to" txt ;
-      (try_lwt PlainSocket.open_connection sockaddr >>= fun s -> return (Some s)
-       with _ -> return None) >>= fun socket ->
-      match socket with
-       | None -> err_log "failed to connect to" txt ; return None
-       | Some socket_data ->
-         info "connected to" txt ;
-         let module Socket_module = struct type t = PlainSocket.socket
-           let socket = socket_data
-           include PlainSocket
-         end in
-         let make_tls () =
-           (match config.Config.authenticator with
-            | `Trust_anchor x -> X509_lwt.authenticator (`Ca_file x)
-            | `Fingerprint fp -> X509_lwt.authenticator (`Hex_fingerprints (`SHA256, [(domain, fp)])) ) >>= fun authenticator ->
+  (try_lwt resolve hostname port domain >>= fun sockaddr -> return (Some sockaddr)
+   with
+     | Invalid_argument x -> (err_log "failure" x ; return None)
+     | _ -> return None) >>= function
+   | None -> return None
+   | Some sockaddr ->
+     let txt =
+       let post = match sockaddr with
+         | Unix.ADDR_INET (inet_addr, port) ->
+           Unix.string_of_inet_addr inet_addr ^ " on port " ^ string_of_int port
+         | Unix.ADDR_UNIX str -> str
+       in
+       domain ^ " (" ^ post ^ ")"
+     in
+     info "connecting to" txt ;
+     (try_lwt PlainSocket.open_connection sockaddr >>= fun s -> return (Some s)
+      with _ -> return None) >>= function
+      | None -> err_log "failed to connect to" txt ; return None
+      | Some socket_data ->
+        info "connected to" txt ;
+        let module Socket_module = struct type t = PlainSocket.socket
+          let socket = socket_data
+          include PlainSocket
+        end in
+        let make_tls () =
+          (match config.Config.authenticator with
+           | `Trust_anchor x -> X509_lwt.authenticator (`Ca_file x)
+           | `Fingerprint fp -> X509_lwt.authenticator (`Hex_fingerprints (`SHA256, [(domain, fp)])) ) >>= fun authenticator ->
           TLSSocket.switch (PlainSocket.get_fd socket_data) domain authenticator >>= fun socket_data ->
           info "TLS session info" (tls_epoch_to_line socket_data) ;
           let module TLS_module = struct type t = Tls_lwt.Unix.t
@@ -375,17 +374,17 @@ let connect ?out config user_data _ =
           return (module TLS_module : XMPPClient.Socket)
         in
         match config.Config.password with
-          | None -> err_log "no password provided" "please restart" ; return None
-          | Some password ->
-            let priority = config.Config.priority in
-            XMPPClient.setup_session
-              ~user_data
-              ~myjid:config.Config.jid
-              ~plain_socket:(module Socket_module : XMPPClient.Socket)
-              ~tls_socket:make_tls
-              ~password
-              (session_callback ?priority) >|= fun s ->
-            Some s
+        | None -> err_log "no password provided" "please restart" ; return None
+        | Some password ->
+          let priority = config.Config.priority in
+          XMPPClient.setup_session
+            ~user_data
+            ~myjid:config.Config.jid
+            ~plain_socket:(module Socket_module : XMPPClient.Socket)
+            ~tls_socket:make_tls
+            ~password
+            (session_callback ?priority) >|= fun s ->
+          Some s
 
 let close session_data =
   let module S = (val session_data.socket : Socket) in
