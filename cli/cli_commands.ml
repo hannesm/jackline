@@ -151,7 +151,40 @@ let handle_help msg = function
     let cmds = String.concat " " (keys ()) in
     msg "available commands (try [/help cmd])" cmds
 
+let resolve config log =
+  let domain = JID.to_idn config.Config.jid
+  and hostname = config.Config.hostname
+  and port = config.Config.port
+  in
+  let report sockaddr =
+    let addr = match sockaddr with
+      | Unix.ADDR_INET (inet_addr, port) ->
+        Unix.string_of_inet_addr inet_addr ^ " on port " ^ string_of_int port
+      | Unix.ADDR_UNIX str -> str
+    in
+    log (`Local "connecting", "to " ^ domain ^ " (" ^ addr ^ ")") ;
+  in
+  Xmpp_callbacks.resolve hostname port domain >|= fun sa ->
+  report sa ;
+  sa
+
 let handle_connect ?out state config log redraw failure =
+  let doit user_data () =
+    match config.Config.password with
+    | None -> failure (Invalid_argument "no password provided, please restart") >|= fun () -> None
+    | Some password ->
+      try_lwt
+        (resolve config log >>= fun sockaddr ->
+         let domain = JID.to_idn config.Config.jid in
+         (match config.Config.authenticator with
+          | `Trust_anchor x -> X509_lwt.authenticator (`Ca_file x)
+          | `Fingerprint fp -> X509_lwt.authenticator (`Hex_fingerprints (`SHA256, [(domain, fp)])) ) >>= fun authenticator ->
+         Xmpp_callbacks.connect ?out
+           config.Config.jid domain sockaddr password
+           config.Config.priority authenticator user_data)
+      with exn -> failure exn >|= fun () -> None
+  in
+
   let maybe_notify jid =
     if List.mem jid state.notifications || state.active_contact = jid then
       ()
@@ -214,11 +247,13 @@ let handle_connect ?out state config log redraw failure =
       Xmpp_callbacks.remove                 = remove                 ;
       Xmpp_callbacks.message                = message                ;
       Xmpp_callbacks.failure                = failure                ;
-  } in
-  Xmpp_callbacks.connect ?out config user_data () >|= (function
-      | None   -> ()
-      | Some s -> xmpp_session := Some s ;
-                  Lwt.async (fun () -> Xmpp_callbacks.parse_loop s))
+  }
+  in
+  doit user_data () >|= function
+  | None   -> ()
+  | Some s ->
+    xmpp_session := Some s ;
+    Lwt.async (fun () -> Xmpp_callbacks.parse_loop s)
 
 let handle_disconnect s msg =
   Xmpp_callbacks.close s >>= fun () ->
