@@ -296,6 +296,35 @@ let tls_epoch_to_line t =
         Ciphersuite.sexp_of_ciphersuite cipher ]))
   | `Error -> "error while fetching TLS parameters"
 
+let resolve (hostname : string option) (port : int option) (jid_idn : string) =
+  (* resolving logic:
+     - prefer user-supplied hostname & port [default to 5222]
+     - TODO: if not available, use DNS SRV record of jid_idn (find a lib which does SRV)
+     - if not available, use A record of jid_domain (and supplied port / 5222)
+  *)
+  let open Unix in
+  let resolve host =
+    match
+      try Some (List.hd (getaddrinfo host "xmpp-client"
+                           [AI_SOCKTYPE SOCK_STREAM ; AI_FAMILY PF_INET])).ai_addr
+      with _ -> None
+    with
+    | None -> fail (Invalid_argument ("could not resolve hostname " ^ host))
+    | Some (ADDR_UNIX _) -> fail (Invalid_argument "received unix address")
+    | Some (ADDR_INET (ip, _) as x) -> match port with
+      | None -> return x
+      | Some p -> return (ADDR_INET (ip, p))
+  in
+  let to_ipv4 str =
+    try (let ip = inet_addr_of_string str in
+         match port with
+         | Some x -> return (ADDR_INET (ip, x))
+         | None -> return (ADDR_INET (ip, 5222)))
+    with _ -> resolve str
+  in
+  match hostname with
+  | Some x -> to_ipv4 x
+  | None -> resolve jid_idn
 
 let connect ?out config user_data _ =
   debug_out := out ;
@@ -303,55 +332,41 @@ let connect ?out config user_data _ =
   let err_log msg data = user_data.received (`Local "error") (msg ^ ": " ^ data) in
   let info info data = user_data.received (`Local info) data in
 
-  let open Unix in
-  let server = config.Config.jid.JID.ldomain in
-  let is_ipv4 str = try Some (inet_addr_of_string str) with _ -> None in
-  let port = match config.Config.port with Some p -> p | None -> 5222 in
-  let resolve hostname port = match is_ipv4 hostname with
-    | None ->
-      (match
-         (try Some ((gethostbyname hostname).h_addr_list.(0))
-          with _ -> None )
-       with
-       | None -> err_log "couldn't resolve hostname" hostname ; return None
-       | Some ip -> return (Some (ADDR_INET (ip, port))))
-    | Some x -> return (Some (ADDR_INET (x, port)))
+  let domain = JID.to_idn config.Config.jid
+  and hostname = config.Config.hostname
+  and port = config.Config.port
   in
-  ( match config.Config.hostname with
-    | Some x -> resolve x port
-    | None ->
-      match
-        getaddrinfo (JID.to_idn config.Config.jid) "xmpp-client"
-          [AI_SOCKTYPE SOCK_STREAM ; AI_FAMILY PF_INET]
-      with
-      | [] -> resolve server port
-      | addr_info::_ -> return (Some addr_info.ai_addr) ) >>= function
-  | None -> err_log "couldn't resolve hostname" "" ; return None
-  | Some sockaddr ->
-    let txt =
-      let post = match sockaddr with
-        | ADDR_INET (inet_addr, port) ->
-          string_of_inet_addr inet_addr ^ " on port " ^ string_of_int port
-        | ADDR_UNIX str -> str
+
+  (try_lwt
+    resolve hostname port domain >>= fun sockaddr -> return (Some sockaddr)
+   with | Invalid_argument x -> (err_log "failure" x ; return None)
+        | _ -> return None) >>= function
+    | None -> return None
+    | Some sockaddr ->
+      let txt =
+        let post = match sockaddr with
+          | Unix.ADDR_INET (inet_addr, port) ->
+            Unix.string_of_inet_addr inet_addr ^ " on port " ^ string_of_int port
+          | Unix.ADDR_UNIX str -> str
+        in
+        domain ^ " (" ^ post ^ ")"
       in
-      server ^ " (" ^ post ^ ")"
-    in
-    info "connecting to" txt ;
-    (try_lwt PlainSocket.open_connection sockaddr >>= fun s -> return (Some s)
-     with _ -> return None ) >>= fun socket ->
-    match socket with
-    | None -> err_log "failed to connect to" txt ; return None
-    | Some socket_data ->
-        info "connected to" txt ;
-        let module Socket_module = struct type t = PlainSocket.socket
-          let socket = socket_data
-          include PlainSocket
-        end in
-        let make_tls () =
-          (match config.Config.authenticator with
-           | `Trust_anchor x -> X509_lwt.authenticator (`Ca_file x)
-           | `Fingerprint fp -> X509_lwt.authenticator (`Hex_fingerprints (`SHA256, [(server, fp)])) ) >>= fun authenticator ->
-          TLSSocket.switch (PlainSocket.get_fd socket_data) server authenticator >>= fun socket_data ->
+      info "connecting to" txt ;
+      (try_lwt PlainSocket.open_connection sockaddr >>= fun s -> return (Some s)
+       with _ -> return None) >>= fun socket ->
+      match socket with
+       | None -> err_log "failed to connect to" txt ; return None
+       | Some socket_data ->
+         info "connected to" txt ;
+         let module Socket_module = struct type t = PlainSocket.socket
+           let socket = socket_data
+           include PlainSocket
+         end in
+         let make_tls () =
+           (match config.Config.authenticator with
+            | `Trust_anchor x -> X509_lwt.authenticator (`Ca_file x)
+            | `Fingerprint fp -> X509_lwt.authenticator (`Hex_fingerprints (`SHA256, [(domain, fp)])) ) >>= fun authenticator ->
+          TLSSocket.switch (PlainSocket.get_fd socket_data) domain authenticator >>= fun socket_data ->
           info "TLS session info" (tls_epoch_to_line socket_data) ;
           let module TLS_module = struct type t = Tls_lwt.Unix.t
             let socket = socket_data
