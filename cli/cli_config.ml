@@ -95,7 +95,7 @@ let configure term () =
         if List.length tas = 0 then
           fail (Invalid_argument "trust anchors are empty!")
         else
-          return (`Trust_anchor trust_anchor)
+          return (`Trust_anchor trust_anchor, None)
       end
     else
       begin
@@ -121,9 +121,11 @@ let configure term () =
            else
              return fp
          with _ ->
-           fail (Invalid_argument "please provide only hex characters (or whitespace or colon)") ) >|= fun fp ->
-        `Fingerprint fp
-      end ) >>= fun authenticator ->
+           fail (Invalid_argument "please provide only hex characters (or whitespace or colon)") ) >>= fun fp ->
+        (new read_inputline ~term ~prompt:("enter name in certificate (optional): ") ())#run >|= fun certname ->
+        let certname = if certname = "" then None else Some certname in
+        (`Fingerprint fp, certname)
+      end ) >>= fun (authenticator, certificate_hostname) ->
 
   (* otr config *)
   LTerm.fprintl term "OTR config" >>= fun () ->
@@ -159,6 +161,7 @@ let configure term () =
       port ;
       password ;
       authenticator ;
-      otr_config
+      otr_config ;
+      certificate_hostname
     }) in
   config

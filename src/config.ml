@@ -16,6 +16,7 @@ type t = {
   password : string option ;
   authenticator : auth ;
   otr_config : Otr.State.config ;
+  certificate_hostname : string option ;
 }
 
 let current_version = 3
@@ -47,27 +48,27 @@ let t_of_sexp dsa t =
   match t with
   | Sexp.List l ->
     (match
-      List.fold_left (fun (ver, jid, prio, host, port, pass, auth, otr_cfg) -> function
+      List.fold_left (fun (ver, jid, prio, host, port, pass, auth, otr_cfg, cert) -> function
           | Sexp.List [ Sexp.Atom "version" ; v ] ->
             assert (ver = None) ;
             let version = int_of_sexp v in
-            (Some version, jid, prio, host, port, pass, auth, otr_cfg)
+            (Some version, jid, prio, host, port, pass, auth, otr_cfg, cert)
           | Sexp.List [ Sexp.Atom "jid" ; Sexp.Atom v ] ->
             assert (jid = None) ;
             let jid =
               try JID.of_string v
               with _ -> raise (Invalid_argument "parse error in jid")
             in
-            (ver, Some jid, prio, host, port, pass, auth, otr_cfg)
+            (ver, Some jid, prio, host, port, pass, auth, otr_cfg, cert)
           | Sexp.List [ Sexp.Atom "priority" ; p ] ->
             assert (prio = None) ;
             let prio = option_of_sexp int_of_sexp p
             in
-            (ver, jid, Some prio, host, port, pass, auth, otr_cfg)
+            (ver, jid, Some prio, host, port, pass, auth, otr_cfg, cert)
           | Sexp.List [ Sexp.Atom "hostname" ; h ] ->
             assert (host = None) ;
             let host = option_of_sexp string_of_sexp h in
-            (ver, jid, prio, Some host, port, pass, auth, otr_cfg)
+            (ver, jid, prio, Some host, port, pass, auth, otr_cfg, cert)
           | Sexp.List [ Sexp.Atom "port" ; p ] ->
             assert (port = None) ;
             let port =
@@ -77,49 +78,53 @@ let t_of_sexp dsa t =
                 if p = 5222 then None else Some p
               | _ -> option_of_sexp int_of_sexp p
             in
-            (ver, jid, prio, host, Some port, pass, auth, otr_cfg)
+            (ver, jid, prio, host, Some port, pass, auth, otr_cfg, cert)
           | Sexp.List [ Sexp.Atom "password" ; password ] ->
             assert (pass = None) ;
             let pass = match ver with
               | Some x when x < 3 -> string_of_sexp password
               | _ -> raise (Invalid_argument "password stored in V3+ file")
             in
-            (ver, jid, prio, host, port, Some pass, auth, otr_cfg)
+            (ver, jid, prio, host, port, Some pass, auth, otr_cfg, cert)
           | Sexp.List [ Sexp.Atom "trust_anchor" ; trust_anchor ] ->
             assert (auth = None) ;
             (match ver with
              | Some 0 ->
                let auth = Some (`Trust_anchor (string_of_sexp trust_anchor)) in
-               (ver, jid, prio, host, port, pass, auth, otr_cfg)
+               (ver, jid, prio, host, port, pass, auth, otr_cfg, cert)
              | Some 1 -> ( match option_of_sexp string_of_sexp trust_anchor with
-                 | None -> (ver, jid, prio, host, port, pass, auth, otr_cfg)
-                 | Some x -> (ver, jid, prio, host, port, pass, Some (`Trust_anchor x), otr_cfg) )
+                 | None -> (ver, jid, prio, host, port, pass, auth, otr_cfg, cert)
+                 | Some x -> (ver, jid, prio, host, port, pass, Some (`Trust_anchor x), otr_cfg, cert) )
              | _ -> raise (Invalid_argument "unexpected element: trust_anchor") )
           | Sexp.List [ Sexp.Atom "tls_fingerprint" ; tls_fp ] ->
             assert (auth = None) ;
             ( match ver with
               | Some 1 ->
                 ( match option_of_sexp string_of_sexp tls_fp with
-                  | None -> (ver, jid, prio, host, port, pass, auth, otr_cfg)
-                  | Some x -> (ver, jid, prio, host, port, pass, Some (`Fingerprint x), otr_cfg) )
+                  | None -> (ver, jid, prio, host, port, pass, auth, otr_cfg, cert)
+                  | Some x -> (ver, jid, prio, host, port, pass, Some (`Fingerprint x), otr_cfg, cert) )
               | _ -> raise (Invalid_argument "unexpected element: tls_fingerprint") )
           | Sexp.List [ Sexp.Atom "authenticator" ; authenticator ] ->
             assert (auth = None) ;
-            (ver, jid, prio, host, port, pass, Some (auth_of_sexp authenticator), otr_cfg)
+            (ver, jid, prio, host, port, pass, Some (auth_of_sexp authenticator), otr_cfg, cert)
           | Sexp.List [ Sexp.Atom "otr_config" ; v ] ->
             assert (otr_cfg = None) ;
-            (ver, jid, prio, host, port, pass, auth, Some (Otr.State.config_no_dsa_of_sexp dsa v) )
+            (ver, jid, prio, host, port, pass, auth, Some (Otr.State.config_no_dsa_of_sexp dsa v), cert)
+          | Sexp.List [ Sexp.Atom "certificate_hostname" ; c ] ->
+            assert (cert = None) ;
+            let cert = option_of_sexp string_of_sexp c in
+            (ver, jid, prio, host, port, pass, auth, otr_cfg, cert)
           | _ -> assert false)
-        (None, None, None, None, None, None, None, None) l
+        (None, None, None, None, None, None, None, None, None) l
      with
-     | Some version, Some jid, Some priority, Some hostname, Some port, password, Some authenticator, Some otr_config ->
-       { version ; jid ; priority ; hostname ; port ; password ; authenticator ; otr_config }
-     | Some version, Some jid, None, Some hostname, Some port, password, Some authenticator, Some otr_config ->
-       { version ; jid ; priority = None ; hostname ; port ; password ; authenticator ; otr_config }
-     | Some version, Some jid, Some priority, None, Some port, password, Some authenticator, Some otr_config ->
-       { version ; jid ; priority ; hostname = None ; port ; password ; authenticator ; otr_config }
-     | Some version, Some jid, None, None, Some port, password, Some authenticator, Some otr_config ->
-       { version ; jid ; priority = None ; hostname = None ; port ; password ; authenticator ; otr_config }
+     | Some version, Some jid, Some priority, Some hostname, Some port, password, Some authenticator, Some otr_config, certificate_hostname ->
+       { version ; jid ; priority ; hostname ; port ; password ; authenticator ; otr_config ; certificate_hostname }
+     | Some version, Some jid, None, Some hostname, Some port, password, Some authenticator, Some otr_config, certificate_hostname ->
+       { version ; jid ; priority = None ; hostname ; port ; password ; authenticator ; otr_config ; certificate_hostname }
+     | Some version, Some jid, Some priority, None, Some port, password, Some authenticator, Some otr_config, certificate_hostname ->
+       { version ; jid ; priority ; hostname = None ; port ; password ; authenticator ; otr_config ; certificate_hostname }
+     | Some version, Some jid, None, None, Some port, password, Some authenticator, Some otr_config, certificate_hostname ->
+       { version ; jid ; priority = None ; hostname = None ; port ; password ; authenticator ; otr_config ; certificate_hostname }
      | _ -> raise (Invalid_argument "broken config") )
   | _ -> raise (Invalid_argument "broken config")
 
@@ -128,12 +133,13 @@ let record kvs =
 
 let sexp_of_t t =
   record [
-    "version"       , sexp_of_int t.version ;
-    "jid"           , sexp_of_string (JID.string_of_jid t.jid) ;
-    "hostname"      , sexp_of_option sexp_of_string t.hostname ;
-    "port"          , sexp_of_option sexp_of_int t.port ;
-    "authenticator" , sexp_of_auth t.authenticator ;
-    "otr_config"    , Otr.State.sexp_of_config_no_dsa t.otr_config ;
+    "version"              , sexp_of_int t.version ;
+    "jid"                  , sexp_of_string (JID.string_of_jid t.jid) ;
+    "hostname"             , sexp_of_option sexp_of_string t.hostname ;
+    "port"                 , sexp_of_option sexp_of_int t.port ;
+    "authenticator"        , sexp_of_auth t.authenticator ;
+    "otr_config"           , Otr.State.sexp_of_config_no_dsa t.otr_config ;
+    "certificate_hostname" , sexp_of_option sexp_of_string t.certificate_hostname ;
   ]
 
 let load_config dsa bytes =

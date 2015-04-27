@@ -326,7 +326,7 @@ let resolve (hostname : string option) (port : int option) (jid_idn : string) =
   | Some x -> to_ipv4 x
   | None -> resolve jid_idn
 
-let connect ?out myjid certname sockaddr password priority authenticator user_data =
+let connect ?out sockaddr myjid certname password priority authenticator user_data =
   debug_out := out ;
 
   let err_log msg = user_data.received (`Local "error") msg

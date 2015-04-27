@@ -56,7 +56,7 @@ let start_client cfgdir debug () =
     else
       return None ) >>= fun out ->
 
-  Cli_client.init_system (log ?step:None) ;
+  Cli_client.init_system (log ?step:None) config.Config.jid ;
 
   ignore (LTerm.save_state term);  (* save the terminal state *)
 

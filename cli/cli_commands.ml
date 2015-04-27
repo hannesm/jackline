@@ -175,12 +175,16 @@ let handle_connect ?out state config log redraw failure =
     | Some password ->
       try_lwt
         (resolve config log >>= fun sockaddr ->
-         let domain = JID.to_idn config.Config.jid in
-         (match config.Config.authenticator with
-          | `Trust_anchor x -> X509_lwt.authenticator (`Ca_file x)
-          | `Fingerprint fp -> X509_lwt.authenticator (`Hex_fingerprints (`SHA256, [(domain, fp)])) ) >>= fun authenticator ->
-         Xmpp_callbacks.connect ?out
-           config.Config.jid domain sockaddr password
+         let certname = match config.Config.certificate_hostname with
+           | None -> JID.to_idn config.Config.jid
+           | Some x -> x
+         in
+         (X509_lwt.authenticator (match config.Config.authenticator with
+              | `Trust_anchor x -> `Ca_file x
+              | `Fingerprint fp -> `Hex_fingerprints (`SHA256, [(certname, fp)])))
+         >>= fun authenticator ->
+         Xmpp_callbacks.connect ?out sockaddr
+           config.Config.jid certname password
            config.Config.priority authenticator user_data)
       with exn -> failure exn >|= fun () -> None
   in

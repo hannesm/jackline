@@ -636,13 +636,21 @@ let rec loop ?out (config : Config.t) term hist state network log =
      | Some _ -> loop ?out config term hist state network log
      | None -> loop ?out config term hist state network log
 
-let init_system log =
-  Lwt.async_exception_hook := (
-    fun exn ->
-      let err m = log (`Local "async error", m) in
-
-      xmpp_session := None ;
-
-      err (Printexc.to_string exn)
+let init_system log jid =
+  let err m = log (`Local "async error", m) in
+  Lwt.async_exception_hook := (function
+      | Tls_lwt.Tls_failure `Error (`AuthenticationFailure (`InvalidServerName x)) ->
+        xmpp_session := None ;
+        let wanted = jid.JID.ldomain in
+        let pre = Printf.sprintf "invalid hostname in certificate: expected %s," wanted
+        and warn =
+          Printf.sprintf "inform your server administrator about that, in the meantime add '(certificate_hostname (\"%s\")' to your config.sexp"
+        in
+        (match X509.cert_hostnames x with
+         | x::_ -> err (Printf.sprintf "%s, but got %s" pre x) ; err (warn x)
+         | [] -> err (Printf.sprintf "%s, but found no name" pre))
+      | exn ->
+        xmpp_session := None ;
+        err (Printexc.to_string exn)
   )
 
