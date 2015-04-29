@@ -1,6 +1,5 @@
 opam-version: "1.2"
 name:         "jackline"
-version:      "0.1.0"
 homepage:     "https://github.com/hannesm/jackline"
 dev-repo:     "https://github.com/hannesm/jackline.git"
 bug-reports:  "https://github.com/hannesm/jackline/issues"
