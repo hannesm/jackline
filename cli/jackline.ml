@@ -3,7 +3,7 @@ open React
 
 let start_client cfgdir debug () =
   ignore (LTerm_inputrc.load ());
-  Tls_lwt.rng_init () >>= fun () ->
+  Nocrypto_entropy_lwt.initialize () >>= fun () ->
 
   Printexc.register_printer (function
       | Tls_lwt.Tls_alert x -> Some ("TLS alert: " ^ Tls.Packet.alert_type_to_string x)
