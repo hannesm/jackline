@@ -1,7 +1,9 @@
 language: c
-script: bash -ex .travis-ci.sh
+install: wget https://raw.githubusercontent.com/ocaml/ocaml-travisci-skeleton/master/.travis-opam.sh
+script: bash -ex .travis-opam.sh
+sudo: required
 env:
-  - OCAML_VERSION=4.01.0
-  - OCAML_VERSION=4.02.0
+  - PACKAGE="jackline" OCAML_VERSION=4.01 EXTRA_REMOTES="https://github.com/mirage/mirage-dev.git https://github.com/hannesm/xmpp-opam.git"
+  - PACKAGE="jackline" OCAML_VERSION=latest EXTRA_REMOTES="https://github.com/mirage/mirage-dev.git https://github.com/hannesm/xmpp-opam.git"
 notifications:
   email: false
