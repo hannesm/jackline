@@ -177,7 +177,7 @@ let format_messages msgs =
     let en = if encrypted then "O" else "-" in
     let pre = match direction with
       | `From _ -> "<" ^ en ^ "- "
-      | `To _   -> (if received then "-" else "r") ^ en ^ "> "
+      | `To _   -> (if received then "-" else "?") ^ en ^ "> "
       | `Local x when x = "" -> "*** "
       | `Local x -> "***" ^ x ^ "*** "
     in
@@ -564,29 +564,29 @@ let rec loop ?out (config : Config.t) term hist state network log =
          Cli_commands.exec ?out command state config log force_redraw >>= fun () ->
          loop ?out config term hist state network log
        else
-         ( begin
-             match !xmpp_session with
-               | None -> return_unit
-               | Some x ->
-                  let otr_sessions = User.Users.fold (fun _ u acc ->
-                      List.fold_left (fun acc s ->
-                          if User.(encrypted s.otr) then
-                            User.(userid u s, s.otr) :: acc
-                          else acc)
-                        acc
-                        u.User.active_sessions)
-                      state.users []
-                  in
-                  Lwt_list.iter_s
-                    (fun (jid_to, ctx) ->
-                       let _, out = Otr.Engine.end_otr ctx in
-                       Xmpp_callbacks.XMPPClient.(send_message x
-                                                    ~kind:Chat
-                                                    ~jid_to:(JID.of_string jid_to)
-                                                    ?body:out ()))
-                    otr_sessions
-           end >|= fun () -> state )
-
+         begin
+           ( match !xmpp_session with
+             | None -> return_unit
+             | Some x ->
+               let otr_sessions = User.Users.fold (fun _ u acc ->
+                   List.fold_left (fun acc s ->
+                       if User.(encrypted s.otr) then
+                         (u, s) :: acc
+                       else acc)
+                     acc
+                     u.User.active_sessions)
+                   state.users []
+               in
+               let send_out (user, session) =
+                 match Otr.Engine.end_otr session.User.otr with
+                 | _, Some body ->
+                   send x user session body
+                     (fun _ -> return_unit)
+                 | _ -> return_unit
+               in
+               Lwt_list.iter_s send_out otr_sessions )
+           >|= fun () -> state
+         end
     | Some message when String.length message > 0 ->
        LTerm_history.add hist message ;
        let err data = log (`Local "error", data) ; return_unit in
@@ -614,22 +614,18 @@ let rec loop ?out (config : Config.t) term hist state network log =
            let ctx, out, user_out = Otr.Engine.send_otr session.User.otr message in
            User.replace_session state.users contact { session with User.otr = ctx } ;
            handle_otr_out user_out ;
-           (try_lwt Xmpp_callbacks.XMPPClient.(
-                send_message t
-                  ~kind:Chat
-                  ~jid_to:(JID.of_string (User.userid contact session))
-                  ?body:out () )
-            with e -> failure e)
+           (match out with
+            | Some body -> send t contact session body failure
+            | None -> return_unit )
          | None        , Some t ->
            let ctx = Otr.State.new_session config.Config.otr_config () in
            let _, out, user_out = Otr.Engine.send_otr ctx message in
            handle_otr_out user_out ;
-           (try_lwt Xmpp_callbacks.XMPPClient.(
-             send_message t
-               ~kind:Chat
-               ~jid_to:(JID.of_string contact.User.jid)
-               ?body:out () )
-            with e -> failure e)
+           ( match out with
+             | Some body ->
+               let _, session = User.find_or_create_session contact "" config.Config.otr_config in
+               send t contact session body failure
+             | None -> return_unit )
          | _           , None ->
            err "no active session, try to connect first" ) >>= fun () ->
        loop ?out config term hist state network log

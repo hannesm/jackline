@@ -421,13 +421,8 @@ let handle_own_info dump user cfgdir config res =
     user.User.active_sessions
 
 let handle_otr_start s users dump failure otr_cfg user =
-  let send_over resource body =
-    let jid_to =
-      let r = if resource = "" then "" else "/" ^ resource in
-      JID.of_string (user.User.jid ^ r)
-    in
-    (try_lwt Xmpp_callbacks.XMPPClient.(send_message s ~kind:Chat ~jid_to ?body ())
-     with e -> failure e)
+  let send_over session body =
+    send s user session body failure
   in
   match User.active_session user with
   | Some session when User.encrypted session.User.otr ->
@@ -436,14 +431,15 @@ let handle_otr_start s users dump failure otr_cfg user =
     let ctx, out = Otr.Engine.start_otr session.User.otr in
     User.replace_session users user { session with User.otr = ctx } ;
     dump "starting OTR session" ;
-    send_over session.User.resource (Some out)
+    send_over session out
   | None ->
     (* no OTR context, but we're sending only an OTR query anyways
        (and if we see a reply, we'll get some resource from the other side) *)
     let ctx = Otr.State.new_session otr_cfg () in
     let _, out = Otr.Engine.start_otr ctx in
     dump "starting OTR session" ;
-    send_over "" (Some out)
+    let _, session = User.find_or_create_session user "" otr_cfg in
+    send_over session out
 
 let handle_otr_stop s users dump err failure user =
   match User.active_session user with
@@ -454,9 +450,7 @@ let handle_otr_stop s users dump err failure user =
       | None   -> return_unit
       | Some body ->
         dump "finished OTR session" ;
-        let jid_to = JID.of_string (User.userid user session) in
-        (try_lwt Xmpp_callbacks.XMPPClient.(send_message s ~kind:Chat ~jid_to ~body ())
-         with e -> failure e) )
+        send s user session body failure )
   | None -> err "no active session"
 
 let handle_smp_abort users s session user dump failure =
@@ -467,11 +461,8 @@ let handle_smp_abort users s session user dump failure =
       | _ -> () )
     ret ;
   match out with
-  | None   -> return_unit
-  | Some body ->
-    let jid_to = JID.of_string (User.userid user session) in
-    (try_lwt Xmpp_callbacks.XMPPClient.(send_message s ~kind:Chat ~jid_to ~body ())
-     with e -> failure e)
+  | None -> return_unit
+  | Some out -> send s user session out failure
 
 let handle_smp_start users s session user dump failure args =
   let secret, question = match split_ws args with
@@ -487,10 +478,7 @@ let handle_smp_start users s session user dump failure args =
   dump "initiated SMP" ;
   match out with
   | None   -> return_unit
-  | Some body ->
-    let jid_to = JID.of_string (User.userid user session) in
-    (try_lwt Xmpp_callbacks.XMPPClient.(send_message s ~kind:Chat ~jid_to ~body ())
-     with e -> failure e)
+  | Some body -> send s user session body failure
 
 let handle_smp_answer users s session user dump failure secret =
   let ctx, out, ret = Otr.Engine.answer_smp session.User.otr secret in
@@ -501,10 +489,7 @@ let handle_smp_answer users s session user dump failure secret =
     ret ;
   match out with
   | None   -> return_unit
-  | Some body ->
-    let jid_to = JID.of_string (User.userid user session) in
-    (try_lwt Xmpp_callbacks.XMPPClient.(send_message s ~kind:Chat ~jid_to ~body ())
-     with e -> failure e)
+  | Some body -> send s user session body failure
 
 let handle_remove s dump user failure =
   (try_lwt

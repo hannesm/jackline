@@ -55,3 +55,14 @@ let add_status state dir msg =
   User.Users.replace state.users state.user user
 
 let (xmpp_session : Xmpp_callbacks.user_data Xmpp_callbacks.XMPPClient.session_data option ref) = ref None
+
+let send s contact session body fail =
+  let jid_to = User.userid contact session in
+  let body =
+    match session.User.receipt with
+    | `Unknown | `Requested | `Supported -> body
+    | `Unsupported -> body
+  in
+  let jid_to = JID.of_string jid_to in
+  (try_lwt Xmpp_callbacks.XMPPClient.(send_message s ~kind:Chat ~jid_to ~body ())
+   with e -> fail e)

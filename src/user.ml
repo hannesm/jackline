@@ -54,6 +54,13 @@ let presence_to_char = function
   | `ExtendedAway -> "x"
   | `Offline      -> "_"
 
+type receipt_state = [
+  | `Unknown
+  | `Requested
+  | `Supported
+  | `Unsupported
+]
+
 type session = {
   resource : string ;
   presence : presence ;
@@ -61,6 +68,7 @@ type session = {
   priority : int ;
   otr      : Otr.State.session ;
   dispose  : bool ;
+  receipt  : receipt_state ;
 }
 
 let empty_session ~resource ?(presence=`Offline) ?otr ?config ?(priority=0) ?(status=None) ?(dispose=false) () =
@@ -75,6 +83,7 @@ let empty_session ~resource ?(presence=`Offline) ?otr ?config ?(priority=0) ?(st
     priority ;
     otr ;
     dispose ;
+    receipt = `Unknown ;
   }
 
 open Sexplib
