@@ -215,6 +215,12 @@ let handle_connect ?out state config log redraw failure =
     User.Users.replace state.users jid user ;
     maybe_notify jid ;
     redraw ()
+  and receipt user id =
+    let user = User.received_message user id in
+    let jid = user.User.jid in
+    User.Users.replace state.users jid user ;
+    maybe_notify jid ;
+    redraw ()
   and find = User.find state.users
   and find_or_create = User.find_or_create state.users
   and find_session user resource =
@@ -250,6 +256,7 @@ let handle_connect ?out state config log redraw failure =
       Xmpp_callbacks.notify                 = notify                 ;
       Xmpp_callbacks.remove                 = remove                 ;
       Xmpp_callbacks.message                = message                ;
+      Xmpp_callbacks.receipt                = receipt                ;
       Xmpp_callbacks.failure                = failure                ;
   }
   in
@@ -422,7 +429,7 @@ let handle_own_info dump user cfgdir config res =
 
 let handle_otr_start s users dump failure otr_cfg user =
   let send_over session body =
-    send s user session body failure
+    send s users user session "" body failure
   in
   match User.active_session user with
   | Some session when User.encrypted session.User.otr ->
@@ -450,7 +457,7 @@ let handle_otr_stop s users dump err failure user =
       | None   -> return_unit
       | Some body ->
         dump "finished OTR session" ;
-        send s user session body failure )
+        send s users user session "" body failure )
   | None -> err "no active session"
 
 let handle_smp_abort users s session user dump failure =
@@ -462,7 +469,7 @@ let handle_smp_abort users s session user dump failure =
     ret ;
   match out with
   | None -> return_unit
-  | Some out -> send s user session out failure
+  | Some out -> send s users user session "" out failure
 
 let handle_smp_start users s session user dump failure args =
   let secret, question = match split_ws args with
@@ -478,7 +485,7 @@ let handle_smp_start users s session user dump failure args =
   dump "initiated SMP" ;
   match out with
   | None   -> return_unit
-  | Some body -> send s user session body failure
+  | Some body -> send s users user session "" body failure
 
 let handle_smp_answer users s session user dump failure secret =
   let ctx, out, ret = Otr.Engine.answer_smp session.User.otr secret in
@@ -489,7 +496,7 @@ let handle_smp_answer users s session user dump failure secret =
     ret ;
   match out with
   | None   -> return_unit
-  | Some body -> send s user session body failure
+  | Some body -> send s users user session "" body failure
 
 let handle_remove s dump user failure =
   (try_lwt

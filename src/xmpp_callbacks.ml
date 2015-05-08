@@ -14,6 +14,7 @@ module XMPPClient = XMPP.Make (Lwt) (Xmlstream.XmlStream) (IDCallback)
 open XMPPClient
 
 module Version = XEP_version.Make (XMPPClient)
+module Disco = XEP_disco.Make (XMPPClient)
 module Roster = Roster.Make (XMPPClient)
 
 open Lwt
@@ -30,6 +31,7 @@ type user_data = {
   find_or_create_session : User.user -> string -> User.session ;
   update_session         : User.user -> User.session -> unit ;
   failure                : exn -> unit Lwt.t ;
+  receipt                : User.user -> string -> unit ;
 }
 
 let validate_utf8 txt =
@@ -58,6 +60,13 @@ let message_callback (t : user_data session_data) stanza =
       let user = match t.user_data.find jid with Some x -> x | None -> assert false in
       t.user_data.message user dir enc txt ;
     in
+    List.iter (function
+        | Xml.Xmlelement ((ns_rec, "received"), attrs, _) when
+            ns_rec = ns_receipts ->
+          ( match Xml.safe_get_attr_value "id" attrs with
+              | "" -> ()
+              | id -> t.user_data.receipt user id )
+        | _ -> ()) stanza.x ;
     match stanza.content.body with
     | None -> return_unit
     | Some v ->
@@ -90,6 +99,21 @@ let message_callback (t : user_data session_data) stanza =
           | `SMP_success             -> msg (`Local "OTR SMP") false "successfully verified!"
           | `SMP_failure             -> msg (`Local "OTR SMP") false "failure" )
         ret ;
+      (Lwt_list.iter_s (function
+          | Xml.Xmlelement ((ns_rec, "request"), _, _) when
+              ns_rec = ns_receipts ->
+            ( match stanza.id with
+              | None -> return_unit
+              | Some id ->
+                let x = [Xml.Xmlelement ((ns_receipts, "received"), [Xml.make_attr "id" id], [])] in
+                (try_lwt
+                   send_message t
+                   ?jid_to:stanza.jid_from
+                   ~kind:Chat
+                   ~x
+                    ()
+                 with _ -> return_unit ) )
+          | _ -> return_unit) stanza.x) >>= fun () ->
       match out with
       | None -> return ()
       | Some body ->
@@ -274,6 +298,19 @@ let session_callback ?priority t =
             ~callback_error:presence_error
             t attrs eles
         with _ -> err "during presence parsing, ignoring" ; return_unit ));
+
+  register_iq_request_handler t Disco.ns_disco_info
+    (fun ev _jid_from _jid_to _lang () ->
+       match ev with
+       | IQSet _el -> fail BadRequest
+       | IQGet _ ->
+         match ns_receipts with
+         | None -> fail BadRequest
+         | Some x ->
+           let feature = Xml.Xmlelement ((None, "feature"), [Xml.make_attr "var" x], []) in
+           let query = Xml.make_element (Disco.ns_disco_info, "query") [] [feature]
+           in
+           return (IQResult (Some query)) ) ;
 
   Roster.get t (fun ?jid_from ?jid_to ?lang ?ver items ->
       ignore jid_from ; ignore jid_to ; ignore lang ; ignore ver ;

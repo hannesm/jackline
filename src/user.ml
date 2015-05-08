@@ -160,6 +160,19 @@ let message direction encrypted received message =
 let insert_message u dir enc rcvd msg =
   { u with message_history = (message dir enc rcvd msg) :: u.message_history }
 
+let received_message u id =
+  let tst msg = match msg.direction with
+    | `To x when x = id -> true
+    | _ -> false
+  in
+  try
+    { u with message_history = List.map (fun m ->
+          if tst m then { m with received = true } else m)
+          u.message_history
+    }
+  with
+    Not_found -> u
+
 let encrypted = Otr.State.is_encrypted
 
 let userid u s = match s.resource with
