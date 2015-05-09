@@ -84,29 +84,31 @@ let send s users contact session id body fail =
      match session.User.receipt with
      | `Unknown ->
        let callback ev _jid_from _jid_to _lang () =
-         match ev with
-         | Xmpp_callbacks.XMPPClient.IQResult el -> (
-             match el with
-             | Some (Xml.Xmlelement ((Some "http://jabber.org/protocol/disco#info", "query"), _, els)) ->
+         let user, session = find_user_session () in
+         let receipt = match ev with
+           | Xmpp_callbacks.XMPPClient.IQResult el ->
+             ( match el with
+               | Some (Xml.Xmlelement ((Some "http://jabber.org/protocol/disco#info", "query"), _, els)) ->
                (* pick el with ns_receipts *)
-               (if
-                 List.exists (function
-                     | Xml.Xmlelement ((_, "feature"), attrs, _) when
-                         Xml.safe_get_attr_value "var" attrs = "urn:xmpp:receipts" -> true
-                     | _ -> false) els
-                then
-                  let user, session = find_user_session () in
-                  let session = { session with receipt = `Supported } in
-                  User.replace_session users user session
-               ) ; Lwt.return_unit
-             | _ -> Lwt.return_unit )
-         | Xmpp_callbacks.XMPPClient.IQError _ ->
-           let user, session = find_user_session () in
-           let session = { session with receipt = `Unsupported } in
-           User.replace_session users user session ; Lwt.return_unit
+                 if
+                   List.exists (function
+                       | Xml.Xmlelement ((_, "feature"), attrs, _) when
+                           Xml.safe_get_attr_value "var" attrs = "urn:xmpp:receipts" -> true
+                       | _ -> false) els
+                 then
+                   `Supported
+                 else
+                   `Unsupported
+               | _ ->  `Unsupported )
+           | Xmpp_callbacks.XMPPClient.IQError _ ->
+             `Unsupported
+         in
+         let session = { session with User.receipt = receipt } in
+         User.replace_session users user session ;
+         Lwt.return_unit
        in
        let user, session = find_user_session () in
-       let session = { session with receipt = `Requested } in
+       let session = { session with User.receipt = `Requested } in
        User.replace_session users user session ;
        Xmpp_callbacks.XMPPClient.(make_iq_request s ~jid_to
                                     (IQGet (Xml.make_element (Some "http://jabber.org/protocol/disco#info", "query") [] [])) callback)
