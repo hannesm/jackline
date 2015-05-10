@@ -61,6 +61,13 @@ type receipt_state = [
   | `Unsupported
 ]
 
+let receipt_state_to_string = function
+  | `Unknown -> "unknown"
+  | `Requested -> "requested"
+  | `Supported -> "supported"
+  | `Unsupported -> "unsupported"
+
+
 type session = {
   resource : string ;
   presence : presence ;

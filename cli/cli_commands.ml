@@ -387,7 +387,8 @@ let marshal_session s =
     | None -> ""
     | Some x -> " - " ^ x
   in
-  s.User.resource ^ " (" ^ prio ^ "): " ^ pres ^ status
+  let receipts = User.receipt_state_to_string s.User.receipt in
+  s.User.resource ^ " (" ^ prio ^ ") (receipts " ^ receipts ^ "): " ^ pres ^ status
 
 let handle_info dump user cfgdir =
   let dump a b = dump (a ^ ": " ^ b) in
