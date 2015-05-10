@@ -14,6 +14,7 @@ module XMPPClient = XMPP.Make (Lwt) (Xmlstream.XmlStream) (IDCallback)
 open XMPPClient
 
 module Version = XEP_version.Make (XMPPClient)
+module Disco = XEP_disco.Make (XMPPClient)
 module Roster = Roster.Make (XMPPClient)
 
 open Lwt
@@ -30,7 +31,66 @@ type user_data = {
   find_or_create_session : User.user -> string -> User.session ;
   update_session         : User.user -> User.session -> unit ;
   failure                : exn -> unit Lwt.t ;
+  receipt                : User.user -> string -> unit ;
 }
+
+let request_disco t userid resource =
+  let user = t.user_data.find_or_create userid in
+  let session = t.user_data.find_or_create_session user resource in
+  match session.User.receipt with
+  | `Unknown ->
+    let callback ev jid_from _jid_to _lang () =
+      let receipt = match ev with
+        | IQResult el ->
+          ( match el with
+            | Some (Xml.Xmlelement ((ns, "query"), _, els)) when ns = Disco.ns_disco_info ->
+              (* pick el with ns_receipts *)
+              let receipt = match ns_receipts with
+                | Some x -> x
+                | None -> assert false
+              in
+              if
+                List.exists (function
+                    | Xml.Xmlelement ((_, "feature"), attrs, _) ->
+                      Xml.safe_get_attr_value "var" attrs = receipt
+                    | _ -> false) els
+              then
+                `Supported
+              else
+                `Unsupported
+            | _ ->  `Unsupported )
+           | IQError _ -> `Unsupported
+      in
+      (match jid_from with
+        | None -> fail BadRequest
+        | Some x -> return x ) >>= fun jid_from ->
+      let jid, resource = User.bare_jid (JID.of_string jid_from) in
+      let user = t.user_data.find_or_create jid in
+      let session = t.user_data.find_or_create_session user resource in
+      t.user_data.update_session user { session with User.receipt = receipt } ;
+      return_unit
+    in
+    t.user_data.update_session user { session with User.receipt = `Requested } ;
+    let jid_to = JID.of_string (User.userid user session) in
+    (try_lwt
+       make_iq_request t ~jid_to (IQGet (Disco.make_disco_query [])) callback
+     with e -> t.user_data.failure e)
+  | _ -> return_unit
+
+let send_msg t user session id request_receipt body failure =
+  let x =
+    match request_receipt, session.User.receipt with
+    | false, _ -> []
+    | true, `Supported -> [Xml.Xmlelement ((ns_receipts, "request"), [], [])]
+    | true, `Unsupported
+    | true, `Unknown
+    | true, `Requested -> []
+  in
+  let jid_to = JID.of_string (User.userid user session) in
+  try_lwt
+    send_message t ~kind:Chat ~jid_to ~body ~x ~id ()
+  with e -> failure e
+
 
 let validate_utf8 txt =
   let open CamomileLibrary.UPervasives in
@@ -58,6 +118,13 @@ let message_callback (t : user_data session_data) stanza =
       let user = match t.user_data.find jid with Some x -> x | None -> assert false in
       t.user_data.message user dir enc txt ;
     in
+    List.iter (function
+        | Xml.Xmlelement ((ns_rec, "received"), attrs, _) when
+            ns_rec = ns_receipts ->
+          ( match Xml.safe_get_attr_value "id" attrs with
+              | "" -> ()
+              | id -> t.user_data.receipt user id )
+        | _ -> ()) stanza.x ;
     match stanza.content.body with
     | None -> return_unit
     | Some v ->
@@ -90,14 +157,32 @@ let message_callback (t : user_data session_data) stanza =
           | `SMP_success             -> msg (`Local "OTR SMP") false "successfully verified!"
           | `SMP_failure             -> msg (`Local "OTR SMP") false "failure" )
         ret ;
+      (Lwt_list.iter_s (function
+          | Xml.Xmlelement ((ns_rec, "request"), _, _) when
+              ns_rec = ns_receipts ->
+            ( match stanza.id with
+              | None -> return_unit
+              | Some id ->
+                let x = [Xml.Xmlelement ((ns_receipts, "received"), [Xml.make_attr "id" id], [])] in
+                (try_lwt
+                   send_message t
+                   ?jid_to:stanza.jid_from
+                   ~kind:Chat
+                   ~x
+                    ()
+                 with _ -> return_unit ) )
+          | _ -> return_unit) stanza.x) >>= fun () ->
       match out with
       | None -> return ()
       | Some body ->
+        (try_lwt
+           send_message t
+             ?jid_to:stanza.jid_from
+             ~kind:Chat
+             ~body ()
+         with e -> t.user_data.failure e) >>= fun () ->
         try_lwt
-          send_message t
-            ?jid_to:stanza.jid_from
-            ~kind:Chat
-            ~body ()
+          request_disco t jid resource
         with e -> t.user_data.failure e
 
 let message_error t ?id ?jid_from ?jid_to ?lang error =
@@ -107,10 +192,10 @@ let message_error t ?id ?jid_from ?jid_to ?lang error =
     | Some x -> JID.string_of_jid x
   in
   let msg =
-    let err = "error message" in
+    let con = "error; reason: " ^ (string_of_condition error.err_condition) in
     match error.err_text with
-    | x when x = "" -> err
-    | x -> err ^ ": " ^ x
+    | x when x = "" -> con
+    | x -> con ^ ", message: " ^ x
   in
   t.user_data.received (`From jid) msg ;
   return_unit
@@ -181,10 +266,10 @@ let presence_error t ?id ?jid_from ?jid_to ?lang error =
     | Some x -> JID.string_of_jid x
   in
   let msg =
-    let err = "presence error" in
+    let con = "presence error; reason: " ^ (string_of_condition error.err_condition) in
     match error.err_text with
-    | x when x = "" -> err
-    | x -> err ^ ": " ^ x
+    | x when x = "" -> con
+    | x -> con ^ ", message: " ^ x
   in
   t.user_data.received (`From jid) msg ;
   return_unit
@@ -274,6 +359,19 @@ let session_callback ?priority t =
             ~callback_error:presence_error
             t attrs eles
         with _ -> err "during presence parsing, ignoring" ; return_unit ));
+
+  register_iq_request_handler t Disco.ns_disco_info
+    (fun ev _jid_from _jid_to _lang () ->
+       match ev with
+       | IQSet _el -> fail BadRequest
+       | IQGet _ ->
+         match ns_receipts with
+         | None -> fail BadRequest
+         | Some x ->
+           let feature = Disco.make_feature_var x in
+           let query = Disco.make_disco_query [feature]
+           in
+           return (IQResult (Some query)) ) ;
 
   Roster.get t (fun ?jid_from ?jid_to ?lang ?ver items ->
       ignore jid_from ; ignore jid_to ; ignore lang ; ignore ver ;

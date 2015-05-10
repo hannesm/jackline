@@ -54,6 +54,20 @@ let presence_to_char = function
   | `ExtendedAway -> "x"
   | `Offline      -> "_"
 
+type receipt_state = [
+  | `Unknown
+  | `Requested
+  | `Supported
+  | `Unsupported
+]
+
+let receipt_state_to_string = function
+  | `Unknown -> "unknown"
+  | `Requested -> "requested"
+  | `Supported -> "supported"
+  | `Unsupported -> "unsupported"
+
+
 type session = {
   resource : string ;
   presence : presence ;
@@ -61,6 +75,7 @@ type session = {
   priority : int ;
   otr      : Otr.State.session ;
   dispose  : bool ;
+  receipt  : receipt_state ;
 }
 
 let empty_session ~resource ?(presence=`Offline) ?otr ?config ?(priority=0) ?(status=None) ?(dispose=false) () =
@@ -75,6 +90,7 @@ let empty_session ~resource ?(presence=`Offline) ?otr ?config ?(priority=0) ?(st
     priority ;
     otr ;
     dispose ;
+    receipt = `Unknown ;
   }
 
 open Sexplib
@@ -150,6 +166,19 @@ let message direction encrypted received message =
 
 let insert_message u dir enc rcvd msg =
   { u with message_history = (message dir enc rcvd msg) :: u.message_history }
+
+let received_message u id =
+  let tst msg = match msg.direction with
+    | `To x when x = id -> true
+    | _ -> false
+  in
+  try
+    { u with message_history = List.map (fun m ->
+          if tst m then { m with received = true } else m)
+          u.message_history
+    }
+  with
+    Not_found -> u
 
 let encrypted = Otr.State.is_encrypted
 

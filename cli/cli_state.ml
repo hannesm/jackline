@@ -55,3 +55,13 @@ let add_status state dir msg =
   User.Users.replace state.users state.user user
 
 let (xmpp_session : Xmpp_callbacks.user_data Xmpp_callbacks.XMPPClient.session_data option ref) = ref None
+
+let send s contact session id body fail =
+  let (>>=) = Lwt.(>>=) in
+  Xmpp_callbacks.send_msg s contact session id true body fail >>= fun () ->
+  Xmpp_callbacks.request_disco s contact.User.jid session.User.resource
+
+let random_string () =
+  let open Nocrypto in
+  let rnd = Rng.generate 12 in
+  Cstruct.to_string (Base64.encode rnd)
