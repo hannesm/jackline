@@ -73,7 +73,7 @@ let request_disco t userid resource =
     t.user_data.update_session user { session with User.receipt = `Requested } ;
     let jid_to = JID.of_string (User.userid user session) in
     (try_lwt
-       make_iq_request t ~jid_to (IQGet (Xml.make_element (Disco.ns_disco_info, "query") [] [])) callback
+       make_iq_request t ~jid_to (IQGet (Disco.make_disco_query [])) callback
      with e -> t.user_data.failure e)
   | _ -> return_unit
 
@@ -368,8 +368,8 @@ let session_callback ?priority t =
          match ns_receipts with
          | None -> fail BadRequest
          | Some x ->
-           let feature = Xml.Xmlelement ((None, "feature"), [Xml.make_attr "var" x], []) in
-           let query = Xml.make_element (Disco.ns_disco_info, "query") [] [feature]
+           let feature = Disco.make_feature_var x in
+           let query = Disco.make_disco_query [feature]
            in
            return (IQResult (Some query)) ) ;
 
