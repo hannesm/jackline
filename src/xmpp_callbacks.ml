@@ -74,10 +74,23 @@ let request_disco t userid resource =
     let jid_to = JID.of_string (User.userid user session) in
     (try_lwt
        make_iq_request t ~jid_to (IQGet (Xml.make_element (Disco.ns_disco_info, "query") [] [])) callback
-     with e -> fail e)
+     with e -> t.user_data.failure e)
   | _ -> return_unit
 
-let send_msg t user resource id request_receipt data = ()
+let send_msg t user session id request_receipt body failure =
+  let x =
+    match request_receipt, session.User.receipt with
+    | false, _ -> []
+    | true, `Supported -> [Xml.Xmlelement ((ns_receipts, "request"), [], [])]
+    | true, `Unsupported
+    | true, `Unknown
+    | true, `Requested -> []
+  in
+  let jid_to = JID.of_string (User.userid user session) in
+  try_lwt
+    send_message t ~kind:Chat ~jid_to ~body ~x ~id ()
+  with e -> failure e
+
 
 let validate_utf8 txt =
   let open CamomileLibrary.UPervasives in
@@ -162,11 +175,14 @@ let message_callback (t : user_data session_data) stanza =
       match out with
       | None -> return ()
       | Some body ->
+        (try_lwt
+           send_message t
+             ?jid_to:stanza.jid_from
+             ~kind:Chat
+             ~body ()
+         with e -> t.user_data.failure e) >>= fun () ->
         try_lwt
-          send_message t
-            ?jid_to:stanza.jid_from
-            ~kind:Chat
-            ~body ()
+          request_disco t jid resource
         with e -> t.user_data.failure e
 
 let message_error t ?id ?jid_from ?jid_to ?lang error =

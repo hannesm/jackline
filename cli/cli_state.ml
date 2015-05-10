@@ -57,21 +57,8 @@ let add_status state dir msg =
 let (xmpp_session : Xmpp_callbacks.user_data Xmpp_callbacks.XMPPClient.session_data option ref) = ref None
 
 let send s contact session id body fail =
-  let jid = User.userid contact session in
-  let x =
-    match session.User.receipt with
-    | `Supported ->
-      let received = Xml.Xmlelement
-          ((Xmpp_callbacks.XMPPClient.ns_receipts, "request"), [], [])
-      in
-      [received]
-    | `Unsupported | `Unknown | `Requested -> []
-  in
-  let jid_to = JID.of_string jid in
   let (>>=) = Lwt.(>>=) in
-  (try_lwt
-     Xmpp_callbacks.XMPPClient.(send_message s ~kind:Chat ~jid_to ~body ~x ~id ())
-   with e -> fail e) >>= fun () ->
+  Xmpp_callbacks.send_msg s contact session id true body fail >>= fun () ->
   Xmpp_callbacks.request_disco s contact.User.jid session.User.resource
 
 let random_string () =
