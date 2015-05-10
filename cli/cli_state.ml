@@ -56,7 +56,7 @@ let add_status state dir msg =
 
 let (xmpp_session : Xmpp_callbacks.user_data Xmpp_callbacks.XMPPClient.session_data option ref) = ref None
 
-let send s users contact session id body fail =
+let send s contact session id body fail =
   let jid = User.userid contact session in
   let x =
     match session.User.receipt with
@@ -68,53 +68,11 @@ let send s users contact session id body fail =
     | `Unsupported | `Unknown | `Requested -> []
   in
   let jid_to = JID.of_string jid in
-  let find_user_session () =
-    let id, r = User.bare_jid jid_to in
-    match User.find users id with
-    | Some u -> ( match User.find_session u r with
-        | Some s -> (u, s)
-        | None -> assert false )
-    | None -> assert false
-  in
   let (>>=) = Lwt.(>>=) in
   (try_lwt
      Xmpp_callbacks.XMPPClient.(send_message s ~kind:Chat ~jid_to ~body ~x ~id ())
    with e -> fail e) >>= fun () ->
-  (try_lwt
-     match session.User.receipt with
-     | `Unknown ->
-       let callback ev _jid_from _jid_to _lang () =
-         let user, session = find_user_session () in
-         let receipt = match ev with
-           | Xmpp_callbacks.XMPPClient.IQResult el ->
-             ( match el with
-               | Some (Xml.Xmlelement ((Some "http://jabber.org/protocol/disco#info", "query"), _, els)) ->
-               (* pick el with ns_receipts *)
-                 if
-                   List.exists (function
-                       | Xml.Xmlelement ((_, "feature"), attrs, _) when
-                           Xml.safe_get_attr_value "var" attrs = "urn:xmpp:receipts" -> true
-                       | _ -> false) els
-                 then
-                   `Supported
-                 else
-                   `Unsupported
-               | _ ->  `Unsupported )
-           | Xmpp_callbacks.XMPPClient.IQError _ ->
-             `Unsupported
-         in
-         let session = { session with User.receipt = receipt } in
-         User.replace_session users user session ;
-         Lwt.return_unit
-       in
-       let user, session = find_user_session () in
-       let session = { session with User.receipt = `Requested } in
-       User.replace_session users user session ;
-       Xmpp_callbacks.XMPPClient.(make_iq_request s ~jid_to
-                                    (IQGet (Xml.make_element (Some "http://jabber.org/protocol/disco#info", "query") [] [])) callback)
-     | _ -> Lwt.return_unit
-   with e -> fail e)
-
+  Xmpp_callbacks.request_disco s contact.User.jid session.User.resource
 
 let random_string () =
   let open Nocrypto in

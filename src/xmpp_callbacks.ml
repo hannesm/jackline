@@ -34,6 +34,51 @@ type user_data = {
   receipt                : User.user -> string -> unit ;
 }
 
+let request_disco t userid resource =
+  let user = t.user_data.find_or_create userid in
+  let session = t.user_data.find_or_create_session user resource in
+  match session.User.receipt with
+  | `Unknown ->
+    let callback ev jid_from _jid_to _lang () =
+      let receipt = match ev with
+        | IQResult el ->
+          ( match el with
+            | Some (Xml.Xmlelement ((ns, "query"), _, els)) when ns = Disco.ns_disco_info ->
+              (* pick el with ns_receipts *)
+              let receipt = match ns_receipts with
+                | Some x -> x
+                | None -> assert false
+              in
+              if
+                List.exists (function
+                    | Xml.Xmlelement ((_, "feature"), attrs, _) ->
+                      Xml.safe_get_attr_value "var" attrs = receipt
+                    | _ -> false) els
+              then
+                `Supported
+              else
+                `Unsupported
+            | _ ->  `Unsupported )
+           | IQError _ -> `Unsupported
+      in
+      (match jid_from with
+        | None -> fail BadRequest
+        | Some x -> return x ) >>= fun jid_from ->
+      let jid, resource = User.bare_jid (JID.of_string jid_from) in
+      let user = t.user_data.find_or_create jid in
+      let session = t.user_data.find_or_create_session user resource in
+      t.user_data.update_session user { session with User.receipt = receipt } ;
+      return_unit
+    in
+    t.user_data.update_session user { session with User.receipt = `Requested } ;
+    let jid_to = JID.of_string (User.userid user session) in
+    (try_lwt
+       make_iq_request t ~jid_to (IQGet (Xml.make_element (Disco.ns_disco_info, "query") [] [])) callback
+     with e -> fail e)
+  | _ -> return_unit
+
+let send_msg t user resource id request_receipt data = ()
+
 let validate_utf8 txt =
   let open CamomileLibrary.UPervasives in
   let check_uchar c = match int_of_uchar c with
