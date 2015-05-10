@@ -192,10 +192,10 @@ let message_error t ?id ?jid_from ?jid_to ?lang error =
     | Some x -> JID.string_of_jid x
   in
   let msg =
-    let err = "error message" in
+    let con = "error; reason: " ^ (string_of_condition error.err_condition) in
     match error.err_text with
-    | x when x = "" -> err
-    | x -> err ^ ": " ^ x
+    | x when x = "" -> con
+    | x -> con ^ ", message: " ^ x
   in
   t.user_data.received (`From jid) msg ;
   return_unit
@@ -266,10 +266,10 @@ let presence_error t ?id ?jid_from ?jid_to ?lang error =
     | Some x -> JID.string_of_jid x
   in
   let msg =
-    let err = "presence error" in
+    let con = "presence error; reason: " ^ (string_of_condition error.err_condition) in
     match error.err_text with
-    | x when x = "" -> err
-    | x -> err ^ ": " ^ x
+    | x when x = "" -> con
+    | x -> con ^ ", message: " ^ x
   in
   t.user_data.received (`From jid) msg ;
   return_unit
