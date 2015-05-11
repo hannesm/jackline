@@ -120,7 +120,7 @@ let print_time ?now timestamp =
   in
   let display = localtime timestamp in
   if now -. timestamp < 86400. then (* less than a day ago *)
-    Printf.sprintf "[%02d:%02d:%02d] "
+    Printf.sprintf "%02d:%02d:%02d "
       display.Unix.tm_hour
       display.Unix.tm_min
       display.Unix.tm_sec
