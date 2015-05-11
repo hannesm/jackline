@@ -430,7 +430,7 @@ let handle_own_info dump user cfgdir config res =
 
 let handle_otr_start s users dump failure otr_cfg user =
   let send_over session body =
-    send s user session "" body failure
+    send s user session None body failure
   in
   match User.active_session user with
   | Some session when User.encrypted session.User.otr ->
@@ -458,7 +458,7 @@ let handle_otr_stop s users dump err failure user =
       | None   -> return_unit
       | Some body ->
         dump "finished OTR session" ;
-        send s user session "" body failure )
+        send s user session None body failure )
   | None -> err "no active session"
 
 let handle_smp_abort users s session user dump failure =
@@ -470,7 +470,7 @@ let handle_smp_abort users s session user dump failure =
     ret ;
   match out with
   | None -> return_unit
-  | Some out -> send s user session "" out failure
+  | Some out -> send s user session None out failure
 
 let handle_smp_start users s session user dump failure args =
   let secret, question = match split_ws args with
@@ -486,7 +486,7 @@ let handle_smp_start users s session user dump failure args =
   dump "initiated SMP" ;
   match out with
   | None   -> return_unit
-  | Some body -> send s user session "" body failure
+  | Some body -> send s user session None body failure
 
 let handle_smp_answer users s session user dump failure secret =
   let ctx, out, ret = Otr.Engine.answer_smp session.User.otr secret in
@@ -497,7 +497,7 @@ let handle_smp_answer users s session user dump failure secret =
     ret ;
   match out with
   | None   -> return_unit
-  | Some body -> send s user session "" body failure
+  | Some body -> send s user session None body failure
 
 let handle_remove s dump user failure =
   (try_lwt

@@ -77,18 +77,18 @@ let request_disco t userid resource =
      with e -> t.user_data.failure e)
   | _ -> return_unit
 
-let send_msg t user session id request_receipt body failure =
+let send_msg t user session id body failure =
   let x =
-    match request_receipt, session.User.receipt with
-    | false, _ -> []
-    | true, `Supported -> [Xml.Xmlelement ((ns_receipts, "request"), [], [])]
-    | true, `Unsupported
-    | true, `Unknown
-    | true, `Requested -> []
+    match id, session.User.receipt with
+    | None, _ -> []
+    | Some _, `Supported -> [Xml.Xmlelement ((ns_receipts, "request"), [], [])]
+    | Some _, `Unsupported
+    | Some _, `Unknown
+    | Some _, `Requested -> []
   in
   let jid_to = JID.of_string (User.userid user session) in
   try_lwt
-    send_message t ~kind:Chat ~jid_to ~body ~x ~id ()
+    send_message t ~kind:Chat ~jid_to ~body ~x ?id ()
   with e -> failure e
 
 

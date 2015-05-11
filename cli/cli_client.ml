@@ -592,7 +592,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
                let send_out (user, session) =
                  match Otr.Engine.end_otr session.User.otr with
                  | _, Some body ->
-                   send x user session "" body
+                   send x user session None body
                      (fun _ -> return_unit)
                  | _ -> return_unit
                in
@@ -633,7 +633,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
            User.replace_session state.users contact { session with User.otr = ctx } ;
            let id = handle_otr_out user_out in
            (match out with
-            | Some body -> send t contact session id body failure
+            | Some body -> send t contact session (Some id) body failure
             | None -> return_unit )
          | None        , Some t ->
            let ctx = Otr.State.new_session config.Config.otr_config () in
@@ -642,7 +642,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
            ( match out with
              | Some body ->
                let _, session = User.find_or_create_session contact "" config.Config.otr_config in
-               send t contact session id body failure
+               send t contact session (Some id) body failure
              | None -> return_unit )
          | _           , None ->
            err "no active session, try to connect first" ) >>= fun () ->

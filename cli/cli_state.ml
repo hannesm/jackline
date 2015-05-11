@@ -58,7 +58,7 @@ let (xmpp_session : Xmpp_callbacks.user_data Xmpp_callbacks.XMPPClient.session_d
 
 let send s contact session id body fail =
   let (>>=) = Lwt.(>>=) in
-  Xmpp_callbacks.send_msg s contact session id true body fail >>= fun () ->
+  Xmpp_callbacks.send_msg s contact session id body fail >>= fun () ->
   Xmpp_callbacks.request_disco s contact.User.jid session.User.resource
 
 let random_string () =
