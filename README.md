@@ -77,9 +77,9 @@ Active keys:
 A message is sent to the active contact with `return`.
 
 In the chat window, each message is prefixed with 3 characters:
-- `***` is a local message,
-- `<--` is an incoming unencrypted message
-- `<O-` is an incoming encrypted message (`O` indicates OTR encryption),
+- `***` is a local message.
+- `<--` is an incoming unencrypted message.
+- `<O-` is an incoming encrypted message (`O` indicates OTR encryption).
 - `-->` is an outgoing unencrypted message, which has been received by the other client.
 - `?->` is an outgoing unencrypted message waiting for a message delivery receipt (XEP 184).
 - `-O>` is an outgoing encrypted message, which was received.
