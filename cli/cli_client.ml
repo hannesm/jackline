@@ -112,14 +112,30 @@ let rec line_wrap ?raw ~max_length entries acc : string list =
     line_wrap ?raw ~max_length remaining (entry::acc)
   | [] -> acc
 
+let print_time ?now timestamp =
+  let open Unix in
+  let now = localtime (match now with
+      | Some x -> x
+      | None -> time ())
+  in
+  let display = localtime timestamp in
+  if now.tm_mon = display.tm_mon && now.tm_mday = display.tm_mday then
+    Printf.sprintf "[%02d:%02d:%02d] "
+      display.Unix.tm_hour
+      display.Unix.tm_min
+      display.Unix.tm_sec
+  else
+    Printf.sprintf "%02d-%02d %02d:%02d "
+      (succ display.Unix.tm_mon)
+      display.Unix.tm_mday
+      display.Unix.tm_hour
+      display.Unix.tm_min
+
 let format_log log =
   let open User in
+  let now = Unix.time () in
   let print_log { direction ; timestamp ; message ; _ } =
-    let time =
-      let lt = Unix.localtime timestamp in
-      Printf.sprintf "[%02d:%02d:%02d] "
-        lt.Unix.tm_hour lt.Unix.tm_min lt.Unix.tm_sec
-    in
+    let time = print_time ~now timestamp in
     let from = match direction with
       | `From jid -> jid ^ ":"
       | `Local x when x = "" -> "***"
@@ -167,13 +183,9 @@ let format_buddies buddies users self active notifications width =
 
 let format_messages msgs =
   let open User in
+  let now = Unix.time () in
   let printmsg { direction ; encrypted ; received ; timestamp ; message ; _ } =
-    let lt = Unix.localtime timestamp in
-    let time =
-      Printf.sprintf "%02d-%02d %02d:%02d "
-        (succ lt.Unix.tm_mon) lt.Unix.tm_mday
-        lt.Unix.tm_hour lt.Unix.tm_min
-    in
+    let time = print_time ~now timestamp in
     let en = if encrypted then "O" else "-" in
     let pre = match direction with
       | `From _ -> "<" ^ en ^ "- "
