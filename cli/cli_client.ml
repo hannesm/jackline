@@ -114,12 +114,12 @@ let rec line_wrap ?raw ~max_length entries acc : string list =
 
 let print_time ?now timestamp =
   let open Unix in
-  let now = localtime (match now with
+  let now = match now with
       | Some x -> x
-      | None -> time ())
+      | None -> time ()
   in
   let display = localtime timestamp in
-  if now.tm_mon = display.tm_mon && now.tm_mday = display.tm_mday then
+  if now -. timestamp < 86400. then (* less than a day ago *)
     Printf.sprintf "[%02d:%02d:%02d] "
       display.Unix.tm_hour
       display.Unix.tm_min
