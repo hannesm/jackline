@@ -45,7 +45,6 @@ Get OCaml (4.02.1 preferred), get opam (1.2), [aspcud](http://www.cs.uni-potsdam
 If you have an older OCaml compiler, run `opam switch 4.02.1`.
 
 Run the following commands:
-- `opam repo add mirage-dev git://github.com/mirage/mirage-dev`
 - `opam repo add xmpp-dev git://github.com/hannesm/xmpp-opam`
 - `opam update`
 - `opam install jackline`
