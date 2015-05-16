@@ -227,7 +227,7 @@ let handle_connect ?out state config log redraw failure =
     User.find_session user resource
   and find_or_create_session user resource =
     let otr_config = config.Config.otr_config in
-    let user, session = User.find_or_create_session user resource otr_config in
+    let user, session = User.find_or_create_session user resource otr_config config.Config.dsa in
     User.Users.replace state.users user.User.jid user ;
     session
   and update_session user session =
@@ -374,7 +374,7 @@ let handle_otr_info dump user =
     dump ("(no active session) OTR fingerprints: " ^ (dump_otr_fps user.User.otr_fingerprints))
 
 let handle_own_otr_info dump config =
-  let otr_fp = Otr.Utils.own_fingerprint config.Config.otr_config in
+  let otr_fp = Otr.Utils.own_fingerprint config.Config.dsa in
   dump ("own otr fingerprint: " ^ (User.format_fp (User.hex_fingerprint otr_fp)))
 
 let common_info dump user cfgdir =
@@ -424,7 +424,7 @@ let handle_info dump user cfgdir =
 let handle_own_info dump user cfgdir config res =
   let dump a b = dump (a ^ ": " ^ b) in
   common_info dump user cfgdir ;
-  let otr_fp = Otr.Utils.own_fingerprint config.Config.otr_config in
+  let otr_fp = Otr.Utils.own_fingerprint config.Config.dsa in
   dump "own otr fingerprint" (User.format_fp (User.hex_fingerprint otr_fp)) ;
   let active = User.active_session user in
   List.iteri (fun i s ->
@@ -437,7 +437,7 @@ let handle_own_info dump user cfgdir config res =
       dump ("session " ^ (string_of_int i) ^ act) (marshal_session s))
     user.User.active_sessions
 
-let handle_otr_start s users dump failure otr_cfg user =
+let handle_otr_start s users dump failure otr_cfg dsa user =
   let send_over session body =
     send s user session None body failure
   in
@@ -452,10 +452,9 @@ let handle_otr_start s users dump failure otr_cfg user =
   | None ->
     (* no OTR context, but we're sending only an OTR query anyways
        (and if we see a reply, we'll get some resource from the other side) *)
-    let ctx = Otr.State.new_session otr_cfg () in
-    let _, out = Otr.Engine.start_otr ctx in
+    let _, session = User.find_or_create_session user "" otr_cfg dsa in
+    let _, out = Otr.Engine.start_otr session.User.otr in
     dump "starting OTR session" ;
-    let _, session = User.find_or_create_session user "" otr_cfg in
     send_over session out
 
 let handle_otr_stop s users dump err failure user =
@@ -616,7 +615,7 @@ let exec ?out input state config log redraw =
           | None -> err "not connected"
           | Some s when x = "start" ->
             if self then err "do not like to talk to myself" else
-              handle_otr_start s state.users dump failure config.Config.otr_config contact
+              handle_otr_start s state.users dump failure config.Config.otr_config config.Config.dsa contact
           | Some s when x = "stop" ->
             if self then err "do not like to talk to myself" else
               handle_otr_stop s state.users dump err failure contact

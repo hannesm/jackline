@@ -152,7 +152,7 @@ let configure term () =
     ""
     " (recommended)" >|= fun policies ->
   let dsa = Nocrypto.Dsa.generate `Fips1024 in
-  let otr_config = Otr.State.config versions policies dsa in
+  let otr_config = Otr.State.config versions policies in
   let config = Config.({
       version = current_version ;
       jid ;
@@ -162,6 +162,7 @@ let configure term () =
       password ;
       authenticator ;
       otr_config ;
+      dsa ;
       certificate_hostname
     }) in
   config

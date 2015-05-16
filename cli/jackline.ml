@@ -21,7 +21,7 @@ let start_client cfgdir debug () =
         ( match config.Config.password with
           | None -> return_unit
           | Some x -> Persistency.dump_password cfgdir x ) >>= fun () ->
-        Persistency.dump_dsa cfgdir config.Config.otr_config.Otr.State.dsa >|= fun () ->
+        Persistency.dump_dsa cfgdir config.Config.dsa >|= fun () ->
         config
       | Some cfg -> return cfg ) >>= fun config ->
 
@@ -44,7 +44,7 @@ let start_client cfgdir debug () =
   (* setup self contact *)
   let jid, resource = User.bare_jid config.Config.jid in
   let user = User.find_or_create users jid in
-  let user, _ = User.find_or_create_session user resource config.Config.otr_config in
+  let user, _ = User.find_or_create_session user resource config.Config.otr_config config.Config.dsa in
   User.Users.replace users jid user ;
 
   let state = Cli_state.empty_ui_state cfgdir jid resource users in

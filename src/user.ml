@@ -78,10 +78,10 @@ type session = {
   receipt  : receipt_state ;
 }
 
-let empty_session ~resource ?(presence=`Offline) ?otr ?config ?(priority=0) ?(status=None) ?(dispose=false) () =
+let empty_session ~resource ?(presence=`Offline) ?otr ?config ?(priority=0) ?(status=None) ?(dispose=false) dsa () =
   let otr = match otr, config with
     | Some otr, _         -> otr
-    | None    , Some conf -> Otr.State.new_session conf ()
+    | None    , Some conf -> Otr.State.new_session conf dsa ()
     | _ -> assert false
   in {
     resource ;
@@ -363,11 +363,11 @@ let find_similar_session user resource =
   let r_similar s = resource_similar s.resource resource in
   get_session user r_similar
 
-let find_or_create_session user resource config =
+let find_or_create_session user resource config dsa =
   match find_session user resource with
   | Some x -> (user, x)
   | None   ->
-    let session = empty_session ~resource ~config () in
+    let session = empty_session ~resource ~config dsa () in
     let session, similar = match find_similar_session user resource with
       | None         -> (session, None)
       | Some similar -> ({ session with otr = similar.otr }, Some similar)
