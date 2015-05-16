@@ -153,12 +153,13 @@ type user = {
   preserve_messages : bool ;
   message_history   : message list ; (* persistent if preserve_messages is true *)
   otr_fingerprints  : fingerprint list ;
+  otr_custom_config : Otr.State.config option ;
   active_sessions   : session list (* not persistent *)
 }
 
-let new_user ~jid ?(name=None) ?(groups=[]) ?(subscription=`None) ?(otr_fingerprints=[]) ?(preserve_messages=false) ?(properties=[]) ?(active_sessions=[]) () =
+let new_user ~jid ?(name=None) ?(groups=[]) ?(subscription=`None) ?(otr_fingerprints=[]) ?(preserve_messages=false) ?(properties=[]) ?(active_sessions=[]) ?(otr_custom_config=None) () =
   let message_history = [] in
-  { jid ; name ; groups ; subscription ; properties ; otr_fingerprints ; preserve_messages ; active_sessions ; message_history }
+  { jid ; name ; groups ; subscription ; properties ; otr_fingerprints ; preserve_messages ; active_sessions ; message_history ; otr_custom_config }
 
 let message direction encrypted received message =
   { direction ; encrypted ; received ;
@@ -404,7 +405,7 @@ let t_of_sexp t version =
   match t with
   | Sexp.List l ->
     (match
-       List.fold_left (fun (name, jid, groups, preserve_messages, properties, subscription, otr_fingerprints) v -> match v with
+       List.fold_left (fun (name, jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config) v -> match v with
            | Sexp.List [ Sexp.Atom "name" ; nam ] ->
              assert (name = None);
              let name = match version with
@@ -412,36 +413,40 @@ let t_of_sexp t version =
                  if str = "" then None else Some str
                | _ -> option_of_sexp string_of_sexp nam
              in
-             (Some name, jid, groups, preserve_messages, properties, subscription, otr_fingerprints)
+             (Some name, jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config)
            | Sexp.List [ Sexp.Atom "jid" ; Sexp.Atom jabberid ] ->
              assert (jid = None);
-             (name, Some jabberid, groups, preserve_messages, properties, subscription, otr_fingerprints)
+             (name, Some jabberid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config)
            | Sexp.List [ Sexp.Atom "groups" ; gps ] ->
              assert (groups = None);
              let groups = list_of_sexp string_of_sexp gps in
-             (name, jid, Some groups, preserve_messages, properties, subscription, otr_fingerprints)
+             (name, jid, Some groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config)
            (* TODO: rename to preserve_messages and bump version *)
            | Sexp.List [ Sexp.Atom "preserve_history" ; hf ] ->
              assert (preserve_messages = None) ;
              let preserve_messages = bool_of_sexp hf in
-             (name, jid, groups, Some preserve_messages, properties, subscription, otr_fingerprints)
+             (name, jid, groups, Some preserve_messages, properties, subscription, otr_fingerprints, otr_config)
            | Sexp.List [ Sexp.Atom "properties" ; p ] ->
              assert (properties = None) ;
              let properties = list_of_sexp property_of_sexp p in
-             (name, jid, groups, preserve_messages, Some properties, subscription, otr_fingerprints)
+             (name, jid, groups, preserve_messages, Some properties, subscription, otr_fingerprints, otr_config)
            | Sexp.List [ Sexp.Atom "subscription" ; s ] ->
              assert (subscription = None) ;
              let subscription = subscription_of_sexp s in
-             (name, jid, groups, preserve_messages, properties, Some subscription, otr_fingerprints)
+             (name, jid, groups, preserve_messages, properties, Some subscription, otr_fingerprints, otr_config)
            | Sexp.List [ Sexp.Atom "otr_fingerprints" ; fps ] ->
              assert (otr_fingerprints = None);
              let otr_fingerprints = list_of_sexp fingerprint_of_sexp fps in
-             (name, jid, groups, preserve_messages, properties, subscription, Some otr_fingerprints)
+             (name, jid, groups, preserve_messages, properties, subscription, Some otr_fingerprints, otr_config)
+           | Sexp.List [ Sexp.Atom "otr_custom_config" ; cfg ] ->
+             assert (otr_config = None);
+             let otr_config = option_of_sexp Otr.State.config_of_sexp cfg in
+             (name, jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config)
            | _ -> assert false)
-         (None, None, None, None, None, None, None) l
+         (None, None, None, None, None, None, None, None) l
      with
-     | Some name, Some jid, Some groups, Some preserve_messages, Some properties, Some subscription, Some otr_fingerprints ->
-       Some (new_user ~jid ~name ~groups ~subscription ~properties ~otr_fingerprints ~preserve_messages ())
+     | Some name, Some jid, Some groups, Some preserve_messages, Some properties, Some subscription, Some otr_fingerprints, otr_custom_config ->
+       Some (new_user ~jid ~name ~groups ~subscription ~properties ~otr_fingerprints ~preserve_messages ~otr_custom_config ())
      | _ -> None )
   | _ -> None
 
@@ -451,14 +456,15 @@ let record kvs =
 
 let sexp_of_t t =
   record [
-    "name"            , sexp_of_option sexp_of_string t.name ;
-    "jid"             , sexp_of_string t.jid ;
-    "groups"          , sexp_of_list sexp_of_string t.groups ;
+    "name"             , sexp_of_option sexp_of_string t.name ;
+    "jid"              , sexp_of_string t.jid ;
+    "groups"           , sexp_of_list sexp_of_string t.groups ;
     (* TODO: rename preserve_messages and bump version *)
-    "preserve_history", sexp_of_bool t.preserve_messages ;
-    "properties"      , sexp_of_list sexp_of_property t.properties ;
-    "subscription"    , sexp_of_subscription t.subscription ;
-    "otr_fingerprints", sexp_of_list sexp_of_fingerprint t.otr_fingerprints ;
+    "preserve_history" , sexp_of_bool t.preserve_messages ;
+    "properties"       , sexp_of_list sexp_of_property t.properties ;
+    "subscription"     , sexp_of_subscription t.subscription ;
+    "otr_fingerprints" , sexp_of_list sexp_of_fingerprint t.otr_fingerprints ;
+    "otr_custom_config", sexp_of_option Otr.State.sexp_of_config t.otr_custom_config ;
   ]
 
 let load_history file strict =

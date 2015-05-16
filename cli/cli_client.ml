@@ -636,12 +636,16 @@ let rec loop ?out (config : Config.t) term hist state network log =
             | Some body -> send t contact session (Some id) body failure
             | None -> return_unit )
          | None        , Some t ->
-           let ctx = Otr.State.new_session config.Config.otr_config config.Config.dsa () in
+           let cfg = match contact.User.otr_custom_config with
+             | None -> config.Config.otr_config
+             | Some x -> x
+           in
+           let ctx = Otr.State.new_session cfg config.Config.dsa () in
            let _, out, user_out = Otr.Engine.send_otr ctx message in
            let id = handle_otr_out user_out in
            ( match out with
              | Some body ->
-               let _, session = User.find_or_create_session contact "" config.Config.otr_config config.Config.dsa in
+               let _, session = User.find_or_create_session contact "" cfg config.Config.dsa in
                send t contact session (Some id) body failure
              | None -> return_unit )
          | _           , None ->

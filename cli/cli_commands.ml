@@ -59,6 +59,9 @@ let _ =
 
   (* user as context *)
   new_command
+    "otrpolicy" "/otrpolicy +-[policy version]" "prints (without argument) or adjusts (prefix with add (+) or remove (-)) the otr policies and versions: require_encryption, send_whitespace_tag, whitespace_start_ake, error_start_ake, reveal_macs, v2, v3"
+    [ "+REQUIRE_ENCRYPTION" ; "+SEND_WHITESPACE_TAG" ; "+WHITESPACE_START_AKE" ; "+ERROR_START_AKE" ; "+REVEAL_MACS" ; "+V2" ; "+V3" ; "-REQUIRE_ENCRYPTION" ; "-SEND_WHITESPACE_TAG" ; "-WHITESPACE_START_AKE" ; "-ERROR_START_AKE" ; "-REVEAL_MACS" ; "-V2" ; "-V3" ] ;
+  new_command
     "log" "/log [on|off]" "enable or disable logging for current contact" [ "on" ; "off" ] ;
   new_command
     "clear" "/clear" "clears the active window chat backlog" [] ;
@@ -226,7 +229,10 @@ let handle_connect ?out state config log redraw failure =
   and find_session user resource =
     User.find_session user resource
   and find_or_create_session user resource =
-    let otr_config = config.Config.otr_config in
+    let otr_config = match user.User.otr_custom_config with
+      | None -> config.Config.otr_config
+      | Some x -> x
+    in
     let user, session = User.find_or_create_session user resource otr_config config.Config.dsa in
     User.Users.replace state.users user.User.jid user ;
     session
@@ -516,6 +522,60 @@ let handle_remove s dump user failure =
          return_unit)
    with e -> failure e)
 
+let print_otr_policy dump pref cfg =
+  let policies = String.concat ", "
+      (List.map Otr.State.policy_to_string cfg.Otr.State.policies)
+  and versions = String.concat ", "
+      (List.map Otr.State.version_to_string cfg.Otr.State.versions)
+  in
+  dump ("OTR " ^ pref ^ "versions: " ^ versions ^ " policies: " ^ policies)
+
+let adjust_otr_policy dump failure users default_cfg cfg contact data =
+  let try_decode str =
+    Otr.State.string_to_policy str, Otr.State.string_to_version str
+  in
+  let rec parse_elements pols vers left =
+    if String.length left > 0 then
+      let arg, rest = split_ws left in
+      let first, arg = String.get arg 0, String.sub arg 1 (pred (String.length arg)) in
+      let pols, vers = match first, try_decode (String.uppercase arg) with
+        | '+', (Some pol, None) when List.mem pol pols -> pols, vers
+        | '+', (Some pol, None) -> pol :: pols, vers
+        | '-', (Some pol, None) -> List.filter (fun x -> x <> pol) pols, vers
+        | '+', (None, Some ver) when List.mem ver vers -> pols, vers
+        | '+', (None, Some ver) -> pols, ver :: vers
+        | '-', (None, Some ver) -> pols, List.filter (fun x -> x <> ver) vers
+        | _ -> assert false
+      in
+      match rest with
+      | None -> pols, vers
+      | Some x -> parse_elements pols vers x
+    else
+      pols, vers
+  in
+  try
+    let old_p = cfg.Otr.State.policies
+    and old_v = cfg.Otr.State.versions
+    in
+    let pols, vers = parse_elements old_p old_v data in
+    (if pols <> old_p || old_v <> vers then
+       let cfg =
+         if pols = default_cfg.Otr.State.policies && vers = default_cfg.Otr.State.versions then
+           None
+         else
+           let otr_custom_config = Otr.State.config vers pols in
+           Some otr_custom_config
+       in
+       User.Users.replace users contact.User.jid { contact with User.otr_custom_config = cfg } ;
+       (match cfg with
+        | None -> dump "reverted to default otr policy"
+        | Some x -> print_otr_policy dump "" x ) ;
+      else
+        dump "nothing changed" ) ;
+    return_unit
+  with
+    _ -> failure (Invalid_argument "unable to parse argument")
+
 let tell_user (log:(User.direction * string) -> unit) ?(prefix:string option) (from:string) (msg:string) =
   let f = match prefix with
     | None -> from
@@ -602,6 +662,18 @@ let exec ?out input state config log redraw =
       else
         handle_info dump contact state.config_directory );
     return_unit
+
+  | ("otrpolicy", x) ->
+    let cfg, pref = match contact.User.otr_custom_config with
+      | None -> (config.Config.otr_config, "default ")
+      | Some x -> (x, "")
+    in
+    (match x with
+     | None -> print_otr_policy dump pref cfg ; return_unit
+     | Some _ when self -> err "cannot adjust own otr policy"
+     | Some z -> adjust_otr_policy dump failure state.users config.Config.otr_config cfg contact z
+    )
+
   | ("otr", x) ->
     ( match x with
       | None -> handle_help (msg ~prefix:"argument required") (Some "otr")
@@ -615,7 +687,11 @@ let exec ?out input state config log redraw =
           | None -> err "not connected"
           | Some s when x = "start" ->
             if self then err "do not like to talk to myself" else
-              handle_otr_start s state.users dump failure config.Config.otr_config config.Config.dsa contact
+              let cfg = match contact.User.otr_custom_config with
+                | None -> config.Config.otr_config
+                | Some x -> x
+              in
+              handle_otr_start s state.users dump failure cfg config.Config.dsa contact
           | Some s when x = "stop" ->
             if self then err "do not like to talk to myself" else
               handle_otr_stop s state.users dump err failure contact
