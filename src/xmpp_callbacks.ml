@@ -34,6 +34,30 @@ type user_data = {
   receipt                : User.user -> string -> unit ;
 }
 
+(*
+let request_server_disco t =
+  let callback ev _jid_from _jid_to _lang () =
+    match ev with
+      | IQResult el ->
+        ( match el with
+          | Some (Xml.Xmlelement ((ns, "query"), _, els)) when ns = Disco.ns_disco_info ->
+            let fs = List.fold_left (fun acc -> function
+                | Xml.Xmlelement ((_, "feature"), attrs, _) ->
+                  let feature = Xml.safe_get_attr_value "var" attrs in
+                  feature :: acc
+                | _ -> "bla" :: acc) [] els
+            in
+            t.user_data.received (`Local "disco") (String.concat ", " fs) ;
+            return_unit
+          | _ ->  return_unit)
+      | IQError _ -> return_unit
+  in
+  let jid_to = JID.of_string (t.myjid.JID.ldomain) in
+  (try_lwt
+     make_iq_request t ~jid_to (IQGet (Disco.make_disco_query [])) callback
+   with e -> t.user_data.failure e)
+*)
+
 let request_disco t userid resource =
   let user = t.user_data.find_or_create userid in
   let session = t.user_data.find_or_create_session user resource in
