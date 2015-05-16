@@ -650,8 +650,11 @@ let rec loop ?out (config : Config.t) term hist state network log =
      | Some _ -> loop ?out config term hist state network log
      | None -> loop ?out config term hist state network log
 
-let init_system log jid =
-  let err m = log (`Local "async error", m) in
+let init_system log jid users =
+  let err m =
+    User.reset_receipt_requests users ;
+    log (`Local "async error", m)
+  in
   Lwt.async_exception_hook := (function
       | Tls_lwt.Tls_failure `Error (`AuthenticationFailure (`InvalidServerName x)) ->
         xmpp_session := None ;

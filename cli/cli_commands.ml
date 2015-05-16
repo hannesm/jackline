@@ -266,10 +266,11 @@ let handle_connect ?out state config log redraw failure =
     xmpp_session := Some s ;
     Lwt.async (fun () -> Xmpp_callbacks.parse_loop s)
 
-let handle_disconnect s msg =
+let handle_disconnect s users msg =
   Xmpp_callbacks.close s >>= fun () ->
   xmpp_session := None ;
   msg "session error" "disconnected" ;
+  User.reset_receipt_requests users ;
   return_unit
 
 let send_status s presence status priority failure =
@@ -552,7 +553,7 @@ let exec ?out input state config log redraw =
   (* disconnect *)
   | ("disconnect", _) ->
     ( match !xmpp_session with
-      | Some x -> handle_disconnect x (msg ?prefix:None)
+      | Some x -> handle_disconnect x state.users (msg ?prefix:None)
       | None   -> err "not connected" )
 
   (* own things *)

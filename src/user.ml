@@ -230,6 +230,19 @@ let keys users =
   let us = Users.fold (fun k _ acc -> k :: acc) users [] in
   List.sort compare us
 
+let reset_receipt_requests users =
+  List.iter (fun id ->
+      let u = Users.find users id in
+      let active_sessions = List.map (fun s ->
+          let receipt = match s.receipt with
+            | `Requested -> `Unknown
+            | x -> x
+          in
+          { s with receipt }) u.active_sessions
+      in
+      Users.replace users id { u with active_sessions })
+    (keys users)
+
 let find users jid =
   if Users.mem users jid then
     Some (Users.find users jid)
