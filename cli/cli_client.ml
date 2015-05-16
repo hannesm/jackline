@@ -652,13 +652,11 @@ let rec loop ?out (config : Config.t) term hist state network log =
 
 let init_system log jid users =
   let err m =
-    User.reset_receipt_requests users ;
-    Xmpp_callbacks.cancel_keepalive () ;
+    cleanups users ;
     log (`Local "async error", m)
   in
   Lwt.async_exception_hook := (function
       | Tls_lwt.Tls_failure `Error (`AuthenticationFailure (`InvalidServerName x)) ->
-        xmpp_session := None ;
         let wanted = jid.JID.ldomain in
         let pre = Printf.sprintf "invalid hostname in certificate: expected %s," wanted
         and warn =
@@ -668,7 +666,6 @@ let init_system log jid users =
          | x::_ -> err (Printf.sprintf "%s, but got %s" pre x) ; err (warn x)
          | [] -> err (Printf.sprintf "%s, but found no name" pre))
       | exn ->
-        xmpp_session := None ;
         err (Printexc.to_string exn)
   )
 

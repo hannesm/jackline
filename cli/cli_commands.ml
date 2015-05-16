@@ -268,11 +268,9 @@ let handle_connect ?out state config log redraw failure =
     Xmpp_callbacks.restart_keepalive s
 
 let handle_disconnect s users msg =
-  Xmpp_callbacks.cancel_keepalive () ;
   Xmpp_callbacks.close s >>= fun () ->
-  xmpp_session := None ;
   msg "session error" "disconnected" ;
-  User.reset_receipt_requests users ;
+  cleanups users ;
   return_unit
 
 let send_status s presence status priority failure =

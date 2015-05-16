@@ -65,3 +65,8 @@ let random_string () =
   let open Nocrypto in
   let rnd = Rng.generate 12 in
   Cstruct.to_string (Base64.encode rnd)
+
+let cleanups users =
+  User.reset_receipt_requests users ;
+  Xmpp_callbacks.cancel_keepalive () ;
+  xmpp_session := None
