@@ -264,7 +264,8 @@ let handle_connect ?out state config log redraw failure =
   | None   -> ()
   | Some s ->
     xmpp_session := Some s ;
-    Lwt.async (fun () -> Xmpp_callbacks.parse_loop s)
+    Lwt.async (fun () -> Xmpp_callbacks.parse_loop s) ;
+    Xmpp_callbacks.restart_keepalive s
 
 let handle_disconnect s users msg =
   Xmpp_callbacks.close s >>= fun () ->

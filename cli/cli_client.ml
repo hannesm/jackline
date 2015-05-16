@@ -653,6 +653,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
 let init_system log jid users =
   let err m =
     User.reset_receipt_requests users ;
+    Xmpp_callbacks.cancel_keepalive () ;
     log (`Local "async error", m)
   in
   Lwt.async_exception_hook := (function

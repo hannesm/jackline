@@ -101,6 +101,26 @@ let request_disco t userid resource =
      with e -> t.user_data.failure e)
   | _ -> return_unit
 
+let whitespace_keepalive t =
+  send t " "
+
+let keepalive : Lwt_engine.event option ref = ref None
+
+let cancel_keepalive () =
+  match !keepalive with
+  | None -> ()
+  | Some x ->
+    Lwt_engine.stop_event x ;
+    keepalive := None
+
+let rec restart_keepalive t =
+  cancel_keepalive () ;
+  let doit () =
+    whitespace_keepalive t >|= fun () ->
+    restart_keepalive t
+  in
+  keepalive := Some (Lwt_engine.on_timer 45. false (fun _ -> Lwt.async doit))
+
 let send_msg t user session id body failure =
   let x =
     match id, session.User.receipt with
@@ -111,6 +131,7 @@ let send_msg t user session id body failure =
     | Some _, `Requested -> []
   in
   let jid_to = JID.of_string (User.userid user session) in
+  restart_keepalive t ;
   try_lwt
     send_message t ~kind:Chat ~jid_to ~body ~x ?id ()
   with e -> failure e
@@ -131,6 +152,7 @@ let validate_utf8 txt =
   | Zed_utf8.Invalid (err, esc) -> err ^ ": " ^ esc
 
 let message_callback (t : user_data session_data) stanza =
+  restart_keepalive t ;
   match stanza.jid_from with
   | None -> t.user_data.received (`Local "error") "no from in stanza" ; return_unit
   | Some jidt ->
@@ -210,6 +232,7 @@ let message_callback (t : user_data session_data) stanza =
         with e -> t.user_data.failure e
 
 let message_error t ?id ?jid_from ?jid_to ?lang error =
+  restart_keepalive t ;
   ignore id ; ignore jid_to ; ignore lang ;
   let jid = match jid_from with
     | None -> "unknown"
@@ -225,6 +248,7 @@ let message_error t ?id ?jid_from ?jid_to ?lang error =
   return_unit
 
 let presence_callback t stanza =
+  restart_keepalive t ;
   let log = t.user_data.received in
   (match stanza.jid_from with
    | None     -> log (`Local "error") "presence received without sending jid, ignoring"
@@ -284,6 +308,7 @@ let presence_callback t stanza =
   return_unit
 
 let presence_error t ?id ?jid_from ?jid_to ?lang error =
+  restart_keepalive t ;
   ignore id ; ignore jid_to ; ignore lang ;
   let jid = match jid_from with
     | None -> "unknown"
