@@ -27,8 +27,9 @@ struct
   let get_fd fd = fd
 
   let open_connection sockaddr =
-    let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
-    Lwt_unix.connect fd sockaddr >>= fun () ->
+    let open Lwt_unix in
+    let fd = socket PF_INET SOCK_STREAM 0 in
+    connect fd sockaddr >>= fun () ->
     return fd
 
   let read fd buf start len =
