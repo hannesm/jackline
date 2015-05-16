@@ -357,6 +357,14 @@ let dump_otr_fps fps =
   in
   String.concat "\n" (List.map marshal_otr fps)
 
+let current_otr_fp dump user =
+  match User.active_session user with
+  | None -> dump "no active session"
+  | Some session ->
+    match User.otr_fingerprint session.User.otr with
+    | Some fp -> dump ("their otr fingerprint: " ^ (User.format_fp fp))
+    | None -> dump "no active OTR session"
+
 let handle_otr_info dump user =
   match User.active_session user with
   | Some session ->
@@ -636,7 +644,13 @@ let exec ?out input state config log redraw =
 
   | ("fingerprint", x) ->
     ( match x with
-      | None   -> handle_help (msg ~prefix:"argument required") (Some "fingerprint")
+      | None    ->
+        ( if self then
+            handle_own_otr_info dump config
+          else
+            (current_otr_fp dump contact ;
+             dump "/fingerprint: argument expected") ) ;
+        return_unit
       | Some fp ->
         if self then err "won't talk to myself" else
           handle_fingerprint state.users dump err fp contact )
