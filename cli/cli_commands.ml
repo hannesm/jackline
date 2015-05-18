@@ -381,7 +381,7 @@ let handle_otr_info dump user =
 
 let handle_own_otr_info dump config =
   let otr_fp = Otr.Utils.own_fingerprint config.Config.dsa in
-  dump ("own otr fingerprint: " ^ (User.format_fp (User.hex_fingerprint otr_fp)))
+  dump ("your otr fingerprint:  " ^ (User.format_fp (User.hex_fingerprint otr_fp)))
 
 let common_info dump user cfgdir =
   dump "jid" user.User.jid ;
@@ -723,7 +723,8 @@ let exec ?out input state config log redraw =
         ( if self then
             handle_own_otr_info dump config
           else
-            (current_otr_fp dump contact ;
+            (handle_own_otr_info dump config ;
+             current_otr_fp dump contact ;
              dump "/fingerprint: argument expected") ) ;
         return_unit
       | Some fp ->
