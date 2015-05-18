@@ -112,7 +112,10 @@ let keepalive_ping t =
     return_unit
   in
   if !keepalive_running then
-     fail (Invalid_argument "ping timeout") (* this raises and lets the async_exception hook handle things *)
+    (let module S = (val t.socket : Socket) in
+     S.close S.socket >>= fun () ->
+     (* this raises and lets the async_exception hook handle things *)
+     fail (Invalid_argument "ping timeout"))
   else
     let jid_to = JID.of_string (t.myjid.JID.ldomain) in
     keepalive_running := true ;
