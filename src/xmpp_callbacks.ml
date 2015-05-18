@@ -101,8 +101,24 @@ let request_disco t userid resource =
      with e -> t.user_data.failure e)
   | _ -> return_unit
 
-let whitespace_keepalive t =
-  send t " "
+
+let ping_urn = "urn:xmpp:ping"
+
+let keepalive_running : bool ref = ref false
+
+let keepalive_ping t =
+  let callback _ev _jid_from _jid_to _lang () =
+    keepalive_running := false ;
+    return_unit
+  in
+  if !keepalive_running then
+     fail (Invalid_argument "ping timeout") (* this raises and lets the async_exception hook handle things *)
+  else
+    let jid_to = JID.of_string (t.myjid.JID.ldomain) in
+    keepalive_running := true ;
+    (try_lwt
+       make_iq_request t ~jid_to (IQGet (Xml.make_element (Some ping_urn, "ping") [] [])) callback
+     with e -> t.user_data.failure e)
 
 let keepalive : Lwt_engine.event option ref = ref None
 
@@ -116,7 +132,7 @@ let cancel_keepalive () =
 let rec restart_keepalive t =
   cancel_keepalive () ;
   let doit () =
-    whitespace_keepalive t >|= fun () ->
+    keepalive_ping t >|= fun () ->
     restart_keepalive t
   in
   keepalive := Some (Lwt_engine.on_timer 45. false (fun _ -> Lwt.async doit))

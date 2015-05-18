@@ -69,4 +69,5 @@ let random_string () =
 let cleanups users =
   User.reset_receipt_requests users ;
   Xmpp_callbacks.cancel_keepalive () ;
+  Xmpp_callbacks.keepalive_running := false ;
   xmpp_session := None
