@@ -107,7 +107,7 @@ let configure term () =
           | Some h, Some p -> pre ^ h ^ ":" ^ (string_of_int p) ^ post
           | None, Some p -> pre ^ jid.JID.ldomain ^ ":" ^ (string_of_int p) ^ post
           | Some h, None -> pre ^ h ^ ":5222" ^ post
-          | None, None -> ""
+          | None, None -> pre ^ jid.JID.ldomain ^ ":5222" ^ post
         in
         (new read_inputline ~term ~prompt:("enter server certificate fingerprint" ^ hostport ^ ": ") ())#run >>= fun fp ->
         (try
