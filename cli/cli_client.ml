@@ -476,6 +476,8 @@ let activate_user state active =
      state.scrollback          <- 0 ;
      state.notifications       <- List.filter (fun a -> a <> active) state.notifications ;
      state.window_mode         <- BuddyList ;
+     if 0 == List.length state.notifications then
+       Lwt.async (fun () -> Lwt_mvar.put state.notify_mvar Clear) ;
      force_redraw ())
 
 let navigate_message_buffer state direction =
