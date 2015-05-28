@@ -49,8 +49,8 @@ let notify_writer fname =
     try_lwt
       openfile fname [ O_WRONLY ; O_TRUNC ] 0o0 >>= fun fd ->
       let oc = of_fd ~mode:Output fd in
-      write oc s >> flush oc >> close oc
-    with Unix.Unix_error(Unix.ENOENT, _, _) -> return () in
+      write oc s >> flush oc >> close oc >> return true
+    with Unix.Unix_error(Unix.ENOENT, _, _) -> return false in
 
   let to_string = function
     | Q -> "quit"
@@ -59,7 +59,7 @@ let notify_writer fname =
     | D_N -> "disconnected_notifications"
     | C_N -> "connected_notifications" in
 
-  let rec loop s0 =
+  let rec loop write_ok0 s0 =
     take mvar >>= fun v ->
     let s1 =
       match v, s0 with
@@ -73,12 +73,14 @@ let notify_writer fname =
       | Clear, C_N -> C
       | Clear, D_N -> D
       | _, _ -> s0 in
-    match s1 with
-    | Q -> write_file (to_string X)
-    | s when s == s0 -> loop s1
-    | _ -> write_file (to_string s1) >> loop s1 in
-
-  async (fun () -> loop C) ;
+    match write_ok0, s1 with
+    | false, Q -> return ()
+    | true, Q -> write_file (to_string Q) >> return ()
+    | _, s when s == s0 -> loop write_ok0 s
+    | false, _ -> loop false s1
+    | true, _ -> write_file (to_string s1) >>= fun write_ok1 ->
+		 loop write_ok1 s1 in
+  async (fun () -> loop true C) ;
   mvar
 
 let empty_ui_state config_directory user resource users =
