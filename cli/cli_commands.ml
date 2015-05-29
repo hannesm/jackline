@@ -267,12 +267,12 @@ let handle_connect ?out state config log redraw failure =
       Xmpp_callbacks.failure                = failure                ;
   }
   in
-  doit user_data () >|= function
-  | None   -> ()
+  doit user_data () >>= function
+  | None   -> return_unit
   | Some s ->
     xmpp_session := Some s ;
     Lwt.async (fun () -> Xmpp_callbacks.parse_loop s) ;
-    Lwt.async (fun () -> Lwt_mvar.put state.notify_mvar Connected) ;
+    Lwt_mvar.put state.notify_mvar Connected >|= fun () ->
     Xmpp_callbacks.restart_keepalive s
 
 let handle_disconnect s users msg =
