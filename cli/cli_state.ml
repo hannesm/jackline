@@ -50,10 +50,12 @@ module Notify = struct
     let open Lwt in
     let mvar = Lwt_mvar.create Disconnected in
     let write_file buf =
-      let open Lwt_unix in
-      openfile fname [O_WRONLY ; O_TRUNC ; O_CREAT ] 0o600 >>= fun fd ->
-      Persistency.write_data fd buf >>= fun () ->
-      close fd
+      Lwt.catch (fun () ->
+          let open Lwt_unix in
+          openfile fname [O_WRONLY ; O_TRUNC ; O_CREAT ] 0o600 >>= fun fd ->
+          Persistency.write_data fd buf >>= fun () ->
+          close fd)
+        (fun _ -> Lwt.return_unit)
     in
     let rec loop s0 =
       Lwt_mvar.take mvar >>= fun v ->
