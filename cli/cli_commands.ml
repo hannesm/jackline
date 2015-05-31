@@ -196,8 +196,8 @@ let handle_connect ?out state config log redraw failure =
     if List.mem jid state.notifications || state.active_contact = jid then
       ()
     else
-      Lwt.async (fun () -> Lwt_mvar.put state.notify_mvar Notifications) ;
-      state.notifications <- jid :: state.notifications
+      state.notifications <- jid :: state.notifications ;
+    Lwt.async (fun () -> Lwt_mvar.put state.notify_mvar Notifications)
   in
   let notify indicate u =
     let jid = u.User.jid in
