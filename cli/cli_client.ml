@@ -328,6 +328,7 @@ let make_prompt size time network state redraw =
      let err_prefix = try String.sub err 0 11 with Invalid_argument _ -> "" in
      ( match err_prefix, !xmpp_session with
        | (x, None) when x = "async error" || x = "session err" ->
+         Lwt.async (fun () -> Lwt_mvar.put state.notify_mvar Disconnected) ;
          let users = User.Users.fold (fun id u acc ->
              let act = List.map
                  (fun s -> { s with User.presence = `Offline })

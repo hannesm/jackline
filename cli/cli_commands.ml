@@ -623,7 +623,8 @@ let exec ?out input state config log redraw =
   (* disconnect *)
   | ("disconnect", _) ->
     ( match !xmpp_session with
-      | Some x -> handle_disconnect x state.users (msg ?prefix:None) >>= fun () ->
+      | Some x ->
+        handle_disconnect x state.users (msg ?prefix:None) >>= fun () ->
         Lwt_mvar.put state.notify_mvar Disconnected
       | None   -> err "not connected" )
 
