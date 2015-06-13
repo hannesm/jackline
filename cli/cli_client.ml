@@ -346,9 +346,9 @@ let make_prompt size time network state redraw =
      (add_status state (fst network) (snd network) ;
       state.last_status <- network) ) ;
 
-  let log_size = 6 in
+  let log_size = state.log_height in
   let main_size = size.rows - log_size - 3 (* status + hline + readline *) in
-  let buddy_width = 24 in
+  let buddy_width = state.buddy_width in
   let chat_width =
     match state.window_mode with
     | BuddyList        -> size.cols - buddy_width - 1
@@ -461,6 +461,10 @@ let ctrlq = UChar.of_int 0x2504
 let ctrlx = UChar.of_int 0x2505
 let ctrlup = UChar.of_int 0x2506
 let ctrldown = UChar.of_int 0x2507
+let f11 = UChar.of_int 0x2508
+let shift_f11 = UChar.of_int 0x2509
+let f10 = UChar.of_int 0x2510
+let shift_f10 = UChar.of_int 0x2511
 
 
 let redraw, force_redraw =
@@ -548,6 +552,18 @@ class read_line ~term ~network ~history ~state = object(self)
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = f12 ->
       state.window_mode <- next_display_mode state.window_mode ;
       force_redraw ()
+    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = f11 ->
+      state.buddy_width <- succ state.buddy_width ;
+      force_redraw ()
+    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = shift_f11 ->
+      state.buddy_width <- max (pred state.buddy_width) 0 ;
+      force_redraw ()
+    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = f10 ->
+      state.log_height <- succ state.log_height ;
+      force_redraw ()
+    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = shift_f10 ->
+      state.log_height <- max (pred state.log_height) 1 ;
+      force_redraw ()
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrlq ->
       if List.length state.notifications > 0 then
         activate_user state (List.hd (List.rev state.notifications))
@@ -564,6 +580,10 @@ class read_line ~term ~network ~history ~state = object(self)
     LTerm_read_line.(bind [LTerm_key.({ control = true; meta = false; shift = false; code = Next_page })] [Edit (LTerm_edit.Zed (Zed_edit.Insert ctrldown))]);
     LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = false; code = F5 })] [Edit (LTerm_edit.Zed (Zed_edit.Insert f5))]);
     LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = false; code = F12 })] [Edit (LTerm_edit.Zed (Zed_edit.Insert f12))]);
+    LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = false; code = F11 })] [Edit (LTerm_edit.Zed (Zed_edit.Insert f11))]);
+    LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = true; code = F11 })] [Edit (LTerm_edit.Zed (Zed_edit.Insert shift_f11))]);
+    LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = false; code = F10 })] [Edit (LTerm_edit.Zed (Zed_edit.Insert f10))]);
+    LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = true; code = F10 })] [Edit (LTerm_edit.Zed (Zed_edit.Insert shift_f10))]);
     LTerm_read_line.(bind [LTerm_key.({ control = true; meta = false; shift = false; code = Char (UChar.of_int 0x71) })] [Edit (LTerm_edit.Zed (Zed_edit.Insert ctrlq))]);
     LTerm_read_line.(bind [LTerm_key.({ control = true; meta = false; shift = false; code = Char (UChar.of_int 0x78) })] [Edit (LTerm_edit.Zed (Zed_edit.Insert ctrlx))]);
     self#set_prompt (S.l4 (fun size time network redraw -> make_prompt size time network state redraw)

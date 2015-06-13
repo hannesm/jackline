@@ -35,6 +35,9 @@ type ui_state = {
   mutable scrollback          : int                       ; (* scroll-pgup/down state *)
 
   mutable last_status         : (User.direction * string) ; (* internal use only *)
+
+  mutable log_height          : int                       ;
+  mutable buddy_width         : int                       ;
 }
 
 module Notify = struct
@@ -113,6 +116,9 @@ let empty_ui_state config_directory notify_callback user resource users =
     scrollback          = 0         ;
 
     last_status                     ;
+
+    log_height          = 6         ;
+    buddy_width         = 24        ;
 }
 
 
