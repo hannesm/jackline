@@ -150,9 +150,13 @@ let configure term () =
     Otr.State.all_policies
     Otr.State.policy_to_string
     ""
-    " (recommended)" >|= fun policies ->
+    " (recommended)" >>= fun policies ->
   let dsa = Nocrypto.Dsa.generate `Fips1024 in
   let otr_config = Otr.State.config versions policies in
+
+  (new read_inputline ~term ~prompt:"path to program which is called on notification: " ())#run >|= fun cb ->
+  let notification_callback = if String.length cb = 0 then None else Some cb in
+
   let config = Config.({
       version = current_version ;
       jid ;
@@ -163,6 +167,7 @@ let configure term () =
       authenticator ;
       otr_config ;
       dsa ;
-      certificate_hostname
+      certificate_hostname ;
+      notification_callback
     }) in
   config

@@ -37,7 +37,7 @@ let start_client cfgdir debug () =
     | Some x -> return (Some x)) >>= fun password ->
   let config = { config with Config.password = password } in
 
-  Persistency.load_users cfgdir >>= fun (users) ->
+  Persistency.load_users cfgdir >>= fun users ->
 
   let history = LTerm_history.create [] in
 
@@ -47,7 +47,7 @@ let start_client cfgdir debug () =
   let user, _ = User.find_or_create_session user resource config.Config.otr_config config.Config.dsa in
   User.Users.replace users jid user ;
 
-  let state = Cli_state.empty_ui_state cfgdir jid resource users in
+  let state = Cli_state.empty_ui_state cfgdir config.Config.notification_callback jid resource users in
   let n, log = S.create (`Local "welcome to jackline", "type /help for help") in
 
   ( if debug then

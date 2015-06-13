@@ -20,6 +20,7 @@ type ui_state = {
   config_directory            : string                    ; (* set initially *)
   user                        : string                    ; (* set initially *)
   resource                    : string                    ; (* set initially *)
+
   notify_mvar                 : notify_v Lwt_mvar.t       ; (* set initially *)
 
   users                       : User.users                ; (* read from disk, extended by xmpp callbacks *)
@@ -46,16 +47,23 @@ module Notify = struct
     | D_N -> "disconnected_notifications"
     | C_N -> "connected_notifications"
 
-  let notify_writer fname =
+  let notify_writer user resource cb fname =
     let open Lwt in
     let mvar = Lwt_mvar.create Disconnected in
     let write_file buf =
+      let open Lwt_unix in
       Lwt.catch (fun () ->
-          let open Lwt_unix in
           openfile fname [O_WRONLY ; O_TRUNC ; O_CREAT ] 0o600 >>= fun fd ->
           Persistency.write_data fd buf >>= fun () ->
           close fd)
-        (fun _ -> Lwt.return_unit)
+        (fun _ -> Lwt.return_unit) >>= fun () ->
+      match cb with
+      | None -> Lwt.return_unit
+      | Some x ->
+        Lwt.catch (fun () ->
+            system (x ^ " " ^ user ^ "/" ^ resource ^ " " ^ buf) >>= fun _ ->
+            Lwt.return_unit)
+          (fun _ -> Lwt.return_unit)
     in
     let rec loop s0 =
       Lwt_mvar.take mvar >>= fun v ->
@@ -81,14 +89,17 @@ module Notify = struct
     mvar
 end
 
-let empty_ui_state config_directory user resource users =
-  let mvar = Notify.notify_writer (Filename.concat config_directory "notification.state") in
+let empty_ui_state config_directory notify_callback user resource users =
+  let notify_mvar =
+    let file = Filename.concat config_directory "notification.state" in
+    Notify.notify_writer user resource notify_callback file in
   let last_status = (`Local "", "") in
   {
     config_directory                ;
     user                            ;
     resource                        ;
-    notify_mvar         = mvar      ;
+
+    notify_mvar                     ;
 
     users                           ;
 
