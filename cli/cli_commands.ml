@@ -223,7 +223,6 @@ let handle_connect ?out state config log redraw failure =
     let user = User.received_message user id in
     let jid = user.User.jid in
     User.Users.replace state.users jid user ;
-    maybe_notify jid ;
     redraw ()
   and find = User.find state.users
   and find_or_create = User.find_or_create state.users
