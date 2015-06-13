@@ -575,7 +575,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
   match_lwt
     try_lwt
       lwt command = (new read_line ~term ~history ~state ~network)#run in
-      if 0 == List.length state.notifications then
+      if List.length state.notifications = 0 then
         Lwt.async (fun () -> Lwt_mvar.put state.notify_mvar Clear) ;
       return (Some command)
     with
