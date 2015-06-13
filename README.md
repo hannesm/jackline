@@ -65,10 +65,12 @@ Active keys:
 - `Ctrl-x` jumps to last active user
 - `F5` toggles display of offline contacts
 - `F12` toggles between display of contact list, full screen chat, and raw (only received messages)
-- `Ctrl-PgUp`, `Ctrl-PgDown` scrolls chat
+- `F11` and `Shift-F11` increase and decrease width of buddy list
+- `F10` and `Shift-F10` increase and decrease height of log window
+- `Ctrl-PgUp`, `Ctrl-PgDown` scrolls chat window
 - `<tab>` tab completion (largest prefix)
-- `Ctrl-a`, `Ctrl-e`, `Ctrl-k`, `Ctrl-left`, `Ctrl-right`, `Ctrl-f`, `Ctrl-b`, `Ctrl-n`, `Ctrl-p` usual moving commands
-- `Ctrl-space`, `Ctrl-w`, `Ctrl-y` mark and yank
+- `Ctrl-a` (jump to beginning of line), `Ctrl-e` (jump to end of line), `Ctrl-k` (kill text to the right of cursor), `Ctrl-u` (kill text to the left of cursor), `Ctrl-left` (jump word backwards), `Ctrl-right` (jump word forwards), `Ctrl-f` (forward one character), `Ctrl-b` (backward one character)
+- `Ctrl-space` (mark, indicated by underline), `Ctrl-w` (cut), `Ctrl-y` (yank)
 - `Ctrl-_` undo
 
 `/help` prints the available commands, `/help command` more detailed help of the given command.
