@@ -481,7 +481,7 @@ let handle_smp_abort users s session user dump failure =
   let ctx, out, ret = Otr.Engine.abort_smp session.User.otr in
   User.replace_session users user { session with User.otr = ctx } ;
   List.iter (function
-      | `Warning x -> dump ("warning: " ^ x)
+      | `Warning x -> dump ("SMP abort warning: " ^ x)
       | _ -> () )
     ret ;
   match out with
@@ -496,7 +496,7 @@ let handle_smp_start users s session user dump failure args =
   let ctx, out, ret = Otr.Engine.start_smp session.User.otr ?question secret in
   User.replace_session users user { session with User.otr = ctx } ;
   List.iter (function
-      | `Warning x -> dump ("warning: " ^ x)
+      | `Warning x -> dump ("SMP start warning: " ^ x)
       | _ -> () )
     ret ;
   dump "initiated SMP" ;
@@ -508,7 +508,7 @@ let handle_smp_answer users s session user dump failure secret =
   let ctx, out, ret = Otr.Engine.answer_smp session.User.otr secret in
   User.replace_session users user { session with User.otr = ctx } ;
   List.iter (function
-      | `Warning x -> dump ("warning: " ^ x)
+      | `Warning x -> dump ("SMP answer warning: " ^ x)
       | _ -> () )
     ret ;
   match out with
