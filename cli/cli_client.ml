@@ -475,7 +475,7 @@ let activate_user state active =
     (state.last_active_contact <- state.active_contact ;
      state.active_contact      <- active ;
      state.scrollback          <- 0 ;
-     state.notifications       <- List.filter (fun a -> a <> active) state.notifications ;
+     state.notifications       <- List.filter (fun a -> a <> active && state.scrollback = 0) state.notifications ;
      state.window_mode         <- BuddyList ;
      if 0 == List.length state.notifications then
        Lwt.async (fun () -> Lwt_mvar.put state.notify_mvar Clear) ;
@@ -487,7 +487,18 @@ let navigate_message_buffer state direction =
     state.scrollback
   with
   | Down, 0 -> ()
-  | Down, n -> state.scrollback <- n - 1 ; force_redraw ()
+  | Down, n -> state.scrollback <- n - 1 ;
+    if state.scrollback = 0 && List.mem state.active_contact state.notifications then
+    ( (* since all messages have been read, remove the active contact from the notification list: *)
+      state.notifications <- List.filter (fun c -> c <> state.active_contact) state.notifications ;
+      (* if this is the last notification, update state file: *)
+      begin match state.notifications with
+      | [] -> Lwt.async (fun () -> Lwt_mvar.put state.notify_mvar Clear)
+      | _  -> () end
+    )
+    else
+      () ;
+    force_redraw ()
   | Up, n -> state.scrollback <- n + 1; force_redraw ()
 
 let navigate_buddy_list state direction =

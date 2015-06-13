@@ -193,7 +193,7 @@ let handle_connect ?out state config log redraw failure =
   in
 
   let maybe_notify jid =
-    if List.mem jid state.notifications || state.active_contact = jid then
+    if List.mem jid state.notifications || (state.active_contact = jid && state.scrollback = 0) then
       ()
     else
       state.notifications <- jid :: state.notifications ;
