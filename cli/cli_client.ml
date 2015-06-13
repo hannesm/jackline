@@ -347,7 +347,12 @@ let make_prompt size time network state redraw =
       state.last_status <- network) ) ;
 
   let log_size = state.log_height in
-  let main_size = size.rows - log_size - 3 (* status + hline + readline *) in
+  let main_size =
+    if log_size = 0 then
+      size.rows - 2
+    else
+      size.rows - log_size - 3 (* status + hline + readline *)
+  in
   let buddy_width = state.buddy_width in
   let chat_width =
     match state.window_mode with
@@ -442,7 +447,10 @@ let make_prompt size time network state redraw =
       let main = List.flatten main_window in
 
       try
-        eval ( main @ hline @ [ S "\n" ; S logs ; S "\n" ] @ status @ [ S "\n" ] )
+        if log_size = 0 then
+          eval ( main @ status @ [ S "\n" ] )
+        else
+          eval ( main @ hline @ [ S "\n" ; S logs ; S "\n" ] @ status @ [ S "\n" ] )
       with
         _ -> eval ([ S "error during evaluating layout"])
     end
@@ -562,7 +570,7 @@ class read_line ~term ~network ~history ~state = object(self)
       state.log_height <- succ state.log_height ;
       force_redraw ()
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = shift_f10 ->
-      state.log_height <- max (pred state.log_height) 1 ;
+      state.log_height <- max (pred state.log_height) 0 ;
       force_redraw ()
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrlq ->
       if List.length state.notifications > 0 then
