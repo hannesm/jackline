@@ -531,7 +531,7 @@ let print_otr_policy dump pref cfg =
   in
   dump ("OTR " ^ pref ^ "versions: " ^ versions ^ " policies: " ^ policies)
 
-let adjust_otr_policy dump failure users default_cfg cfg contact data =
+let adjust_otr_policy dump users default_cfg cfg contact data =
   let try_decode str =
     Otr.State.string_to_policy str, Otr.State.string_to_version str
   in
@@ -575,7 +575,7 @@ let adjust_otr_policy dump failure users default_cfg cfg contact data =
         dump "nothing changed" ) ;
     return_unit
   with
-    _ -> failure (Invalid_argument "unable to parse argument")
+    _ -> dump "unable to parse argument" ; return_unit
 
 let tell_user (log:(User.direction * string) -> unit) ?(prefix:string option) (from:string) (msg:string) =
   let f = match prefix with
@@ -675,7 +675,7 @@ let exec ?out input state config log redraw =
     (match x with
      | None -> print_otr_policy dump pref cfg ; return_unit
      | Some _ when self -> err "cannot adjust own otr policy"
-     | Some z -> adjust_otr_policy dump failure state.users config.Config.otr_config cfg contact z
+     | Some z -> adjust_otr_policy dump state.users config.Config.otr_config cfg contact z
     )
 
   | ("otr", x) ->
