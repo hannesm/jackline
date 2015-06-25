@@ -454,8 +454,8 @@ let tls_epoch_to_line t =
   let open Tls in
   match Tls_lwt.Unix.epoch t with
   | `Ok epoch ->
-    let version = epoch.Engine.protocol_version
-    and cipher = epoch.Engine.ciphersuite
+    let version = epoch.Core.protocol_version
+    and cipher = epoch.Core.ciphersuite
     in
     Sexplib.Sexp.(to_string_hum (List [
         Core.sexp_of_tls_version version ;
