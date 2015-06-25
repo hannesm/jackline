@@ -706,7 +706,7 @@ let init_system log jid users =
         and warn =
           Printf.sprintf "inform your server administrator about that, in the meantime add '(certificate_hostname (\"%s\")' to your config.sexp"
         in
-        (match X509.cert_hostnames x with
+        (match X509.hostnames x with
          | x::_ -> err (Printf.sprintf "%s, but got %s" pre x) ; err (warn x)
          | [] -> err (Printf.sprintf "%s, but found no name" pre))
       | exn ->
