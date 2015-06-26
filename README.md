@@ -156,7 +156,7 @@ status line
 
 - How do I prevent jackline from doing DNS lookups? -- Interactive configuration or specify `(hostname ("bla.com"))` in `config.sexp`.
 - The server certificate does not match the server name, how do I fix this? -- Interactive configuration or specify `(cert_hostname ("blabla.com"))` in `config.sexp`.
-- Keys do not work on MacOSX -- [This](https://github.com/timothybasanov/terminal-app-function-keys#full-list-of-all-bindings) article might be useful.
+- Keys do not work on MacOSX -- [This](https://github.com/timothybasanov/terminal-app-function-keys#full-list-of-all-bindings) might be useful.
 - `Ctrl-D` terminates a session, this is insane. -- Create a `~/.lambda-term-inputrc` with the following content:
 
  ````
