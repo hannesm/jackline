@@ -165,3 +165,4 @@ status line
  ````
 
 - I want to receive notifications. -- There are two ways at the moment: `notification.state` contains the current state (written on every change) and a hook script can be defined during interactive configuration or `(notification_callback (/my/favorite/script.sh))` in `config.sexp`.  It is executed with two arguments: the jabber id and state.
+- I want a systray icon. -- you might be interested in [this script](https://github.com/cfcs/misc/blob/f3cb0cf29464d820149b8cf91c6cced893331000/jackline_systray.py)
