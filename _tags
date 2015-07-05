@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 73c5d695614ce431b34750465d4d2a29)
+# DO NOT EDIT (digest: 34a43f1a3b17afde17c11f7f42b851e1)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -21,6 +21,7 @@ true: annot, bin_annot
 "src/persistency.cmx": for-pack(Xmpp_client)
 "src/xmpp_connection.cmx": for-pack(Xmpp_client)
 "src/xmpp_callbacks.cmx": for-pack(Xmpp_client)
+"src/escape.cmx": for-pack(Xmpp_client)
 <src/xmpp_client.{cma,cmxa}>: oasis_library_xmpp_client_byte
 <src/*.ml{,i,y}>: oasis_library_xmpp_client_byte
 <src/*.ml{,i,y}>: pkg_camomile
@@ -32,6 +33,7 @@ true: annot, bin_annot
 <src/*.ml{,i,y}>: pkg_otr
 <src/*.ml{,i,y}>: pkg_sexplib
 <src/*.ml{,i,y}>: pkg_sexplib.syntax
+<src/*.ml{,i,y}>: pkg_stringext
 <src/*.ml{,i,y}>: pkg_tls
 <src/*.ml{,i,y}>: pkg_tls.lwt
 <src/*.ml{,i,y}>: pkg_zed
@@ -55,6 +57,7 @@ true: annot, bin_annot
 "cli/jackline.native": pkg_react
 "cli/jackline.native": pkg_sexplib
 "cli/jackline.native": pkg_sexplib.syntax
+"cli/jackline.native": pkg_stringext
 "cli/jackline.native": pkg_tls
 "cli/jackline.native": pkg_tls.lwt
 "cli/jackline.native": pkg_zed
@@ -71,6 +74,7 @@ true: annot, bin_annot
 <cli/*.ml{,i,y}>: pkg_react
 <cli/*.ml{,i,y}>: pkg_sexplib
 <cli/*.ml{,i,y}>: pkg_sexplib.syntax
+<cli/*.ml{,i,y}>: pkg_stringext
 <cli/*.ml{,i,y}>: pkg_tls
 <cli/*.ml{,i,y}>: pkg_tls.lwt
 <cli/*.ml{,i,y}>: pkg_zed
