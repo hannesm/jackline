@@ -179,9 +179,13 @@ let message_callback (t : user_data session_data) stanza =
     let user = t.user_data.find_or_create jid in
     let session = t.user_data.find_or_create_session user resource in
     let msg dir enc txt =
-      let txt = validate_utf8 txt in
+      let data =
+        let txt = validate_utf8 txt in
+        let txt = Escape.strip_tags txt in
+        Escape.unescape txt
+      in
       let user = match t.user_data.find jid with Some x -> x | None -> assert false in
-      t.user_data.message user dir enc txt ;
+      t.user_data.message user dir enc data ;
     in
     List.iter (function
         | Xml.Xmlelement ((ns_rec, "received"), attrs, _) when

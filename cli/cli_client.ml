@@ -657,7 +657,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
             id
           | `Sent_encrypted m ->
             let id = random_string () in
-            add_msg (`To id) true m ;
+            add_msg (`To id) true (Escape.unescape m) ;
             id
        in
        let failure reason =
@@ -669,7 +669,14 @@ let rec loop ?out (config : Config.t) term hist state network log =
         else
           match User.active_session contact, !xmpp_session with
           | Some session, Some t ->
-             let ctx, out, user_out = Otr.Engine.send_otr session.User.otr message in
+             let ctx = session.User.otr in
+             let msg =
+               if Otr.State.is_encrypted ctx then
+                 Escape.escape message
+               else
+                 message
+             in
+             let ctx, out, user_out = Otr.Engine.send_otr ctx msg in
              User.replace_session state.users contact { session with User.otr = ctx } ;
              let id = handle_otr_out user_out in
              (match out with
