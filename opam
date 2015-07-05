@@ -25,6 +25,7 @@ depends: [
   "x509" {>= "0.4.0"}
   "lwt"
   "otr" {>= "0.2.0"}
+  "stringext"
   "zed"
   "lambda-term"
   "react"
