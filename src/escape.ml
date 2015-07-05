@@ -29,7 +29,7 @@ let unescape str =
     (fun s (repl, on) ->
      let repl = String.make 1 repl in
      unescape1 on repl s)
-    str entities
+    str (List.rev entities)
 
 let rec strip_tags str =
   match Stringext.cut str ~on:"<" with
