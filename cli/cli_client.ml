@@ -666,33 +666,33 @@ let rec loop ?out (config : Config.t) term hist state network log =
          return_unit
        in
        (if contact.User.jid = state.user then err "try `M-x doctor` in emacs instead"
-       else
-         match User.active_session contact, !xmpp_session with
-         | Some session, Some t ->
-           let ctx, out, user_out = Otr.Engine.send_otr session.User.otr message in
-           User.replace_session state.users contact { session with User.otr = ctx } ;
-           let id = handle_otr_out user_out in
-           (match out with
-            | Some body -> send t contact session (Some id) body failure
-            | None -> return_unit )
-         | None        , Some t ->
-           let cfg = match contact.User.otr_custom_config with
-             | None -> config.Config.otr_config
-             | Some x -> x
-           in
-           let ctx = Otr.State.new_session cfg config.Config.dsa () in
-           let _, out, user_out = Otr.Engine.send_otr ctx message in
-           let id = handle_otr_out user_out in
-           ( match out with
-             | Some body ->
-               let _, session = User.find_or_create_session contact "" cfg config.Config.dsa in
-               send t contact session (Some id) body failure
-             | None -> return_unit )
-         | _           , None ->
-           err "no active session, try to connect first" ) >>= fun () ->
+        else
+          match User.active_session contact, !xmpp_session with
+          | Some session, Some t ->
+             let ctx, out, user_out = Otr.Engine.send_otr session.User.otr message in
+             User.replace_session state.users contact { session with User.otr = ctx } ;
+             let id = handle_otr_out user_out in
+             (match out with
+              | Some body -> send t contact session (Some id) body failure
+              | None -> return_unit)
+          | None        , Some t ->
+             let cfg = match contact.User.otr_custom_config with
+               | None -> config.Config.otr_config
+               | Some x -> x
+             in
+             let ctx = Otr.State.new_session cfg config.Config.dsa () in
+             let _, out, user_out = Otr.Engine.send_otr ctx message in
+             let id = handle_otr_out user_out in
+             (match out with
+              | Some body ->
+                 let _, session = User.find_or_create_session contact "" cfg config.Config.dsa in
+                 send t contact session (Some id) body failure
+              | None -> return_unit)
+          | _           , None ->
+             err "no active session, try to connect first") >>= fun () ->
        loop ?out config term hist state network log
-     | Some _ -> loop ?out config term hist state network log
-     | None -> loop ?out config term hist state network log
+    | Some _ -> loop ?out config term hist state network log
+    | None -> loop ?out config term hist state network log
 
 let init_system log jid users =
   let err m =
