@@ -21,7 +21,7 @@ type ui_state = {
   user                        : string                    ; (* set initially *)
   resource                    : string                    ; (* set initially *)
 
-  notify_mvar                 : notify_v Lwt_mvar.t       ; (* set initially *)
+  state_mvar                  : notify_v Lwt_mvar.t       ; (* set initially *)
 
   users                       : User.users                ; (* read from disk, extended by xmpp callbacks *)
 
@@ -93,7 +93,7 @@ module Notify = struct
 end
 
 let empty_ui_state config_directory notify_callback user resource users =
-  let notify_mvar =
+  let state_mvar =
     let file = Filename.concat config_directory "notification.state" in
     Notify.notify_writer user resource notify_callback file in
   let last_status = (`Local "", "") in
@@ -102,7 +102,7 @@ let empty_ui_state config_directory notify_callback user resource users =
     user                            ;
     resource                        ;
 
-    notify_mvar                     ;
+    state_mvar                      ;
 
     users                           ;
 

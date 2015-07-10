@@ -65,7 +65,7 @@ let start_client cfgdir debug () =
     | None -> return_unit
     | Some fd -> Lwt_unix.close fd ) >>= fun () ->
 
-  Lwt_mvar.put state.Cli_state.notify_mvar Cli_state.Quit >>= fun () ->
+  Lwt_mvar.put state.Cli_state.state_mvar Cli_state.Quit >>= fun () ->
 
   Persistency.dump_users cfgdir state.Cli_state.users >>= fun () ->
 

@@ -197,7 +197,7 @@ let handle_connect ?out state config log redraw failure =
       ()
     else
       state.notifications <- jid :: state.notifications ;
-    Lwt.async (fun () -> Lwt_mvar.put state.notify_mvar Notifications)
+    Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Notifications)
   in
   let notify indicate u =
     let jid = u.User.jid in
@@ -271,7 +271,7 @@ let handle_connect ?out state config log redraw failure =
   | Some s ->
     xmpp_session := Some s ;
     Lwt.async (fun () -> Xmpp_callbacks.parse_loop s) ;
-    Lwt_mvar.put state.notify_mvar Connected >|= fun () ->
+    Lwt_mvar.put state.state_mvar Connected >|= fun () ->
     Xmpp_callbacks.restart_keepalive s
 
 let handle_disconnect s users msg =
@@ -590,7 +590,7 @@ let exec ?out input state config log redraw =
   let err = msg "error" in
   let failure reason =
     xmpp_session := None ;
-    Lwt_mvar.put state.notify_mvar Disconnected >>= fun () ->
+    Lwt_mvar.put state.state_mvar Disconnected >>= fun () ->
     msg "session error" (Printexc.to_string reason)
   in
   let contact = User.Users.find state.users state.active_contact in
@@ -624,7 +624,7 @@ let exec ?out input state config log redraw =
     ( match !xmpp_session with
       | Some x ->
         handle_disconnect x state.users (msg ?prefix:None) >>= fun () ->
-        Lwt_mvar.put state.notify_mvar Disconnected
+        Lwt_mvar.put state.state_mvar Disconnected
       | None   -> err "not connected" )
 
   (* own things *)

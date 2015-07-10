@@ -328,7 +328,7 @@ let make_prompt size time network state redraw =
      let err_prefix = try String.sub err 0 11 with Invalid_argument _ -> "" in
      ( match err_prefix, !xmpp_session with
        | (x, None) when x = "async error" || x = "session err" ->
-         Lwt.async (fun () -> Lwt_mvar.put state.notify_mvar Disconnected) ;
+         Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Disconnected) ;
          let users = User.Users.fold (fun id u acc ->
              let act = List.map
                  (fun s -> { s with User.presence = `Offline })
@@ -485,7 +485,7 @@ type direction = Up | Down
 let maybe_clear_notifications state =
   state.notifications <- List.filter ((<>) state.active_contact) state.notifications ;
   if List.length state.notifications = 0 then
-    Lwt.async (fun () -> Lwt_mvar.put state.notify_mvar Clear)
+    Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear)
 
 let activate_user state active =
   if state.active_contact <> active then
@@ -604,7 +604,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
     try_lwt
       lwt command = (new read_line ~term ~history ~state ~network)#run in
       if List.length state.notifications = 0 then
-        Lwt.async (fun () -> Lwt_mvar.put state.notify_mvar Clear) ;
+        Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) ;
       return (Some command)
     with
       | Sys.Break -> return None
