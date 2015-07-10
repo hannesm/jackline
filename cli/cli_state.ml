@@ -51,7 +51,7 @@ module Notify = struct
     | C_N -> "connected_notifications"
 
   let notify_writer user resource cb fname =
-    let open Lwt in
+    let open Lwt.Infix in
     let mvar = Lwt_mvar.create Disconnected in
     let write_file buf =
       let open Lwt_unix in
@@ -88,7 +88,7 @@ module Notify = struct
       | s when s == s0 -> loop s
       | _ -> write_file (to_string s1) >>= fun () -> loop s1
     in
-    async (fun () -> loop C) ;
+    Lwt.async (fun () -> loop C) ;
     mvar
 end
 
