@@ -59,14 +59,17 @@ let append dir file buf =
   write_data fd buf >>= fun () ->
   Lwt_unix.close fd
 
+let delete file =
+  Lwt.catch (fun () ->
+      Lwt_unix.access file [ Unix.F_OK ; Unix.W_OK ] >>= fun () ->
+      Lwt_unix.unlink file)
+    (fun _ -> return ())
+
 let write dir filename buf =
   ensure_create dir >>= fun () ->
   let f = Filename.concat dir filename in
   let file = f ^ ".tmp" in
-  Lwt.catch (fun () ->
-      Lwt_unix.access file [ Unix.F_OK ; Unix.W_OK ] >>= fun () ->
-      Lwt_unix.unlink file)
-    (fun _ -> return ()) >>= fun () ->
+  delete file >>= fun () ->
   Lwt_unix.openfile file [Unix.O_WRONLY ; Unix.O_EXCL ; Unix.O_CREAT] 0o600 >>= fun fd ->
   write_data fd buf >>= fun () ->
   Lwt_unix.close fd >>= fun () ->
