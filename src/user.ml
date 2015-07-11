@@ -141,7 +141,7 @@ type message = {
   received   : bool ;
   timestamp  : float ;
   message    : string ;
-  persistent : bool ; (* internal use only (mark whether this needs to be written) *)
+  mutable persistent : bool ; (* internal use only (mark whether this needs to be written) *)
 } with sexp
 
 type user = {
@@ -517,9 +517,12 @@ let marshal_history user =
           | _              -> true)
         user.message_history
     in
-    let new_msgs = List.map (fun x -> { x with persistent = true }) new_msgs in
+    List.iter (fun x -> x.persistent <- true) new_msgs ;
+    let hist_version = sexp_of_int 0 in
     if List.length new_msgs > 0 then
-      Some (user.jid, List.map sexp_of_message new_msgs)
+      let sexps = List.map sexp_of_message new_msgs in
+      let sexp = Sexp.(List [ hist_version ; List sexps ]) in
+      Some (user.jid, Sexp.to_string_mach sexp)
     else
       None
   else
@@ -528,12 +531,10 @@ let marshal_history user =
 let store_users users =
   let data = Users.fold (fun _ s acc -> (sexp_of_t s, marshal_history s) :: acc) users [] in
   let users, histories = List.split data in
-  let hist_version = sexp_of_int 0 in
   Sexp.(to_string_hum (List [ sexp_of_int db_version ; List users ]),
         List.fold_left (fun acc v ->
             match v with
             | None -> acc
-            | Some (u, history) ->
-              (u, to_string_mach (List [ hist_version ; List history ])) :: acc)
+            | Some (u, history) -> (u, history) :: acc)
           []
           histories)
