@@ -249,6 +249,7 @@ let handle_connect ?out state config log redraw failure =
     let fp = { fp with User.session_count = succ fp.User.session_count ; User.resources = resources } in
     let u = User.replace_fp user fp in
     User.Users.replace state.users u.User.jid u ;
+    Lwt.async (fun () -> Lwt_mvar.put state.user_mvar u) ;
     fp
   in
   let (user_data : Xmpp_callbacks.user_data) = {
@@ -319,7 +320,7 @@ let handle_add s failure msg a =
      with e -> failure e)
   with _ -> msg "error" "parsing of jid failed (user@node)"
 
-let handle_fingerprint users dump err fp user =
+let handle_fingerprint mvar users dump err fp user =
   match User.active_session user with
   | Some session when User.encrypted session.User.otr ->
     let manual_fp = string_normalize_fingerprint fp in
@@ -329,15 +330,18 @@ let handle_fingerprint users dump err fp user =
         let user = User.replace_fp user { otr_fp with User.verified = true } in
         User.Users.replace users user.User.jid user ;
         dump ("fingerprint " ^ fp ^ " is now marked verified") ;
-        return_unit
+        Lwt_mvar.put mvar user
       | _ -> err "provided fingerprint does not match the one of this active session" )
   | _ -> err "no active OTR session"
 
-let handle_log users dump user v a =
+let handle_log mvar users dump user v a =
   if user.User.preserve_messages <> v then
     (let user = { user with User.preserve_messages = v } in
      User.Users.replace users user.User.jid user ;
-     dump ("logging turned " ^ a))
+     dump ("logging turned " ^ a) ;
+     Lwt_mvar.put mvar user)
+  else
+    Lwt.return_unit
 
 let handle_authorization s failure dump user arg =
   let open Xmpp_callbacks.XMPPClient in
@@ -391,8 +395,8 @@ let common_info dump user cfgdir =
     | Some x -> dump "name" x ) ;
   ( if user.User.preserve_messages then
       let histo =
-        let dir = Persistency.message_history_dir cfgdir in
-        Filename.concat dir user.User.jid
+        let dir = Persistency.history in
+        Filename.(concat (concat cfgdir dir) user.User.jid)
       in
       dump "persistent history in " histo )
 
@@ -531,7 +535,7 @@ let print_otr_policy dump pref cfg =
   in
   dump ("OTR " ^ pref ^ "versions: " ^ versions ^ " policies: " ^ policies)
 
-let adjust_otr_policy dump users default_cfg cfg contact data =
+let adjust_otr_policy mvar dump users default_cfg cfg contact data =
   let try_decode str =
     Otr.State.string_to_policy str, Otr.State.string_to_version str
   in
@@ -559,21 +563,23 @@ let adjust_otr_policy dump users default_cfg cfg contact data =
     and old_v = cfg.Otr.State.versions
     in
     let pols, vers = parse_elements old_p old_v data in
-    (if pols <> old_p || old_v <> vers then
-       let cfg =
-         if pols = default_cfg.Otr.State.policies && vers = default_cfg.Otr.State.versions then
-           None
-         else
-           let otr_custom_config = Otr.State.config vers pols in
-           Some otr_custom_config
-       in
-       User.Users.replace users contact.User.jid { contact with User.otr_custom_config = cfg } ;
-       (match cfg with
-        | None -> dump "reverted to default otr policy"
-        | Some x -> print_otr_policy dump "" x ) ;
-      else
-        dump "nothing changed" ) ;
-    return_unit
+    if pols <> old_p || old_v <> vers then
+      let cfg =
+        if pols = default_cfg.Otr.State.policies && vers = default_cfg.Otr.State.versions then
+          None
+        else
+          let otr_custom_config = Otr.State.config vers pols in
+          Some otr_custom_config
+      in
+      let user = { contact with User.otr_custom_config = cfg } in
+      User.Users.replace users contact.User.jid user ;
+      (match cfg with
+       | None -> dump "reverted to default otr policy"
+       | Some x -> print_otr_policy dump "" x ) ;
+      Lwt_mvar.put mvar user
+    else
+      (dump "nothing changed" ;
+       Lwt.return_unit)
   with
     _ -> dump "unable to parse argument" ; return_unit
 
@@ -656,8 +662,8 @@ let exec ?out input state config log redraw =
   | ("log", x) ->
     ( match x with
       | None   -> handle_help (msg ~prefix:"argument required") (Some "log")
-      | Some a when a = "on"  -> handle_log state.users dump contact true a ; return_unit
-      | Some a when a = "off" -> handle_log state.users dump contact false a ; return_unit
+      | Some a when a = "on"  -> handle_log state.user_mvar state.users dump contact true a
+      | Some a when a = "off" -> handle_log state.user_mvar state.users dump contact false a
       | Some _ -> handle_help (msg ~prefix:"unknown argument") (Some "log") )
 
   | ("info", _) ->
@@ -675,7 +681,7 @@ let exec ?out input state config log redraw =
     (match x with
      | None -> print_otr_policy dump pref cfg ; return_unit
      | Some _ when self -> err "cannot adjust own otr policy"
-     | Some z -> adjust_otr_policy dump state.users config.Config.otr_config cfg contact z
+     | Some z -> adjust_otr_policy state.user_mvar dump state.users config.Config.otr_config cfg contact z
     )
 
   | ("otr", x) ->
@@ -733,7 +739,7 @@ let exec ?out input state config log redraw =
         return_unit
       | Some fp ->
         if self then err "won't talk to myself" else
-          handle_fingerprint state.users dump err fp contact )
+          handle_fingerprint state.user_mvar state.users dump err fp contact )
   | ("authorization", x) ->
     ( match !xmpp_session, x with
       | None  , _      -> err "not connected"

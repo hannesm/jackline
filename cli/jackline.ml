@@ -37,6 +37,9 @@ let start_client cfgdir debug () =
   let config = { config with Config.password = password } in
 
   Persistency.load_users cfgdir >>= fun users ->
+  let users_sexp_existed = User.Users.length users > 0 in
+
+  Persistency.load_user_dir cfgdir users >>= fun () ->
 
   let history = LTerm_history.create [] in
 
@@ -49,28 +52,48 @@ let start_client cfgdir debug () =
   let state = Cli_state.empty_ui_state cfgdir config.Config.notification_callback jid resource users in
   let n, log = S.create (`Local "welcome to jackline", "type /help for help") in
 
-  ( if debug then
-      Persistency.open_append (Unix.getenv "PWD") "out.txt" >|= fun fd ->
-      Some fd
-    else
-      return None ) >>= fun out ->
+  let us = User.Users.fold (fun _ v acc -> v :: acc) users [] in
+
+  (if users_sexp_existed then
+     (* write out all the users to users/ *)
+     Lwt_list.iter_s (Lwt_mvar.put state.Cli_state.user_mvar) us >>= fun () ->
+     (* delete users.sexp *)
+     Persistency.delete (Filename.concat cfgdir Persistency.users)
+   else
+     Lwt.return_unit) >>= fun () ->
+
+  (* dump histories every 10 minutes *)
+  let hist_dumper =
+    let dump () = Persistency.dump_histories cfgdir users in
+    Lwt_engine.on_timer 600. true (fun _ -> Lwt.async dump)
+  in
+
+  (if debug then
+     Persistency.open_append (Unix.getenv "PWD") "out.txt" >|= fun fd ->
+     Some fd
+   else
+     return None) >>= fun out ->
 
   Cli_client.init_system (log ?step:None) config.Config.jid users ;
 
   ignore (LTerm.save_state term);  (* save the terminal state *)
 
+  (* main loop *)
   Cli_client.loop ?out config term history state n (log ?step:None) >>= fun state ->
 
-  ( match out with
-    | None -> return_unit
-    | Some fd -> Lwt_unix.close fd ) >>= fun () ->
+  (match out with
+   | None -> return_unit
+   | Some fd -> Lwt_unix.close fd) >>= fun () ->
 
   Lwt_mvar.put state.Cli_state.state_mvar Cli_state.Quit >>= fun () ->
 
-  Persistency.dump_users cfgdir state.Cli_state.users >>= fun () ->
+  (* cancel history dumper *)
+  Lwt_engine.stop_event hist_dumper ;
+  (* store histories a last time *)
+  Persistency.dump_histories cfgdir users >>= fun () ->
 
-  LTerm.load_state term   (* restore the terminal state *)
-
+  (* restore the terminal state *)
+  LTerm.load_state term
 
 
 let config_dir = ref ""

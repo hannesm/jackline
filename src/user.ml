@@ -483,6 +483,14 @@ let load_history file strict =
         Printf.printf "parsing histories failed" ;
       []
 
+let load_user bytes =
+  try (match Sexp.of_string bytes with
+       | Sexp.List [ ver ; user ] ->
+          let version = int_of_sexp ver in
+          (try t_of_sexp user version with _ -> None)
+       | _ -> None)
+    with _ -> None
+
 let load_users hist_dir bytes =
   let table = Users.create 100 in
   ( try (match Sexp.of_string bytes with
@@ -528,13 +536,9 @@ let marshal_history user =
   else
     None
 
-let store_users users =
-  let data = Users.fold (fun _ s acc -> (sexp_of_t s, marshal_history s) :: acc) users [] in
-  let users, histories = List.split data in
-  Sexp.(to_string_hum (List [ sexp_of_int db_version ; List users ]),
-        List.fold_left (fun acc v ->
-            match v with
-            | None -> acc
-            | Some (u, history) -> (u, history) :: acc)
-          []
-          histories)
+let store_user user =
+  match user.preserve_messages, user.otr_fingerprints, user.otr_custom_config with
+  | false, [], None -> None
+  | _ ->
+     let u_sexp = sexp_of_t user in
+     Some Sexp.(to_string_hum (List [ sexp_of_int db_version ; u_sexp ]))
