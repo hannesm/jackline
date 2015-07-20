@@ -22,6 +22,7 @@ type ui_state = {
   resource                    : string                    ; (* set initially *)
 
   state_mvar                  : notify_v Lwt_mvar.t       ; (* set initially *)
+  user_mvar                   : User.user Lwt_mvar.t      ; (* set initially *)
 
   users                       : User.users                ; (* read from disk, extended by xmpp callbacks *)
 
@@ -96,6 +97,7 @@ let empty_ui_state config_directory notify_callback user resource users =
   let state_mvar =
     let file = Filename.concat config_directory "notification.state" in
     Notify.notify_writer user resource notify_callback file in
+  let user_mvar = Persistency.notify_user config_directory in
   let last_status = (`Local "", "") in
   {
     config_directory                ;
@@ -103,6 +105,7 @@ let empty_ui_state config_directory notify_callback user resource users =
     resource                        ;
 
     state_mvar                      ;
+    user_mvar                       ;
 
     users                           ;
 

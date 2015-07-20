@@ -78,7 +78,21 @@ let write dir filename buf =
 
 let config = "config.sexp"
 let users = "users.sexp"
-let message_history_dir dir = Filename.concat dir "histories"
+
+let maybe_create_dir dir =
+  Lwt.catch (fun () -> Lwt_unix.access dir [Unix.F_OK ; Unix.R_OK])
+            (fun _ -> Lwt_unix.mkdir dir 0o700)
+
+let history = "histories"
+let message_history_dir dir =
+  let name = Filename.concat dir history in
+  maybe_create_dir name >|= fun () ->
+  name
+
+let user_dir dir =
+  let name = Filename.concat dir "users" in
+  maybe_create_dir name >|= fun () ->
+  name
 
 let dump_config cfgdir cfg =
   write cfgdir config (Config.store_config cfg)
@@ -88,15 +102,74 @@ let load_config dsa cfg =
   | Some x ->  Some (Config.load_config dsa x)
   | None   -> None
 
-let dump_users cfgdir data =
-  let userdb, histories = User.store_users data in
-  write cfgdir users userdb >>= fun () ->
-  let histo = message_history_dir cfgdir in
-  Lwt_list.iter_p (fun (id, data) -> append histo id data) histories
+let dump_user cfgdir user =
+  user_dir cfgdir >>= fun userdir ->
+  match User.store_user user with
+  | None ->
+     let file = Filename.concat userdir user.User.jid in
+     delete file
+  | Some sexp ->
+     write userdir user.User.jid sexp
+
+let notify_user cfgdir =
+  let mvar = Lwt_mvar.create_empty () in
+  let rec loop () =
+    Lwt_mvar.take mvar >>= fun user ->
+    dump_user cfgdir user >>= fun () ->
+    loop ()
+  in
+  Lwt.async loop ;
+  mvar
+
+let load_user dir file =
+  read dir file >|= function
+  | Some x -> User.load_user x
+  | None -> None
+
+let load_user_dir cfgdir users =
+  message_history_dir cfgdir >>= fun hist_dir ->
+  user_dir cfgdir >>= fun dir ->
+  Lwt_unix.opendir dir >>= fun dh ->
+  Lwt_unix.readdir dh >>= fun _ -> (* skip . *)
+  Lwt_unix.readdir dh >>= fun _ -> (* skip .. *)
+  let rec loadone () =
+    try_lwt
+      (Lwt_unix.readdir dh >>= fun f ->
+       load_user dir f >>= fun x ->
+       (match x with
+        | None -> Printf.printf "something went wrong\n"
+        | Some x ->
+           let message_history =
+             User.load_history
+               (Filename.concat hist_dir x.User.jid)
+               x.User.preserve_messages
+           in
+           let user = { x with User.message_history } in
+           if User.Users.mem users user.User.jid then
+             User.Users.replace users user.User.jid user
+           else
+             User.Users.add users user.User.jid user) ;
+       loadone ())
+    with End_of_file -> Lwt_unix.closedir dh
+  in
+  loadone ()
+
+let dump_history cfgdir user =
+  match User.marshal_history user with
+  | None -> Lwt.return_unit (* should remove if user.User.preserve_messages is not set *)
+  | Some (_, sexp) ->
+     message_history_dir cfgdir >>= fun history_dir ->
+     append history_dir user.User.jid sexp
+
+let dump_histories cfgdir users =
+  let users = User.Users.fold (fun _ v acc -> v :: acc) users [] in
+  Lwt_list.iter_p (dump_history cfgdir) users
 
 let load_users cfg =
+  message_history_dir cfg >>= fun histo ->
   read cfg users >|= function
-  | Some x ->  (try User.load_users (message_history_dir cfg) x with _ -> User.Users.create 100)
+  | Some x ->  (try User.load_users histo x
+                with _ -> User.Users.create 100)
   | None -> User.Users.create 100
 
 let pass_file = "password"
