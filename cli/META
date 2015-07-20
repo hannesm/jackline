@@ -1,8 +1,8 @@
 # OASIS_START
-# DO NOT EDIT (digest: ed6cac367df38554bf87560258113050)
+# DO NOT EDIT (digest: 8933b3c28cf374cc39a0dd848dc470e4)
 version = "0.1.0"
 description = "XMPP Client"
-requires = "lambda-term react lwt.syntax xmpp_client"
+requires = "lambda-term react lwt.syntax xmpp_client stringext"
 archive(byte) = "xmpp_client_cli.cma"
 archive(byte, plugin) = "xmpp_client_cli.cma"
 archive(native) = "xmpp_client_cli.cmxa"

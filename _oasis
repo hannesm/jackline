@@ -22,7 +22,7 @@ Library "xmpp_client_cli"
   Path            : cli/
   Modules         : Cli_config, Cli_state, Cli_commands, Cli_client
   Pack            : true
-  BuildDepends    : lambda-term, react, lwt.syntax, xmpp_client
+  BuildDepends    : lambda-term, react, lwt.syntax, xmpp_client, stringext
   ByteOpt         : -w A-4-33-40-41-42-43-34-44
 
 Executable "jackline"

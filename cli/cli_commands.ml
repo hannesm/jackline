@@ -2,15 +2,9 @@ open Cli_state
 
 let string_normalize_fingerprint fpstr =
   let fpstr = String.lowercase fpstr in
-  let rec worker ~fpstr ~acclst = function
-  | -1 -> String.concat "" acclst
-  | i -> worker ~fpstr ~acclst:(
-    (match (String.get fpstr i) with
-     | ' '| ':' -> ""
-     | c -> String.make 1 c
-    )::acclst) (i-1)
-  in
-    worker ~fpstr ~acclst:[] ((String.length fpstr)-1)
+  let chars = Stringext.to_list fpstr in
+  let hexchars = List.filter (function '0'..'9' | 'a'..'f' -> true | _ -> false) chars in
+  Stringext.of_list hexchars
 
 type command = {
   name : string ;
