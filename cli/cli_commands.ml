@@ -565,7 +565,15 @@ let adjust_otr_policy mvar dump users default_cfg cfg contact data =
           let otr_custom_config = Otr.State.config vers pols in
           Some otr_custom_config
       in
-      let user = { contact with User.otr_custom_config = cfg } in
+      let active_sessions =
+        let cfg = match cfg with None -> default_cfg | Some x -> x in
+        List.map
+          (fun x ->
+           let otr = Otr.State.update_config cfg x.User.otr in
+           { x with User.otr })
+          contact.User.active_sessions
+      in
+      let user = { contact with User.otr_custom_config = cfg ; active_sessions } in
       User.Users.replace users contact.User.jid user ;
       (match cfg with
        | None -> dump "reverted to default otr policy"
