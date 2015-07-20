@@ -377,7 +377,9 @@ let find_or_create_session user resource config dsa =
       | None   -> user.active_sessions
       | Some x ->
         let others = List.filter (fun s -> x.resource <> s.resource) user.active_sessions in
-        if x.presence = `Offline then others else
+        if x.presence = `Offline then
+          others
+        else
           { x with dispose = true } :: others
     in
     ({ user with active_sessions = session :: others },
