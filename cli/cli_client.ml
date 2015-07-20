@@ -34,10 +34,10 @@ let pad_l neutral len xs =
   List.rev (pad_l_rev neutral len (List.rev xs))
 
 let pad x s =
-  match x - (String.length s) with
+  match x - (Zed_utf8.length s) with
   | 0                  -> s
   | d when d > 0       -> s ^ (String.make d ' ')
-  | _ (* when d < 0 *) -> String.sub s 0 x
+  | _ (* when d < 0 *) -> Zed_utf8.sub s 0 x
 
 let rec find_index id i = function
   | []                                  -> 0
@@ -146,40 +146,76 @@ let format_log log =
   in
   List.map print_log log
 
-let format_buddies buddies users self active notifications width =
-  List.map (fun (`Bare id) ->
-      let u = User.Users.find users id in
-      let session = User.active_session u in
-      let presence = match session with
-        | None -> `Offline
-        | Some s -> s.User.presence
-      in
-      let fg = color_session u self session in
-      let highlight, e_highlight = if u = active then
-          ([ B_reverse true ], [ E_reverse ])
-        else
-          ([], [])
-      in
-      let f, t =
-        if u = self then
+let format_buddies show_offline buddies users self active notifications width =
+  let notification = "*"
+  and multi = "+"
+  and multi_notify = Zed_utf8.singleton (UChar.of_int 0x2600) (* black sun with rays (combined * and +) *)
+  and show_multiple user =
+    let open User in
+    let big l = List.length l > 1
+    and not_off s = s.presence <> `Offline
+    in
+    show_offline && big user.active_sessions ||
+      big (List.filter not_off user.active_sessions)
+  in
+
+  let draw_one ?prefix name user presence fg =
+    let notify = List.mem user notifications in
+    let item =
+      let st = match notify, not user.User.expand && show_multiple user with
+        | true , false -> notification
+        | true , true  -> multi_notify
+        | false, true  -> multi
+        | false, false -> " "
+      and f, t =
+        if user = self then
           ("{", "}")
         else
           User.subscription_to_chars u.User.subscription
+      and pre = match prefix with
+        | None -> ""
+        | Some x -> x
       in
-      let notify = List.mem u notifications in
-      let item =
-        let data = Printf.sprintf "%s%s%s%s %s"
-            (if notify then "*" else " ")
-            f (User.presence_to_char presence) t (User.Jid.bare_jid_to_string id)
-        in
-        pad width data
-      in
-      let show = highlight @ [B_fg fg ; S item ; E_fg ] @ e_highlight in
-      if notify then
-        B_blink true :: show @ [ E_blink ]
+      let data = Printf.sprintf "%s%s%s%s%s %s" pre st f presence t name in
+      pad width data
+    and highlight, e_highlight =
+      if user = active then
+        ([ B_reverse true ], [ E_reverse ])
       else
-        show)
-    buddies
+        ([], [])
+    in
+    let show = highlight @ [B_fg fg ; S item ; E_fg ] @ e_highlight in
+    if notify then
+      B_blink true :: show @ [ E_blink ]
+    else
+      show
+  in
+
+  List.fold_left (fun acc id ->
+    let u = User.Users.find users id in
+    let s = User.active_session u in
+    let presence session =
+      let p = match session with
+        | None -> `Offline
+        | Some s -> s.User.presence
+      in
+      User.presence_to_char p
+    and fg session = color_session u self session
+    in
+
+    if u.User.expand && show_multiple u then
+      let first = draw_one id u (presence s) (fg s)
+      and others =
+        List.map (fun s ->
+          let s_opt = Some s in
+          draw_one ~prefix:" " s.User.resource u (presence s_opt) (fg s_opt))
+          u.User.active_sessions
+        in
+        first :: others @ acc
+    else
+      draw_one id u (presence s) (fg s) :: acc)
+    []
+    (List.rev buddies)
 
 let format_messages msgs =
   let open User in
@@ -199,7 +235,7 @@ let format_messages msgs =
 
 let buddy_list users show_offline self active notifications length width =
   let buddies = show_buddies users show_offline self active notifications in
-  let formatted_buddies = format_buddies buddies users self active notifications width in
+  let formatted_buddies = format_buddies show_offline buddies users self active notifications width in
 
   let bs = List.length buddies
   and up, down = (length / 2, (length + 1) / 2)
