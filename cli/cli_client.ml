@@ -688,7 +688,10 @@ let rec loop term hist state network log =
           | _           , None ->
              err "no active session, try to connect first") >>= fun () ->
        loop term hist state network log
-    | Some _ -> loop term hist state network log
+    | Some _ ->
+       let active = User.Users.find state.users state.active_contact in
+       User.Users.replace state.users state.active_contact { active with User.expand = not active.User.expand } ;
+       loop term hist state network log
     | None -> loop term hist state network log
 
 let init_system log domain connect_mvar =
