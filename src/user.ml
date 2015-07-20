@@ -308,14 +308,17 @@ type user = {
   message_history   : message list ; (* persistent if preserve_messages is true *)
   otr_fingerprints  : fingerprint list ;
   otr_custom_config : Otr.State.config option ;
-  active_sessions   : session list (* not persistent *)
+  active_sessions   : session list ; (* not persistent *)
+  expand            : bool ; (* not persistent *)
 }
 
 let jid u = Jid.bare_jid_to_string u.bare_jid
 
 let new_user ~jid ?(name=None) ?(groups=[]) ?(subscription=`None) ?(otr_fingerprints=[]) ?(preserve_messages=false) ?(properties=[]) ?(active_sessions=[]) ?(otr_custom_config=None) () =
-  let message_history = [] in
-  { bare_jid = jid ; name ; groups ; subscription ; properties ; otr_fingerprints ; preserve_messages ; active_sessions ; message_history ; otr_custom_config }
+  let message_history = []
+  and expand = false
+  in
+  { bare_jid = jid ; name ; groups ; subscription ; properties ; otr_fingerprints ; preserve_messages ; active_sessions ; message_history ; otr_custom_config ; expand }
 
 let message direction encrypted received message =
   { direction ; encrypted ; received ;
