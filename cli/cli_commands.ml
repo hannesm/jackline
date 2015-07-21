@@ -418,13 +418,13 @@ let handle_info dump user cfgdir =
   let add = if String.length add > 0 then " (" ^ (String.trim add) ^ ")" else "" in
   dump "subscription" ((User.subscription_to_string user.User.subscription) ^ add) ;
   let active = User.active_session user in
-  List.iteri (fun i s ->
+  List.iter (fun s ->
       let act = match active with
-        | Some x when x = s -> " (active)"
-        | _ -> ""
+        | Some x when x = s -> "active"
+        | _ -> "other"
       in
-      dump ("session " ^ (string_of_int i) ^ act) (marshal_session s))
-    user.User.active_sessions
+      dump act (marshal_session s))
+      (List.sort User.compare_session user.User.active_sessions)
 
 let handle_own_info dump user cfgdir config res =
   let dump a b = dump (a ^ ": " ^ b) in
