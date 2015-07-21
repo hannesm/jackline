@@ -212,7 +212,7 @@ let format_buddies show_offline buddies users self active notifications width =
         List.map (fun s ->
           let s_opt = Some s in
           let draw st _ _ =
-            Printf.sprintf "  %s%s %s" st (presence s_opt) s.User.resource
+            Printf.sprintf " %s%s   %s" st (presence s_opt) s.User.resource
           in
           draw_one draw u (fg s_opt))
           (List.sort User.compare_session u.User.active_sessions)
