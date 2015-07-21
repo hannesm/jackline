@@ -159,7 +159,7 @@ let format_buddies show_offline buddies users self active notifications width =
       big (List.filter not_off user.active_sessions)
   in
 
-  let draw_one ?prefix name user presence fg =
+  let draw_one draw user fg =
     let notify = List.mem user notifications in
     let item =
       let st = match notify, not user.User.expand && show_multiple user with
@@ -171,12 +171,12 @@ let format_buddies show_offline buddies users self active notifications width =
         if user = self then
           ("{", "}")
         else
-          User.subscription_to_chars u.User.subscription
+          User.subscription_to_chars user.User.subscription
       and pre = match prefix with
         | None -> ""
         | Some x -> x
       in
-      let data = Printf.sprintf "%s%s%s%s%s %s" pre st f presence t name in
+      let data = draw st f t in
       pad width data
     and highlight, e_highlight =
       if user = active then
@@ -204,16 +204,25 @@ let format_buddies show_offline buddies users self active notifications width =
     in
 
     if u.User.expand && show_multiple u then
-      let first = draw_one id u (presence s) (fg s)
+      let draw st f t =
+        Printf.sprintf "%s%s%s%s %s" st f (presence s) t id
+      in
+      let first = draw_one draw u (fg s)
       and others =
         List.map (fun s ->
           let s_opt = Some s in
-          draw_one ~prefix:" " s.User.resource u (presence s_opt) (fg s_opt))
-          u.User.active_sessions
+          let draw st _ _ =
+            Printf.sprintf "  %s%s %s" st (presence s_opt) s.User.resource
+          in
+          draw_one draw u (fg s_opt))
+          (List.sort User.compare_session u.User.active_sessions)
         in
         first :: others @ acc
     else
-      draw_one id u (presence s) (fg s) :: acc)
+      let draw st f t =
+        Printf.sprintf "%s%s%s%s %s" st f (presence s) t id
+      in
+      draw_one draw u (fg s) :: acc)
     []
     (List.rev buddies)
 
