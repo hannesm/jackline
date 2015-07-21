@@ -402,12 +402,7 @@ let active_session user =
     if List.length s = 0 then
       Some (List.hd user.active_sessions)
     else
-      let ss =
-        let prios = List.sort (fun a b -> compare b.priority a.priority) s in
-        let top = List.hd prios in
-        let best = List.filter (fun x -> x.priority = top.priority) prios in
-        List.sort (fun a b -> compare_presence a.presence b.presence) best
-      in
+      let ss = List.sort compare_session s in
       Some (List.hd ss)
 
 let db_version = 1
