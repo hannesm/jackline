@@ -140,6 +140,7 @@ let sexp_of_t t =
     "jid"                  , sexp_of_string (JID.string_of_jid t.jid) ;
     "hostname"             , sexp_of_option sexp_of_string t.hostname ;
     "port"                 , sexp_of_option sexp_of_int t.port ;
+    "priority"             , sexp_of_option sexp_of_int t.priority ;
     "authenticator"        , sexp_of_auth t.authenticator ;
     "otr_config"           , Otr.State.sexp_of_config t.otr_config ;
     "certificate_hostname" , sexp_of_option sexp_of_string t.certificate_hostname ;
