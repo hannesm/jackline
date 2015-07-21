@@ -14,6 +14,10 @@ let compare_presence a b =
   | `Free, `Online -> 0
   | `Online, `Online -> 0
   | `Online, `Free -> 0
+  | `Online, _ -> 1
+  | `Free, _ -> 1
+  | _, `Online -> -1
+  | _, `Free -> -1
   | `Away, `Away -> 0
   | `Away, _ -> 1
   | _, `Away -> -1
@@ -384,6 +388,11 @@ let find_or_create_session user resource config dsa =
     in
     ({ user with active_sessions = session :: others },
      session)
+
+let compare_session a b =
+  match compare b.priority a.priority with
+  | 0 -> compare_presence b.presence a.presence
+  | x -> x
 
 let active_session user =
   if List.length user.active_sessions = 0 then
