@@ -9,7 +9,7 @@ type auth = [
 
 type t = {
   version : int ;
-  jid : JID.t ;
+  jid : Jid.full_jid ;
   priority : int option ;
   hostname : string option ;
   port : int option ;
@@ -56,8 +56,9 @@ let t_of_sexp dsa t =
           | Sexp.List [ Sexp.Atom "jid" ; Sexp.Atom v ] ->
             assert (jid = None) ;
             let jid =
-              try JID.of_string v
-              with _ -> raise (Invalid_argument "parse error in jid")
+              match Jid.string_to_full_jid v with
+              | None -> raise (Invalid_argument "parse error in jid")
+              | Some x -> x
             in
             (ver, Some jid, prio, host, port, pass, auth, cert, notification)
           | Sexp.List [ Sexp.Atom "priority" ; p ] ->
@@ -137,7 +138,7 @@ let record kvs =
 let sexp_of_t t =
   record [
     "version"              , sexp_of_int t.version ;
-    "jid"                  , sexp_of_string (JID.string_of_jid t.jid) ;
+    "jid"                  , sexp_of_string (Jid.full_jid_to_string t.jid) ;
     "hostname"             , sexp_of_option sexp_of_string t.hostname ;
     "port"                 , sexp_of_option sexp_of_int t.port ;
     "priority"             , sexp_of_option sexp_of_int t.priority ;
