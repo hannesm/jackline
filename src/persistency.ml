@@ -106,10 +106,10 @@ let dump_user cfgdir user =
   user_dir cfgdir >>= fun userdir ->
   match User.store_user user with
   | None ->
-     let file = Filename.concat userdir user.User.jid in
+     let file = Filename.concat userdir (User.jid user) in
      delete file
   | Some sexp ->
-     write userdir user.User.jid sexp
+     write userdir (User.jid user) sexp
 
 let notify_user cfgdir =
   let mvar = Lwt_mvar.create_empty () in
@@ -141,14 +141,11 @@ let load_user_dir cfgdir users =
         | Some x ->
            let message_history =
              User.load_history
-               (Filename.concat hist_dir x.User.jid)
+               (Filename.concat hist_dir (User.jid x))
                x.User.preserve_messages
            in
            let user = { x with User.message_history } in
-           if User.Users.mem users user.User.jid then
-             User.Users.replace users user.User.jid user
-           else
-             User.Users.add users user.User.jid user) ;
+           User.add_or_replace users user) ;
        loadone ())
     with End_of_file -> Lwt_unix.closedir dh
   in
@@ -159,7 +156,7 @@ let dump_history cfgdir user =
   | None -> Lwt.return_unit (* should remove if user.User.preserve_messages is not set *)
   | Some (_, sexp) ->
      message_history_dir cfgdir >>= fun history_dir ->
-     append history_dir user.User.jid sexp
+     append history_dir (User.jid user) sexp
 
 let dump_histories cfgdir users =
   let users = User.Users.fold (fun _ v acc -> v :: acc) users [] in
