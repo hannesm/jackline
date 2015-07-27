@@ -197,7 +197,7 @@ let handle_connect ?out state config log redraw failure =
   and log dir txt = log (dir, txt)
   and message jid dir enc txt =
     User.add_message state.users jid dir enc true txt ;
-    maybe_notify state jid ;
+    notify state jid ;
     redraw ()
   and receipt jid id =
     let bare = Jid.t_to_bare jid in
@@ -226,10 +226,10 @@ let handle_connect ?out state config log redraw failure =
     let bare = Jid.t_to_bare jid in
     let user = User.find_or_create state.users bare in
     User.replace_session state.users user session
-  and update_user user notify =
+  and update_user user alert =
     let jid = user.User.bare_jid in
     User.Users.replace state.users jid user ;
-    if notify then maybe_notify state (`Bare jid) ;
+    if alert then notify state (`Bare jid) ;
     redraw ()
   and inc_fp jid raw_fp =
     let bare = Jid.t_to_bare jid in
