@@ -45,10 +45,9 @@ let start_client cfgdir debug () =
   let history = LTerm_history.create [] in
 
   (* setup self contact *)
-  let myjid = `Full config.Config.jid in
-  let bare = Jid.t_to_bare myjid in
+  let myjid = config.Config.jid in
+  let (bare, resource) = myjid in
   let user = User.find_or_create users bare in
-  let resource = match Jid.resource myjid with Some x -> x | None -> "NONE" in
   let user, _ = User.find_or_create_session user resource config.Config.otr_config config.Config.dsa in
   User.Users.replace users bare user ;
 

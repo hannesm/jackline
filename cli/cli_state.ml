@@ -18,7 +18,7 @@ type notify_v =
 
 type ui_state = {
   config_directory            : string                    ; (* set initially *)
-  myjid                       : Jid.t                     ; (* set initially *)
+  myjid                       : Jid.full_jid               ; (* set initially *)
 
   state_mvar                  : notify_v Lwt_mvar.t       ; (* set initially *)
   user_mvar                   : User.user Lwt_mvar.t      ; (* set initially *)
@@ -64,7 +64,7 @@ module Notify = struct
       | None -> Lwt.return_unit
       | Some x ->
         Lwt.catch (fun () ->
-            system (x ^ " " ^ Jid.jid_to_string jid ^ " " ^ buf) >>= fun _ ->
+            system (x ^ " " ^ Jid.full_jid_to_string jid ^ " " ^ buf) >>= fun _ ->
             Lwt.return_unit)
           (fun _ -> Lwt.return_unit)
     in
@@ -95,9 +95,11 @@ end
 let empty_ui_state config_directory notify_callback myjid users =
   let state_mvar =
     let file = Filename.concat config_directory "notification.state" in
-    Notify.notify_writer myjid notify_callback file in
-  let user_mvar = Persistency.notify_user config_directory in
-  let last_status = (`Local "", "") in
+    Notify.notify_writer myjid notify_callback file
+  and user_mvar = Persistency.notify_user config_directory
+  and last_status = (`Local "", "")
+  and active = `Full myjid
+  in
   {
     config_directory                ;
     myjid                           ;
@@ -107,8 +109,8 @@ let empty_ui_state config_directory notify_callback myjid users =
 
     users                           ;
 
-    active_contact      = myjid     ;
-    last_active_contact = myjid     ;
+    active_contact      = active    ;
+    last_active_contact = active    ;
 
     notifications       = []        ;
 
@@ -124,7 +126,7 @@ let empty_ui_state config_directory notify_callback myjid users =
 
 
 let add_status state dir msg =
-  User.add_message state.users state.myjid dir false true msg
+  User.add_message state.users (`Full state.myjid) dir false true msg
 
 let (xmpp_session : Xmpp_callbacks.user_data Xmpp_callbacks.XMPPClient.session_data option ref) = ref None
 
