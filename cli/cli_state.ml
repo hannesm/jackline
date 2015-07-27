@@ -141,3 +141,19 @@ let cleanups users =
   Xmpp_callbacks.cancel_keepalive () ;
   Xmpp_callbacks.keepalive_running := false ;
   xmpp_session := None
+
+let maybe_notify state jid =
+  if List.exists (fun x -> Jid.jid_matches x jid) state.notifications ||
+       (Jid.jid_matches state.active_contact jid && state.scrollback = 0)
+  then
+    ()
+  else
+    (state.notifications <- jid :: state.notifications ;
+     Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Notifications))
+
+let notified state jid =
+  state.notifications <- List.filter
+                           (fun x -> not (Jid.jid_matches jid x))
+                           state.notifications ;
+  if List.length state.notifications = 0 then
+    Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear)
