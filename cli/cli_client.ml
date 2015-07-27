@@ -40,9 +40,9 @@ let pad x s =
   | _ (* when d < 0 *) -> String.sub s 0 x
 
 let rec find_index id i = function
-  | []               -> 0
-  | x::_ when x = id -> i
-  | _::xs            -> find_index id (succ i) xs
+  | []                             -> 0
+  | x::_ when Jid.jid_matches id x -> i
+  | _::xs                          -> find_index id (succ i) xs
 
 let color_session u su = function
   | Some x when User.(encrypted x.otr) -> green
@@ -60,10 +60,10 @@ let show_buddies users show_offline self active notifications =
       in
       let rly_show = u = self || u = active || List.mem u notifications in
       match rly_show, show_offline, presence with
-      | true,  _    , _        -> id :: acc
-      | false, true , _        -> id :: acc
+      | true,  _    , _        -> `Bare id :: acc
+      | false, true , _        -> `Bare id :: acc
       | false, false, `Offline -> acc
-      | false, false, _        -> id :: acc)
+      | false, false, _        -> `Bare id :: acc)
     (User.keys users) []
 
 let rec line_wrap ?raw ~max_length entries acc : string list =
@@ -147,7 +147,7 @@ let format_log log =
   List.map print_log log
 
 let format_buddies buddies users self active notifications width =
-  List.map (fun id ->
+  List.map (fun (`Bare id) ->
       let u = User.Users.find users id in
       let session = User.active_session u in
       let presence = match session with
@@ -203,7 +203,7 @@ let buddy_list users show_offline self active notifications length width =
 
   let bs = List.length buddies
   and up, down = (length / 2, (length + 1) / 2)
-  and active_idx = find_index active.User.bare_jid 0 buddies
+  and active_idx = find_index (`Bare active.User.bare_jid) 0 buddies
   in
   match length >= bs with
   | true  -> let pad = [ S (String.make width ' ') ] in
@@ -507,15 +507,15 @@ let navigate_message_buffer state direction =
   | Up, n -> state.scrollback <- n + 1; force_redraw ()
 
 let navigate_buddy_list state direction =
-  let find u = User.Users.find state.users u in
-  let active = find (Jid.t_to_bare state.active_contact) in
-  let notifications = List.map find (List.map Jid.t_to_bare state.notifications) in
-  let self = find (Jid.t_to_bare state.myjid) in
+  let find u = User.Users.find state.users (Jid.t_to_bare u) in
+  let active = find state.active_contact in
+  let notifications = List.map find state.notifications in
+  let self = find state.myjid in
   let userlist = show_buddies state.users state.show_offline self active notifications in
   let set_active idx =
     let user = List.nth userlist idx in
-    activate_user state (`Bare user)
-  and active_idx = find_index (Jid.t_to_bare state.active_contact) 0 userlist
+    activate_user state user
+  and active_idx = find_index state.active_contact 0 userlist
   in
   match
     direction,
