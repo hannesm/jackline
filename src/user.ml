@@ -271,86 +271,6 @@ let find_or_create users jid =
       Users.replace users jid user ;
       user
 
-(*
-   xmpp resources should be unique for each client, thus multiple
-   sessions between two contacts can be established. great idea!
-   unfortunately the real world is crap. look at some resources:
-   -mcabber.123456 mcabber.123457
-   -276687891418300495410099 276687891418300495410010 ...
-   -D87A6DD1
-   -gmail.1234D33 ...
-   -5d234568880
-   -BitlBee7D0D5864
-   -AAAA AAAAB (size increases/decreases (because some use random and print without leading 0s))
-   -23d22ef2-6bf9-4531-abb2-e42418a4713b, 22fa77f2-9333-41b9-81e1-4cebf042ac18 (agl/xmpp-client)
-
-   thus I have some magic here to uniquify sessions... the idea is
-   (read: hand-wavy):
-    if two resources share a common prefix and have some random hex numbers,
-    they are similar!
-
-    or, if they are both UUIDs (some servers use UUID if the client doesn't come up with a resource)
-
-   this naive obviously fails:
-     user X with AAAA comes online, user X with AAAB comes online
-     (read: these are similar) -- then AAAA goes offline.. AAAB is
-     still online (and this order of events happens on a reconnect due
-     to timeout)
-
-   thus only the otr ctx is copied over, and the dispose flag is set...
-   when a contact goes offline where dispose is set, the session is removed
- *)
-
-let hex_chars start s =
-  let hex_char = function
-    | 'a' .. 'f' | 'A' .. 'F' | '0' .. '9' -> true
-    | _ -> false
-  in
-  let rec go idx s =
-    if idx < String.length s then
-      if hex_char (String.get s idx) then
-        go (succ idx) s
-      else
-        false
-    else
-      true
-  in
-  go start s
-
-let is_uuid s =
-  let open String in
-  length s = 36 &&
-  hex_chars 0 (sub s 0 8) &&
-  get s 8 = '-' &&
-  hex_chars 0 (sub s 9 4) &&
-  get s 13 = '-' &&
-  hex_chars 0 (sub s 14 4) &&
-  get s 18 = '-' &&
-  hex_chars 0 (sub s 19 4) &&
-  get s 23 = '-' &&
-  hex_chars 0 (sub s 24 12)
-
-let resource_similar a b =
-  let alen = String.length a
-  and blen = String.length b
-  in
-  if abs (alen - blen) > 2 then
-    false (* they're a bit too much off *)
-  else if is_uuid a && is_uuid b then
-    true
-  else
-    let stop = min alen blen in
-    let rec equal idx =
-      if idx < stop then
-        if String.get a idx = String.get b idx then
-          equal (succ idx)
-        else
-          idx
-      else
-        idx
-    in
-    let prefix_len = equal 0 in
-    hex_chars prefix_len a && hex_chars prefix_len b
 
 let replace_session users user session =
   let others = List.filter (fun s -> s.resource <> session.resource) user.active_sessions in
@@ -374,7 +294,7 @@ let find_session user resource =
   get_session user tst
 
 let find_similar_session user resource =
-  let r_similar s = resource_similar s.resource resource in
+  let r_similar s = Jid.resource_similar s.resource resource in
   get_session user r_similar
 
 let find_or_create_session user resource config dsa =
