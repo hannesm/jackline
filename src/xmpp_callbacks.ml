@@ -20,18 +20,16 @@ module Roster = Roster.Make (XMPPClient)
 open Lwt
 
 type user_data = {
-  received               : User.direction -> string -> unit ;
-  notify                 : bool -> User.user -> unit ;
-  remove                 : string -> unit ;
-  message                : User.user -> User.direction -> bool -> string -> unit ;
-  find                   : string -> User.user option ;
-  find_or_create         : string -> User.user ;
-  find_inc_fp            : User.user -> string -> string -> User.fingerprint ;
-  find_session           : User.user -> string -> User.session option ;
-  find_or_create_session : User.user -> string -> User.session ;
-  update_session         : User.user -> User.session -> unit ;
-  failure                : exn -> unit Lwt.t ;
-  receipt                : User.user -> string -> unit ;
+  log            : User.direction -> string -> unit ;
+  remove         : Jid.t -> unit ;
+  message        : Jid.t -> User.direction -> bool -> string -> unit ;
+  user           : Jid.t -> User.user ;
+  session        : Jid.t -> User.session ;
+  update_user    : User.user -> bool -> unit ;
+  update_session : Jid.t -> User.session -> unit ;
+  receipt        : Jid.t -> string -> unit ;
+  inc_fp         : Jid.t -> string -> (bool * int * bool) ;
+  failure        : exn -> unit Lwt.t ;
 }
 
 (*
@@ -47,7 +45,7 @@ let request_server_disco t =
                   feature :: acc
                 | _ -> "bla" :: acc) [] els
             in
-            t.user_data.received (`Local "disco") (String.concat ", " fs) ;
+            t.user_data.log (`Local "disco") (String.concat ", " fs) ;
             return_unit
           | _ ->  return_unit)
       | IQError _ -> return_unit
@@ -58,49 +56,41 @@ let request_server_disco t =
    with e -> t.user_data.failure e)
 *)
 
-let request_disco t userid resource =
-  let user = t.user_data.find_or_create userid in
-  let session = t.user_data.find_or_create_session user resource in
-  match session.User.receipt with
-  | `Unknown ->
-    let callback ev jid_from _jid_to _lang () =
-      let receipt = match ev with
-        | IQResult el ->
-          ( match el with
-            | Some (Xml.Xmlelement ((ns, "query"), _, els)) when ns = Disco.ns_disco_info ->
-              (* pick el with ns_receipts *)
-              let receipt = match ns_receipts with
-                | Some x -> x
-                | None -> assert false
-              in
-              if
-                List.exists (function
-                    | Xml.Xmlelement ((_, "feature"), attrs, _) ->
-                      Xml.safe_get_attr_value "var" attrs = receipt
-                    | _ -> false) els
-              then
-                `Supported
-              else
-                `Unsupported
-            | _ ->  `Unsupported )
-           | IQError _ -> `Unsupported
+let request_disco t jid =
+  let callback ev jid_from _jid_to _lang () =
+    let receipt = match ev with
+      | IQError _ -> `Unsupported
+      | IQResult el ->
+         match el with
+         | Some (Xml.Xmlelement ((ns, "query"), _, els)) when ns = Disco.ns_disco_info ->
+            (* pick el with ns_receipts *)
+            let Some receipt = ns_receipts in
+            if List.exists (function
+                             | Xml.Xmlelement ((_, "feature"), attrs, _) ->
+                                Xml.safe_get_attr_value "var" attrs = receipt
+                             | _ -> false) els
+            then
+              `Supported
+            else
+              `Unsupported
+         | _ ->  `Unsupported
       in
       (match jid_from with
         | None -> fail BadRequest
         | Some x -> return x ) >>= fun jid_from ->
-      let jid, resource = User.bare_jid (JID.of_string jid_from) in
-      let user = t.user_data.find_or_create jid in
-      let session = t.user_data.find_or_create_session user resource in
-      t.user_data.update_session user { session with User.receipt = receipt } ;
-      return_unit
-    in
-    t.user_data.update_session user { session with User.receipt = `Requested } ;
-    let jid_to = JID.of_string (User.userid user session) in
-    (try_lwt
-       make_iq_request t ~jid_to (IQGet (Disco.make_disco_query [])) callback
-     with e -> t.user_data.failure e)
-  | _ -> return_unit
-
+      match Jid.string_to_jid jid_from with
+      | None -> fail BadRequest
+      | Some jid ->
+         let session = t.user_data.session jid in
+         t.user_data.update_session jid { session with User.receipt = receipt } ;
+         return_unit
+  in
+  let session = t.user_data.session jid in
+  t.user_data.update_session jid { session with User.receipt = `Requested } ;
+  let jid_to = Jid.jid_to_xmpp_jid jid in
+  (try_lwt
+     make_iq_request t ~jid_to (IQGet (Disco.make_disco_query [])) callback
+   with e -> t.user_data.failure e)
 
 let ping_urn = "urn:xmpp:ping"
 
@@ -140,21 +130,25 @@ let rec restart_keepalive t =
   in
   keepalive := Some (Lwt_engine.on_timer 45. false (fun _ -> Lwt.async doit))
 
-let send_msg t user session id body failure =
-  let x =
+let send_msg t jid id body failure =
+  let session = t.user_data.session jid in
+  let x, req =
     match id, session.User.receipt with
-    | None, _ -> []
-    | Some _, `Supported -> [Xml.Xmlelement ((ns_receipts, "request"), [], [])]
-    | Some _, `Unsupported
+    | None, _ -> ([], false)
+    | Some _, `Supported -> ([Xml.Xmlelement ((ns_receipts, "request"), [], [])], false)
+    | Some _, `Unsupported -> ([], true)
     | Some _, `Unknown
-    | Some _, `Requested -> []
+    | Some _, `Requested -> ([], false)
   in
-  let jid_to = JID.of_string (User.userid user session) in
+  let jid_to = Jid.jid_to_xmpp_jid jid in
   restart_keepalive t ;
-  try_lwt
-    send_message t ~kind:Chat ~jid_to ~body ~x ?id ()
-  with e -> failure e
-
+  (try_lwt
+     send_message t ~kind:Chat ~jid_to ~body ~x ?id ()
+   with e -> failure e) >>= fun () ->
+  if req then
+    request_disco t jid
+  else
+    return_unit
 
 let validate_utf8 txt =
   let open CamomileLibrary.UPervasives in
@@ -173,48 +167,42 @@ let validate_utf8 txt =
 let message_callback (t : user_data session_data) stanza =
   restart_keepalive t ;
   match stanza.jid_from with
-  | None -> t.user_data.received (`Local "error") "no from in stanza" ; return_unit
+  | None -> t.user_data.log (`Local "error") "no from in stanza" ; return_unit
   | Some jidt ->
-    let jid, resource = User.bare_jid jidt in
-    let user = t.user_data.find_or_create jid in
-    let session = t.user_data.find_or_create_session user resource in
+    let jid = Jid.xmpp_jid_to_jid jidt in
     let msg dir enc txt =
       let data =
         let txt = validate_utf8 txt in
         let txt = Escape.strip_tags txt in
         Escape.unescape txt
       in
-      let user = match t.user_data.find jid with Some x -> x | None -> assert false in
-      t.user_data.message user dir enc data ;
+      t.user_data.message jid dir enc data ;
     in
     List.iter (function
-        | Xml.Xmlelement ((ns_rec, "received"), attrs, _) when
-            ns_rec = ns_receipts ->
-          ( match Xml.safe_get_attr_value "id" attrs with
-              | "" -> ()
-              | id -> t.user_data.receipt user id )
+        | Xml.Xmlelement ((ns_rec, "received"), attrs, _) when ns_rec = ns_receipts ->
+          (match Xml.safe_get_attr_value "id" attrs with
+           | "" -> ()
+           | id -> t.user_data.receipt jid id)
         | _ -> ()) stanza.x ;
     match stanza.content.body with
     | None -> return_unit
     | Some v ->
+      let session = t.user_data.session jid in
       let ctx, out, ret = Otr.Engine.handle session.User.otr v in
-      t.user_data.update_session user { session with User.otr = ctx } ;
-      let from = `From (JID.string_of_jid jidt) in
+      t.user_data.update_session jid { session with User.otr = ctx } ;
+      let from = `From jid in
       List.iter (function
           | `Established_encrypted_session ssid ->
             msg (`Local "OTR") false ("encrypted connection established (ssid " ^ ssid ^ ")") ;
             let raw_fp = match User.otr_fingerprint ctx with Some fp -> fp | _ -> assert false in
-            let user = match t.user_data.find jid with Some x -> x | None -> assert false in
-            let fp = t.user_data.find_inc_fp user resource raw_fp in
-            let verified_key = List.exists (fun x -> x.User.verified) user.User.otr_fingerprints in
             let verify = "verify /fingerprint [fp] over second channel" in
             let otrmsg =
-              match verified_key, fp.User.verified, pred fp.User.session_count with
-              | _, true, _ -> "verified OTR key"
-              | true, false, 0 -> "POSSIBLE BREAKIN ATTEMPT! new unverified key with a different verified key on disk! " ^ verify
-              | true, false, n -> "unverified key (used " ^ (string_of_int n) ^ " times) with a different verified key on disk! please " ^ verify
-              | false, false, 0 -> "new unverified key! please " ^ verify
-              | false, false, n -> "unverified key (used " ^ (string_of_int n) ^ " times). please " ^ verify
+              match t.user_data.inc_fp jid raw_fp with
+              | true, _, _ -> "verified OTR key"
+              | false, 0, true -> "POSSIBLE BREAKIN ATTEMPT! new unverified key with a different verified key on disk! " ^ verify
+              | false, n, true -> "unverified key (used " ^ (string_of_int n) ^ " times) with a different verified key on disk! please " ^ verify
+              | false, 0, false -> "new unverified key! please " ^ verify
+              | false, n, false -> "unverified key (used " ^ (string_of_int n) ^ " times). please " ^ verify
             in
             msg (`Local "OTR key") false otrmsg
           | `Warning w               -> msg (`Local "OTR warning") false w
@@ -229,7 +217,7 @@ let message_callback (t : user_data session_data) stanza =
       (Lwt_list.iter_s (function
           | Xml.Xmlelement ((ns_rec, "request"), _, _) when
               ns_rec = ns_receipts ->
-            ( match stanza.id with
+            (match stanza.id with
               | None -> return_unit
               | Some id ->
                 let x = [Xml.Xmlelement ((ns_receipts, "received"), [Xml.make_attr "id" id], [])] in
@@ -239,10 +227,10 @@ let message_callback (t : user_data session_data) stanza =
                    ~kind:Chat
                    ~x
                     ()
-                 with _ -> return_unit ) )
+                 with _ -> return_unit))
           | _ -> return_unit) stanza.x) >>= fun () ->
       match out with
-      | None -> return ()
+      | None -> return_unit
       | Some body ->
         (try_lwt
            send_message t
@@ -250,16 +238,18 @@ let message_callback (t : user_data session_data) stanza =
              ~kind:Chat
              ~body ()
          with e -> t.user_data.failure e) >>= fun () ->
-        try_lwt
-          request_disco t jid resource
-        with e -> t.user_data.failure e
+        if (t.user_data.session jid).User.receipt = `Unknown then
+          try_lwt request_disco t jid
+          with e -> t.user_data.failure e
+        else
+          return_unit
 
 let message_error t ?id ?jid_from ?jid_to ?lang error =
   restart_keepalive t ;
   ignore id ; ignore jid_to ; ignore lang ;
   let jid = match jid_from with
-    | None -> "unknown"
-    | Some x -> JID.string_of_jid x
+    | None -> `Bare ("unknown", "host")
+    | Some x -> Jid.xmpp_jid_to_jid x
   in
   let msg =
     let con = "error; reason: " ^ (string_of_condition error.err_condition) in
@@ -267,49 +257,41 @@ let message_error t ?id ?jid_from ?jid_to ?lang error =
     | x when x = "" -> con
     | x -> con ^ ", message: " ^ x
   in
-  t.user_data.received (`From jid) msg ;
+  t.user_data.log (`From jid) msg ;
   return_unit
 
 let presence_callback t stanza =
   restart_keepalive t ;
-  let log = t.user_data.received in
+  let log = t.user_data.log in
   (match stanza.jid_from with
    | None     -> log (`Local "error") "presence received without sending jid, ignoring"
    | Some jidt ->
-     let jid, resource = User.bare_jid jidt in
+     let jid = Jid.xmpp_jid_to_jid jidt in
      let status, statstring = match stanza.content.status with
        | None -> (None, "")
        | Some x when x = "" -> (None, "")
        | Some x -> let data = validate_utf8 x in (Some data, " - " ^ data)
      in
-     let handle_presence newp =
-       let user = t.user_data.find_or_create jid in
-       let session = t.user_data.find_or_create_session user resource in
-       let prio = match stanza.content.priority with
+     let handle_presence presence =
+       let session = t.user_data.session jid in
+       let priority = match stanza.content.priority with
          | None -> 0
          | Some x -> x
        in
-       let old = User.presence_to_char session.User.presence in
-       let session =
-         { session with
-           User.presence = newp ;
-           User.status   = status ;
-           User.priority = prio ;
-         }
-       in
-       let user = match t.user_data.find jid with Some x -> x | None -> assert false in
-       t.user_data.update_session user session ;
+       let session = { session with User.presence ; status ; priority } in
+       t.user_data.update_session jid session ;
 
-       let n = User.presence_to_char newp in
-       let nl = User.presence_to_string newp in
+       let old = User.presence_to_char session.User.presence
+       and n = User.presence_to_char presence
+       and nl = User.presence_to_string presence
+       in
        let info =
          "presence changed: [" ^ old ^ ">" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring
        in
-       log (`From (JID.string_of_jid jidt)) info
+       log (`From jid) info
      in
      let handle_subscription txt hlp =
-       let user = t.user_data.find_or_create jid in
-       t.user_data.message user (`Local txt) false hlp
+       t.user_data.message jid (`Local txt) false hlp
      in
      match stanza.content.presence_type with
      | None ->
@@ -334,8 +316,8 @@ let presence_error t ?id ?jid_from ?jid_to ?lang error =
   restart_keepalive t ;
   ignore id ; ignore jid_to ; ignore lang ;
   let jid = match jid_from with
-    | None -> "unknown"
-    | Some x -> JID.string_of_jid x
+    | None -> `Bare ("unknown", "host")
+    | Some x -> Jid.xmpp_jid_to_jid x
   in
   let msg =
     let con = "presence error; reason: " ^ (string_of_condition error.err_condition) in
@@ -343,11 +325,11 @@ let presence_error t ?id ?jid_from ?jid_to ?lang error =
     | x when x = "" -> con
     | x -> con ^ ", message: " ^ x
   in
-  t.user_data.received (`From jid) msg ;
+  t.user_data.log (`From jid) msg ;
   return_unit
 
 
-let roster_callback find item =
+let roster_callback user item =
   try
     let subscription =
       match item.Roster.subscription with
@@ -364,19 +346,17 @@ let roster_callback find item =
     in
     let name = if item.Roster.name = "" then None else Some item.Roster.name in
     let groups = item.Roster.group in
-    let jid, _ = User.bare_jid item.Roster.jid in
-    match find jid with
-    | Some user -> Some { user with User.name = name ;
-                                    User.groups = groups ;
-                                    User.subscription = subscription ;
-                                    User.properties = properties }
-    | None ->
-      Some (User.new_user ~jid ~name ~groups ~subscription ~properties ())
+    let jid = Jid.xmpp_jid_to_jid item.Roster.jid in
+    let user = user jid in
+    Some { user with User.name = name ;
+                     User.groups = groups ;
+                     User.subscription = subscription ;
+                     User.properties = properties }
   with
   _ -> None
 
 let session_callback ?priority t =
-  let err txt = t.user_data.received (`Local "handling error") txt in
+  let err txt = t.user_data.log (`Local "handling error") txt in
 
   register_iq_request_handler t Roster.ns_roster
     (fun ev jid_from jid_to lang () ->
@@ -401,14 +381,16 @@ let session_callback ?priority t =
          | Xml.Xmlelement ((ns_roster, "query"), attrs, els) when ns_roster = Roster.ns_roster ->
            let _, items = Roster.decode attrs els in
            if List.length items = 1 then
-             let mods = List.map (roster_callback t.user_data.find) items in
-             List.iter (function
+             let mods = List.map (roster_callback t.user_data.user) items in
+             List.iter
+               (function
                  | None -> ()
-                 | Some x -> if x.User.subscription = `Remove then (
-                     t.user_data.received (`From x.User.jid) "Removed from roster" ;
-                     t.user_data.remove x.User.jid )
-                   else
-                     t.user_data.notify true x) mods ;
+                 | Some x when x.User.subscription = `Remove ->
+                    let jid = `Bare x.User.bare_jid in
+                    t.user_data.log (`From jid) "Removed from roster" ;
+                    t.user_data.remove jid
+                 | Some x -> t.user_data.update_user x true)
+               mods ;
              return (IQResult None)
            else
              fail BadRequest
@@ -447,8 +429,8 @@ let session_callback ?priority t =
 
   Roster.get t (fun ?jid_from ?jid_to ?lang ?ver items ->
       ignore jid_from ; ignore jid_to ; ignore lang ; ignore ver ;
-      let mods = List.map (roster_callback t.user_data.find) items in
-      List.iter (function None -> () | Some x -> t.user_data.notify false x) mods ;
+      let mods = List.map (roster_callback t.user_data.user) items in
+      List.iter (function None -> () | Some x -> t.user_data.update_user x false) mods ;
       return () ) >>= fun () ->
 
   try_lwt send_presence t ?priority ()
@@ -499,8 +481,8 @@ let resolve (hostname : string option) (port : int option) (jid_idn : string) =
 let connect ?out sockaddr myjid certname password priority authenticator user_data =
   debug_out := out ;
 
-  let err_log msg = user_data.received (`Local "error") msg
-  and info info data = user_data.received (`Local info) data
+  let err_log msg = user_data.log (`Local "error") msg
+  and info info data = user_data.log (`Local info) data
   in
 
   (try_lwt PlainSocket.open_connection sockaddr >>= fun s -> return (Some s)
@@ -523,6 +505,7 @@ let connect ?out sockaddr myjid certname password priority authenticator user_da
        return (module TLS_module : XMPPClient.Socket)
      in
 
+     let myjid = Jid.jid_to_xmpp_jid (`Full myjid) in
      XMPPClient.setup_session
        ~user_data
        ~myjid
