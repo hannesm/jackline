@@ -630,8 +630,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
                  match Otr.Engine.end_otr session.User.otr with
                  | _, Some body ->
                     let jid = `Full (user.User.bare_jid, session.User.resource) in
-                    send x jid None body
-                     (fun _ -> return_unit)
+                    send x jid None body (fun _ -> return_unit)
                  | _ -> return_unit
                in
                Lwt_list.iter_s send_out otr_sessions )
