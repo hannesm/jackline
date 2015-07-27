@@ -71,7 +71,6 @@ let receipt_state_to_string = function
   | `Supported -> "supported"
   | `Unsupported -> "unsupported"
 
-
 type session = {
   resource : string ;
   presence : presence ;
@@ -134,7 +133,7 @@ type property = [
 ] with sexp
 
 type direction = [
-  | `From of string (* full jid *)
+  | `From of Jid.t
   | `To of string (* id *)
   | `Local of string
 ] with sexp
@@ -149,7 +148,7 @@ type message = {
 } with sexp
 
 type user = {
-  jid               : string ; (* user@domain, unique key *)
+  bare_jid          : Jid.bare_jid ;
   name              : string option ;
   groups            : string list ;
   subscription      : subscription ;
@@ -161,9 +160,11 @@ type user = {
   active_sessions   : session list (* not persistent *)
 }
 
+let jid u = Jid.bare_jid_to_string u.bare_jid
+
 let new_user ~jid ?(name=None) ?(groups=[]) ?(subscription=`None) ?(otr_fingerprints=[]) ?(preserve_messages=false) ?(properties=[]) ?(active_sessions=[]) ?(otr_custom_config=None) () =
   let message_history = [] in
-  { jid ; name ; groups ; subscription ; properties ; otr_fingerprints ; preserve_messages ; active_sessions ; message_history ; otr_custom_config }
+  { bare_jid = jid ; name ; groups ; subscription ; properties ; otr_fingerprints ; preserve_messages ; active_sessions ; message_history ; otr_custom_config }
 
 let message direction encrypted received message =
   { direction ; encrypted ; received ;
@@ -188,8 +189,8 @@ let received_message u id =
 let encrypted = Otr.State.is_encrypted
 
 let userid u s = match s.resource with
-  | r when r = "" -> u.jid
-  | r -> u.jid ^ "/" ^ r
+  | r when r = "" -> Jid.bare_jid_to_string u.bare_jid
+  | r -> Jid.jid_to_string (`Full (u.bare_jid, r))
 
 let format_fp e =
   String.((sub e 0 8) ^ " " ^ (sub e 8 8) ^ " " ^ (sub e 16 8) ^ " " ^ (sub e 24 8) ^ " " ^ (sub e 32 8))
@@ -217,14 +218,10 @@ let verified_fp u raw =
   let fps = find_raw_fp u raw in
   fps.verified
 
-let bare_jid jid =
-  let { JID.lnode ; JID.ldomain ; JID.lresource ; _ } = jid in
-  (lnode ^ "@" ^ ldomain, lresource)
-
 module StringHash =
   struct
-    type t = string
-    let equal a b = a = b
+    type t = Jid.bare_jid
+    let equal = Jid.bare_jid_equal
     let hash = Hashtbl.hash
   end
 
@@ -234,6 +231,18 @@ type users = user Users.t
 let keys users =
   let us = Users.fold (fun k _ acc -> k :: acc) users [] in
   List.sort compare us
+
+let add_or_replace users user =
+  if Users.mem users user.bare_jid then
+    Users.replace users user.bare_jid user
+  else
+    Users.add users user.bare_jid user
+
+let add_message users jid dir enc rcvd msg =
+  let bare = Jid.t_to_bare jid in
+  let user = Users.find users bare in
+  let user = insert_message user dir enc rcvd msg in
+  Users.replace users bare user
 
 let reset_receipt_requests users =
   List.iter (fun id ->
@@ -352,7 +361,7 @@ let replace_session users user session =
       session :: others
   in
   let user = { user with active_sessions } in
-  Users.replace users user.jid user
+  Users.replace users user.bare_jid user
 
 let get_session user tst =
   if List.exists tst user.active_sessions then
@@ -422,7 +431,12 @@ let t_of_sexp t version =
              (Some name, jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config)
            | Sexp.List [ Sexp.Atom "jid" ; Sexp.Atom jabberid ] ->
              assert (jid = None);
-             (name, Some jabberid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config)
+             let bare_jid = Jid.string_to_bare_jid jabberid in
+             (name, bare_jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config)
+           | Sexp.List [ Sexp.Atom "bare_jid" ; jabberid ] ->
+             assert (jid = None);
+             let bare_jid = Jid.bare_jid_of_sexp jabberid in
+             (name, Some bare_jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config)
            | Sexp.List [ Sexp.Atom "groups" ; gps ] ->
              assert (groups = None);
              let groups = list_of_sexp string_of_sexp gps in
@@ -463,7 +477,7 @@ let record kvs =
 let sexp_of_t t =
   record [
     "name"             , sexp_of_option sexp_of_string t.name ;
-    "jid"              , sexp_of_string t.jid ;
+    "bare_jid"         , Jid.sexp_of_bare_jid t.bare_jid ;
     "groups"           , sexp_of_list sexp_of_string t.groups ;
     (* TODO: rename preserve_messages and bump version *)
     "preserve_history" , sexp_of_bool t.preserve_messages ;
@@ -473,12 +487,36 @@ let sexp_of_t t =
     "otr_custom_config", sexp_of_option Otr.State.sexp_of_config t.otr_custom_config ;
   ]
 
+
+let tr_m s =
+  let open Sexp in
+  let tr_dir = function
+    | List [ Atom "From" ; Atom jid ] ->
+       (match Jid.string_to_jid jid with
+        | Some jid -> List [ Atom "From" ; Jid.sexp_of_t jid ]
+        | None -> Printf.printf "from failed" ;
+                  List [ Atom "From" ; Jid.sexp_of_t (`Bare ("none", "none")) ])
+    | x -> x
+  in
+  match s with
+  | List s ->
+     let r = List.fold_left (fun acc s ->
+        let s = match s with
+          | List [ Atom "direction" ; value ] -> List [ Atom "direction" ; tr_dir value ]
+          | x -> x
+        in
+        s :: acc) [] s
+     in
+     List (List.rev r)
+  | x -> x
+
 let load_history file strict =
   let load_h = function
     | Sexp.List [ ver ; Sexp.List msgs ] ->
       let version = int_of_sexp ver in
       ( match version with
-        | 0 -> List.map message_of_sexp msgs
+        | 0 -> List.map message_of_sexp (List.map tr_m msgs)
+        | 1 -> List.map message_of_sexp msgs
         | _ -> Printf.printf "unknown message format" ; [] )
     | _ -> Printf.printf "parsing history failed" ; []
   in
@@ -506,16 +544,12 @@ let load_users hist_dir bytes =
              match try t_of_sexp s version with _ -> None with
                | None -> Printf.printf "parse failure %s\n%!" (Sexp.to_string_hum s)
                | Some u ->
-                 let id = u.jid in
-                 if Users.mem table id then
-                   Printf.printf "key %s already present in table, ignoring\n%!" id
-                 else
-                   (let message_history =
-                     load_history
-                       (Filename.concat hist_dir id) u.preserve_messages
-                    in
-                    let u = { u with message_history } in
-                    Users.add table id u) )
+                  let message_history =
+                    load_history
+                      (Filename.concat hist_dir (jid u)) u.preserve_messages
+                  in
+                  let u = { u with message_history } in
+                  add_or_replace table u)
            users
        | _ -> Printf.printf "parse failed while parsing db\n")
     with _ -> () ) ;
@@ -532,11 +566,11 @@ let marshal_history user =
         user.message_history
     in
     List.iter (fun x -> x.persistent <- true) new_msgs ;
-    let hist_version = sexp_of_int 0 in
+    let hist_version = sexp_of_int 1 in
     if List.length new_msgs > 0 then
       let sexps = List.map sexp_of_message new_msgs in
       let sexp = Sexp.(List [ hist_version ; List sexps ]) in
-      Some (user.jid, Sexp.to_string_mach sexp)
+      Some (jid user, Sexp.to_string_mach sexp)
     else
       None
   else
