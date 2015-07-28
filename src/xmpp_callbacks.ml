@@ -278,11 +278,11 @@ let presence_callback t stanza =
          | None -> 0
          | Some x -> x
        in
+       let old = User.presence_to_char session.User.presence in
        let session = { session with User.presence ; status ; priority } in
        t.user_data.update_session jid session ;
 
-       let old = User.presence_to_char session.User.presence
-       and n = User.presence_to_char presence
+       let n = User.presence_to_char presence
        and nl = User.presence_to_string presence
        in
        let info =
