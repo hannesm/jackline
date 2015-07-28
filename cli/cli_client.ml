@@ -41,7 +41,7 @@ let pad x s =
 
 let rec find_index id i = function
   | []                             -> 0
-  | x::_ when Jid.jid_matches id x -> i
+  | x::_ when Jid.jid_matches x id -> i
   | _::xs                          -> find_index id (succ i) xs
 
 let color_session u su = function
