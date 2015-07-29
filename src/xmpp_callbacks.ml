@@ -280,17 +280,23 @@ let presence_callback t stanza =
          | None -> 0
          | Some x -> x
        in
-       let old = User.presence_to_char session.User.presence in
-       let session = { session with User.presence ; status ; priority } in
-       t.user_data.update_session jid session ;
+       match
+         session.User.presence = presence,
+         session.User.status = status
+       with
+       | true, true -> ()
+       | _ ->
+          let old = User.presence_to_char session.User.presence in
+          let session = { session with User.presence ; status ; priority } in
+          t.user_data.update_session jid session ;
 
-       let n = User.presence_to_char presence
-       and nl = User.presence_to_string presence
-       in
-       let info =
-         "presence changed: [" ^ old ^ ">" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring
-       in
-       log (`From jid) info
+          let n = User.presence_to_char presence
+          and nl = User.presence_to_string presence
+          in
+          let info =
+            "presence changed: [" ^ old ^ ">" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring
+          in
+          log (`From jid) info
      in
      let handle_subscription txt hlp =
        t.user_data.message jid (`Local txt) false hlp
