@@ -189,9 +189,9 @@ let handle_connect ?out state config log redraw failure =
   let remove jid =
     let bare = Jid.t_to_bare jid in
     User.Users.remove state.users bare ;
-    if Jid.jid_matches bare state.active_contact then
+    if Jid.jid_matches (`Bare bare) state.active_contact then
       state.active_contact <- `Full state.myjid ;
-    if Jid.jid_matches bare state.last_active_contact then
+    if Jid.jid_matches (`Bare bare) state.last_active_contact then
       state.last_active_contact <- `Full state.myjid ;
     redraw ()
   and log dir txt = log (dir, txt)
