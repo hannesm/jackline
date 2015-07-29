@@ -191,7 +191,7 @@ let format_buddies show_offline buddies users self active notifications width =
       show
   in
 
-  List.fold_left (fun acc id ->
+  List.fold_left (fun acc (`Bare id) ->
     let u = User.Users.find users id in
     let s = User.active_session u in
     let presence session =
@@ -205,7 +205,7 @@ let format_buddies show_offline buddies users self active notifications width =
 
     if u.User.expand && show_multiple u then
       let draw st f t =
-        Printf.sprintf "%s%s%s%s %s" st f (presence s) t id
+        Printf.sprintf "%s%s%s%s %s" st f (presence s) t (User.jid u)
       in
       let first = draw_one draw u (fg s)
       and others =
@@ -220,7 +220,7 @@ let format_buddies show_offline buddies users self active notifications width =
         first :: others @ acc
     else
       let draw st f t =
-        Printf.sprintf "%s%s%s%s %s" st f (presence s) t id
+        Printf.sprintf "%s%s%s%s %s" st f (presence s) t (User.jid u)
       in
       draw_one draw u (fg s) :: acc)
     []
@@ -734,7 +734,8 @@ let rec loop term hist state network log =
              err "no active session, try to connect first") >>= fun () ->
        loop term hist state network log
     | Some _ ->
-       let active = User.Users.find state.users state.active_contact in
+       let bare = Jid.t_to_bare state.active_contact in
+       let active = User.Users.find state.users bare in
        User.Users.replace state.users state.active_contact { active with User.expand = not active.User.expand } ;
        loop term hist state network log
     | None -> loop term hist state network log
