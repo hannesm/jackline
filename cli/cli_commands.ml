@@ -149,7 +149,7 @@ let handle_help msg = function
     msg "available commands (try [/help cmd])" cmds
 
 let resolve config log =
-  let domain = JID.to_idn config.Config.jid
+  let domain = JID.to_idn (Jid.jid_to_xmpp_jid (`Full config.Config.jid))
   and hostname = config.Config.hostname
   and port = config.Config.port
   in
@@ -173,7 +173,7 @@ let handle_connect ?out state config log redraw failure =
       try_lwt
         (resolve config log >>= fun sockaddr ->
          let certname = match config.Config.certificate_hostname with
-           | None -> JID.to_idn config.Config.jid
+           | None -> JID.to_idn (Jid.jid_to_xmpp_jid (`Full config.Config.jid))
            | Some x -> x
          in
          (X509_lwt.authenticator (match config.Config.authenticator with
@@ -186,53 +186,55 @@ let handle_connect ?out state config log redraw failure =
       with exn -> failure exn >|= fun () -> None
   in
 
-  let maybe_notify jid =
-    if List.mem jid state.notifications || (state.active_contact = jid && state.scrollback = 0) then
-      ()
-    else
-      state.notifications <- jid :: state.notifications ;
-    Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Notifications)
-  in
-  let notify indicate u =
-    let jid = u.User.jid in
-    if indicate then maybe_notify jid ;
-    User.Users.replace state.users jid u ;
+  let remove jid =
+    let bare = Jid.t_to_bare jid in
+    User.Users.remove state.users bare ;
+    if Jid.jid_matches (`Bare bare) state.active_contact then
+      state.active_contact <- `Full state.myjid ;
+    if Jid.jid_matches (`Bare bare) state.last_active_contact then
+      state.last_active_contact <- `Full state.myjid ;
     redraw ()
-  and remove jid =
-    User.Users.remove state.users jid ;
-    if state.active_contact = jid then
-      state.active_contact <- state.user ;
-    if state.last_active_contact = jid then
-      state.last_active_contact <- state.user ;
+  and log dir txt = log (dir, txt)
+  and message jid dir enc txt =
+    User.add_message state.users jid dir enc true txt ;
+    notify state jid ;
     redraw ()
-  and received dir txt =
-    log (dir, txt)
-  and message user dir enc txt =
-    let user = User.insert_message user dir enc true txt in
-    let jid = user.User.jid in
-    User.Users.replace state.users jid user ;
-    maybe_notify jid ;
-    redraw ()
-  and receipt user id =
+  and receipt jid id =
+    let bare = Jid.t_to_bare jid in
+    let user = User.find_or_create state.users bare in
     let user = User.received_message user id in
-    let jid = user.User.jid in
-    User.Users.replace state.users jid user ;
+    User.Users.replace state.users bare user ;
     redraw ()
-  and find = User.find state.users
-  and find_or_create = User.find_or_create state.users
-  and find_session user resource =
-    User.find_session user resource
-  and find_or_create_session user resource =
+  and user jid =
+    let jid = Jid.t_to_bare jid in
+    User.find_or_create state.users jid
+  and session jid =
+    let bare = Jid.t_to_bare jid in
+    let user = User.find_or_create state.users bare in
     let otr_config = match user.User.otr_custom_config with
       | None -> config.Config.otr_config
       | Some x -> x
     in
+    let resource = match Jid.resource jid with
+      | Some x -> x
+      | None -> ""
+    in
     let user, session = User.find_or_create_session user resource otr_config config.Config.dsa in
-    User.Users.replace state.users user.User.jid user ;
+    User.Users.replace state.users bare user ;
     session
-  and update_session user session =
+  and update_session jid session =
+    let bare = Jid.t_to_bare jid in
+    let user = User.find_or_create state.users bare in
     User.replace_session state.users user session
-  and find_inc_fp user resource raw_fp =
+  and update_user user alert =
+    let jid = user.User.bare_jid in
+    User.Users.replace state.users jid user ;
+    if alert then notify state (`Bare jid) ;
+    redraw ()
+  and inc_fp jid raw_fp =
+    let bare = Jid.t_to_bare jid in
+    let resource = match Jid.resource jid with Some x -> x | None -> "" in
+    let user = User.find_or_create state.users bare in
     let fp = User.find_raw_fp user raw_fp in
     let resources =
       if List.mem resource fp.User.resources then
@@ -242,23 +244,21 @@ let handle_connect ?out state config log redraw failure =
     in
     let fp = { fp with User.session_count = succ fp.User.session_count ; User.resources = resources } in
     let u = User.replace_fp user fp in
-    User.Users.replace state.users u.User.jid u ;
+    User.Users.replace state.users bare u ;
     Lwt.async (fun () -> Lwt_mvar.put state.user_mvar u) ;
-    fp
+    (fp.User.verified, pred fp.User.session_count, List.exists (fun x -> x.User.verified) user.User.otr_fingerprints)
   in
   let (user_data : Xmpp_callbacks.user_data) = {
-      Xmpp_callbacks.find                   = find                   ;
-      Xmpp_callbacks.find_or_create         = find_or_create         ;
-      Xmpp_callbacks.find_inc_fp            = find_inc_fp            ;
-      Xmpp_callbacks.find_session           = find_session           ;
-      Xmpp_callbacks.find_or_create_session = find_or_create_session ;
-      Xmpp_callbacks.update_session         = update_session         ;
-      Xmpp_callbacks.received               = received               ;
-      Xmpp_callbacks.notify                 = notify                 ;
-      Xmpp_callbacks.remove                 = remove                 ;
-      Xmpp_callbacks.message                = message                ;
-      Xmpp_callbacks.receipt                = receipt                ;
-      Xmpp_callbacks.failure                = failure                ;
+      Xmpp_callbacks.log ;
+      remove ;
+      message ;
+      user ;
+      session ;
+      update_session ;
+      update_user ;
+      receipt ;
+      inc_fp ;
+      failure ;
   }
   in
   doit user_data () >>= function
@@ -322,7 +322,7 @@ let handle_fingerprint mvar users dump err fp user =
       | Some key when User.hex_fingerprint key = manual_fp ->
         let otr_fp = User.find_raw_fp user manual_fp in
         let user = User.replace_fp user { otr_fp with User.verified = true } in
-        User.Users.replace users user.User.jid user ;
+        User.Users.replace users user.User.bare_jid user ;
         dump ("fingerprint " ^ fp ^ " is now marked verified") ;
         Lwt_mvar.put mvar user
       | _ -> err "provided fingerprint does not match the one of this active session" )
@@ -331,7 +331,7 @@ let handle_fingerprint mvar users dump err fp user =
 let handle_log mvar users dump user v a =
   if user.User.preserve_messages <> v then
     (let user = { user with User.preserve_messages = v } in
-     User.Users.replace users user.User.jid user ;
+     User.Users.replace users user.User.bare_jid user ;
      dump ("logging turned " ^ a) ;
      Lwt_mvar.put mvar user)
   else
@@ -339,9 +339,8 @@ let handle_log mvar users dump user v a =
 
 let handle_authorization s failure dump user arg =
   let open Xmpp_callbacks.XMPPClient in
-  let jid = user.User.jid in
   let doit kind m =
-    (try_lwt send_presence s ~jid_to:(JID.of_string jid) ~kind ()
+    (try_lwt send_presence s ~jid_to:(Jid.jid_to_xmpp_jid (`Bare user.User.bare_jid)) ~kind ()
      with e -> failure e) >|= fun () ->
      dump m ;
      Some ()
@@ -383,14 +382,14 @@ let handle_own_otr_info dump config =
   dump ("your otr fingerprint:  " ^ (User.format_fp (User.hex_fingerprint otr_fp)))
 
 let common_info dump user cfgdir =
-  dump "jid" user.User.jid ;
+  dump "jid" (User.jid user) ;
   ( match user.User.name with
     | None -> ()
     | Some x -> dump "name" x ) ;
   ( if user.User.preserve_messages then
       let histo =
         let dir = Persistency.history in
-        Filename.(concat (concat cfgdir dir) user.User.jid)
+        Filename.(concat (concat cfgdir dir) (User.jid user))
       in
       dump "persistent history in " histo )
 
@@ -444,7 +443,8 @@ let handle_own_info dump user cfgdir config res =
 
 let handle_otr_start s users dump failure otr_cfg dsa user =
   let send_over session body =
-    send s user session None body failure
+    let jid = `Full (user.User.bare_jid, session.User.resource) in
+    send s jid None body failure
   in
   match User.active_session user with
   | Some session when User.encrypted session.User.otr ->
@@ -471,7 +471,8 @@ let handle_otr_stop s users dump err failure user =
       | None   -> return_unit
       | Some body ->
         dump "finished OTR session" ;
-        send s user session None body failure )
+        let jid = `Full (user.User.bare_jid, session.User.resource) in
+        send s jid None body failure )
   | None -> err "no active session"
 
 let handle_smp_abort users s session user dump failure =
@@ -483,7 +484,9 @@ let handle_smp_abort users s session user dump failure =
     ret ;
   match out with
   | None -> return_unit
-  | Some out -> send s user session None out failure
+  | Some out ->
+     let jid = `Full (user.User.bare_jid, session.User.resource) in
+     send s jid None out failure
 
 let handle_smp_start users s session user dump failure args =
   let secret, question = match split_ws args with
@@ -499,7 +502,9 @@ let handle_smp_start users s session user dump failure args =
   dump "initiated SMP" ;
   match out with
   | None   -> return_unit
-  | Some body -> send s user session None body failure
+  | Some body ->
+     let jid = `Full (user.User.bare_jid, session.User.resource) in
+     send s jid None body failure
 
 let handle_smp_answer users s session user dump failure secret =
   let ctx, out, ret = Otr.Engine.answer_smp session.User.otr secret in
@@ -510,14 +515,16 @@ let handle_smp_answer users s session user dump failure secret =
     ret ;
   match out with
   | None   -> return_unit
-  | Some body -> send s user session None body failure
+  | Some body ->
+     let jid = `Full (user.User.bare_jid, session.User.resource) in
+     send s jid None body failure
 
 let handle_remove s dump user failure =
   (try_lwt
-     Xmpp_callbacks.Roster.put ~remove:() s user.User.jid
+     Xmpp_callbacks.Roster.put ~remove:() s (User.jid user)
        (fun ?jid_from ?jid_to ?lang el ->
          ignore jid_from ; ignore jid_to ; ignore lang ; ignore el ;
-         dump ("Removal of " ^ user.User.jid ^ " successful") ;
+         dump ("Removal of " ^ User.jid user ^ " successful") ;
          return_unit)
    with e -> failure e)
 
@@ -574,7 +581,7 @@ let adjust_otr_policy mvar dump users default_cfg cfg contact data =
           contact.User.active_sessions
       in
       let user = { contact with User.otr_custom_config = cfg ; active_sessions } in
-      User.Users.replace users contact.User.jid user ;
+      User.Users.replace users contact.User.bare_jid user ;
       (match cfg with
        | None -> dump "reverted to default otr policy"
        | Some x -> print_otr_policy dump "" x ) ;
@@ -601,16 +608,17 @@ let exec ?out input state config log redraw =
     Lwt_mvar.put state.state_mvar Disconnected >>= fun () ->
     msg "session error" (Printexc.to_string reason)
   in
-  let contact = User.Users.find state.users state.active_contact in
+  let contact = User.Users.find state.users (Jid.t_to_bare state.active_contact) in
   let dump data =
-    let contact = User.Users.find state.users state.active_contact in
+    let contact = User.Users.find state.users (Jid.t_to_bare state.active_contact) in
     let user = User.insert_message contact (`Local "") false false data in
-    User.Users.replace state.users user.User.jid user
+    User.Users.replace state.users user.User.bare_jid user
   in
-  let self = state.user = contact.User.jid in
+  let self = Jid.jid_matches (`Bare contact.User.bare_jid) (`Full state.myjid) in
   let own_session () =
-    let user = User.Users.find state.users state.user in
-    List.find (fun s -> s.User.resource = state.resource) user.User.active_sessions
+    let user = User.Users.find state.users (fst state.myjid) in
+    let resource = snd state.myjid in
+    List.find (fun s -> s.User.resource = resource) user.User.active_sessions
   in
 
   match cmd_arg input with
@@ -618,7 +626,7 @@ let exec ?out input state config log redraw =
   | ("help" , x) -> handle_help (msg ?prefix:None) x
   | ("clear", _) ->
     let user = { contact with User.message_history = [] } in
-    User.Users.replace state.users user.User.jid user ;
+    User.Users.replace state.users user.User.bare_jid user ;
     return_unit
 
   (* connect *)
@@ -670,7 +678,7 @@ let exec ?out input state config log redraw =
 
   | ("info", _) ->
     ( if self then
-        handle_own_info dump contact state.config_directory config state.resource
+        handle_own_info dump contact state.config_directory config (own_session ()).User.resource
       else
         handle_info dump contact state.config_directory );
     return_unit

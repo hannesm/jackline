@@ -40,9 +40,9 @@ let pad x s =
   | _ (* when d < 0 *) -> String.sub s 0 x
 
 let rec find_index id i = function
-  | []               -> 0
-  | x::_ when x = id -> i
-  | _::xs            -> find_index id (succ i) xs
+  | []                             -> 0
+  | x::_ when Jid.jid_matches x id -> i
+  | _::xs                          -> find_index id (succ i) xs
 
 let color_session u su = function
   | Some x when User.(encrypted x.otr) -> green
@@ -60,10 +60,10 @@ let show_buddies users show_offline self active notifications =
       in
       let rly_show = u = self || u = active || List.mem u notifications in
       match rly_show, show_offline, presence with
-      | true,  _    , _        -> id :: acc
-      | false, true , _        -> id :: acc
+      | true,  _    , _        -> `Bare id :: acc
+      | false, true , _        -> `Bare id :: acc
       | false, false, `Offline -> acc
-      | false, false, _        -> id :: acc)
+      | false, false, _        -> `Bare id :: acc)
     (User.keys users) []
 
 let rec line_wrap ?raw ~max_length entries acc : string list =
@@ -137,7 +137,7 @@ let format_log log =
   let print_log { direction ; timestamp ; message ; _ } =
     let time = print_time ~now timestamp in
     let from = match direction with
-      | `From jid -> jid ^ ":"
+      | `From jid -> Jid.jid_to_string jid ^ ":"
       | `Local x when x = "" -> "***"
       | `Local x -> "*** " ^ x ^ " ***"
       | `To _ -> ">>>"
@@ -147,7 +147,7 @@ let format_log log =
   List.map print_log log
 
 let format_buddies buddies users self active notifications width =
-  List.map (fun id ->
+  List.map (fun (`Bare id) ->
       let u = User.Users.find users id in
       let session = User.active_session u in
       let presence = match session with
@@ -170,7 +170,7 @@ let format_buddies buddies users self active notifications width =
       let item =
         let data = Printf.sprintf "%s%s%s%s %s"
             (if notify then "*" else " ")
-            f (User.presence_to_char presence) t id
+            f (User.presence_to_char presence) t (Jid.bare_jid_to_string id)
         in
         pad width data
       in
@@ -203,7 +203,7 @@ let buddy_list users show_offline self active notifications length width =
 
   let bs = List.length buddies
   and up, down = (length / 2, (length + 1) / 2)
-  and active_idx = find_index active.User.jid 0 buddies
+  and active_idx = find_index (`Bare active.User.bare_jid) 0 buddies
   in
   match length >= bs with
   | true  -> let pad = [ S (String.make width ' ') ] in
@@ -249,7 +249,7 @@ let horizontal_line user session fg_color buddy_width scrollback show_buddy_list
         | None                               -> (red, " - no OTR")
       in
       (userid user s, " -- " ^ presence, status, otr, otrcolor)
-    | None -> (user.jid, "", "", "", default)
+    | None -> (User.jid user, "", "", "", default)
   in
   let pre =
     if show_buddy_list then
@@ -364,7 +364,7 @@ let make_prompt size time network state redraw =
     eval ([S "need more space"])
   else
     begin
-      let self = User.Users.find state.users state.user in
+      let self = User.Users.find state.users (fst state.myjid) in
       let statusses = self.User.message_history in
       let logs =
         let entries =
@@ -381,11 +381,11 @@ let make_prompt size time network state redraw =
         String.concat "\n" data
       in
 
-      let active = User.Users.find state.users state.active_contact in
+      let active = User.Users.find state.users (Jid.t_to_bare state.active_contact) in
       let active_session = User.active_session active in
       let notifications =
         List.map
-          (fun id -> User.Users.find state.users id)
+          (fun id -> User.Users.find state.users (Jid.t_to_bare id))
           state.notifications
       in
 
@@ -442,7 +442,9 @@ let make_prompt size time network state redraw =
 
       let notify = List.length notifications > 0 in
       let log = active.User.preserve_messages in
-      let mysession = List.find (fun s -> s.User.resource = state.resource) self.User.active_sessions in
+      let mysession =
+        let r = snd state.myjid in
+        List.find (fun s -> s.User.resource = r) self.User.active_sessions in
       let status = status_line time self mysession notify log redraw fg_color size.cols in
       let main = List.flatten main_window in
 
@@ -482,18 +484,13 @@ let redraw, force_redraw =
 
 type direction = Up | Down
 
-let maybe_clear_notifications state =
-  state.notifications <- List.filter ((<>) state.active_contact) state.notifications ;
-  if List.length state.notifications = 0 then
-    Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear)
-
 let activate_user state active =
   if state.active_contact <> active then
     (state.last_active_contact <- state.active_contact ;
      state.active_contact      <- active ;
      state.scrollback          <- 0 ;
      state.window_mode         <- BuddyList ;
-     maybe_clear_notifications state ;
+     notified state active ;
      force_redraw ())
 
 let navigate_message_buffer state direction =
@@ -505,15 +502,15 @@ let navigate_message_buffer state direction =
   | Down, n ->
     state.scrollback <- n - 1 ;
     if state.scrollback = 0 then
-      maybe_clear_notifications state ;
+      notified state state.active_contact ;
     force_redraw ()
   | Up, n -> state.scrollback <- n + 1; force_redraw ()
 
 let navigate_buddy_list state direction =
-  let find u = User.Users.find state.users u in
+  let find u = User.Users.find state.users (Jid.t_to_bare u) in
   let active = find state.active_contact in
   let notifications = List.map find state.notifications in
-  let self = find state.user in
+  let self = find (`Full state.myjid) in
   let userlist = show_buddies state.users state.show_offline self active notifications in
   let set_active idx =
     let user = List.nth userlist idx in
@@ -632,8 +629,8 @@ let rec loop ?out (config : Config.t) term hist state network log =
                let send_out (user, session) =
                  match Otr.Engine.end_otr session.User.otr with
                  | _, Some body ->
-                   send x user session None body
-                     (fun _ -> return_unit)
+                    let jid = `Full (user.User.bare_jid, session.User.resource) in
+                    send x jid None body (fun _ -> return_unit)
                  | _ -> return_unit
                in
                Lwt_list.iter_s send_out otr_sessions )
@@ -642,12 +639,10 @@ let rec loop ?out (config : Config.t) term hist state network log =
     | Some message when String.length message > 0 ->
        LTerm_history.add hist message ;
        let err data = log (`Local "error", data) ; return_unit in
-       let contact = User.Users.find state.users state.active_contact in
+       let contact = User.Users.find state.users (Jid.t_to_bare state.active_contact) in
        let handle_otr_out user_out =
          let add_msg direction enc data =
-           let user = User.Users.find state.users state.active_contact in
-           let user = User.insert_message user direction enc false data in
-           User.Users.replace state.users user.User.jid user
+           User.add_message state.users state.active_contact direction enc false data
          in
          match user_out with
           | `Warning msg      -> add_msg (`Local "OTR Warning") false msg ; ""
@@ -665,7 +660,8 @@ let rec loop ?out (config : Config.t) term hist state network log =
          log (`Local "session error", Printexc.to_string reason) ;
          return_unit
        in
-       (if contact.User.jid = state.user then err "try `M-x doctor` in emacs instead"
+       (if Jid.bare_jid_equal contact.User.bare_jid (fst state.myjid) then
+          err "try `M-x doctor` in emacs instead"
         else
           match User.active_session contact, !xmpp_session with
           | Some session, Some t ->
@@ -680,7 +676,9 @@ let rec loop ?out (config : Config.t) term hist state network log =
              User.replace_session state.users contact { session with User.otr = ctx } ;
              let id = handle_otr_out user_out in
              (match out with
-              | Some body -> send t contact session (Some id) body failure
+              | Some body ->
+                 let jid = `Full (contact.User.bare_jid, session.User.resource) in
+                 send t jid (Some id) body failure
               | None -> return_unit)
           | None        , Some t ->
              let cfg = match contact.User.otr_custom_config with
@@ -692,8 +690,8 @@ let rec loop ?out (config : Config.t) term hist state network log =
              let id = handle_otr_out user_out in
              (match out with
               | Some body ->
-                 let _, session = User.find_or_create_session contact "" cfg config.Config.dsa in
-                 send t contact session (Some id) body failure
+                 let jid = `Bare contact.User.bare_jid in
+                 send t jid (Some id) body failure
               | None -> return_unit)
           | _           , None ->
              err "no active session, try to connect first") >>= fun () ->
@@ -701,15 +699,14 @@ let rec loop ?out (config : Config.t) term hist state network log =
     | Some _ -> loop ?out config term hist state network log
     | None -> loop ?out config term hist state network log
 
-let init_system log jid users =
+let init_system log domain users =
   let err m =
     cleanups users ;
     log (`Local "async error", m)
   in
   Lwt.async_exception_hook := (function
       | Tls_lwt.Tls_failure `Error (`AuthenticationFailure (`InvalidServerName x)) ->
-        let wanted = jid.JID.ldomain in
-        let pre = Printf.sprintf "invalid hostname in certificate: expected %s," wanted
+        let pre = Printf.sprintf "invalid hostname in certificate: expected %s," domain
         and warn =
           Printf.sprintf "inform your server administrator about that, in the meantime add '(certificate_hostname (\"%s\")' to your config.sexp"
         in

@@ -18,18 +18,17 @@ type notify_v =
 
 type ui_state = {
   config_directory            : string                    ; (* set initially *)
-  user                        : string                    ; (* set initially *)
-  resource                    : string                    ; (* set initially *)
+  myjid                       : Jid.full_jid               ; (* set initially *)
 
   state_mvar                  : notify_v Lwt_mvar.t       ; (* set initially *)
   user_mvar                   : User.user Lwt_mvar.t      ; (* set initially *)
 
   users                       : User.users                ; (* read from disk, extended by xmpp callbacks *)
 
-  mutable active_contact      : string                    ; (* modified by scrolling *)
-  mutable last_active_contact : string                    ; (* modified by scrolling *)
+  mutable active_contact      : Jid.t                     ; (* modified by scrolling *)
+  mutable last_active_contact : Jid.t                     ; (* modified by scrolling *)
 
-  mutable notifications       : string list               ; (* list to blink *)
+  mutable notifications       : Jid.t list                ; (* list to blink *)
 
   mutable show_offline        : bool                      ; (* F5 stuff *)
   mutable window_mode         : display_mode              ; (* F12 stuff *)
@@ -51,7 +50,7 @@ module Notify = struct
     | D_N -> "disconnected_notifications"
     | C_N -> "connected_notifications"
 
-  let notify_writer user resource cb fname =
+  let notify_writer jid cb fname =
     let open Lwt.Infix in
     let mvar = Lwt_mvar.create Disconnected in
     let write_file buf =
@@ -65,7 +64,7 @@ module Notify = struct
       | None -> Lwt.return_unit
       | Some x ->
         Lwt.catch (fun () ->
-            system (x ^ " " ^ user ^ "/" ^ resource ^ " " ^ buf) >>= fun _ ->
+            system (x ^ " " ^ Jid.full_jid_to_string jid ^ " " ^ buf) >>= fun _ ->
             Lwt.return_unit)
           (fun _ -> Lwt.return_unit)
     in
@@ -93,24 +92,25 @@ module Notify = struct
     mvar
 end
 
-let empty_ui_state config_directory notify_callback user resource users =
+let empty_ui_state config_directory notify_callback myjid users =
   let state_mvar =
     let file = Filename.concat config_directory "notification.state" in
-    Notify.notify_writer user resource notify_callback file in
-  let user_mvar = Persistency.notify_user config_directory in
-  let last_status = (`Local "", "") in
+    Notify.notify_writer myjid notify_callback file
+  and user_mvar = Persistency.notify_user config_directory
+  and last_status = (`Local "", "")
+  and active = `Full myjid
+  in
   {
     config_directory                ;
-    user                            ;
-    resource                        ;
+    myjid                           ;
 
     state_mvar                      ;
     user_mvar                       ;
 
     users                           ;
 
-    active_contact      = user      ;
-    last_active_contact = user      ;
+    active_contact      = active    ;
+    last_active_contact = active    ;
 
     notifications       = []        ;
 
@@ -126,16 +126,12 @@ let empty_ui_state config_directory notify_callback user resource users =
 
 
 let add_status state dir msg =
-  let self = User.Users.find state.users state.user in
-  let user = User.insert_message self dir false true msg in
-  User.Users.replace state.users state.user user
+  User.add_message state.users (`Full state.myjid) dir false true msg
 
 let (xmpp_session : Xmpp_callbacks.user_data Xmpp_callbacks.XMPPClient.session_data option ref) = ref None
 
-let send s contact session id body fail =
-  let (>>=) = Lwt.(>>=) in
-  Xmpp_callbacks.send_msg s contact session id body fail >>= fun () ->
-  Xmpp_callbacks.request_disco s contact.User.jid session.User.resource
+let send s jid id body fail =
+  Xmpp_callbacks.send_msg s jid id body fail
 
 let random_string () =
   let open Nocrypto in
@@ -147,3 +143,19 @@ let cleanups users =
   Xmpp_callbacks.cancel_keepalive () ;
   Xmpp_callbacks.keepalive_running := false ;
   xmpp_session := None
+
+let notify state jid =
+  if List.exists (fun x -> Jid.jid_matches x jid) state.notifications ||
+       (Jid.jid_matches state.active_contact jid && state.scrollback = 0)
+  then
+    ()
+  else
+    state.notifications <- jid :: state.notifications ;
+  Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Notifications)
+
+let notified state jid =
+  state.notifications <- List.filter
+                           (fun x -> not (Jid.jid_matches jid x))
+                           state.notifications ;
+  if List.length state.notifications = 0 then
+    Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear)

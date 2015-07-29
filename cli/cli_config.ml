@@ -45,10 +45,9 @@ let configure term () =
   (if not (exactly_one '/' jid) then
      fail (Invalid_argument "invalid jabber ID (needs exactly one / character)")
    else return_unit ) >>= fun () ->
-  let jid = try Some (JID.of_string (String.lowercase jid)) with _ -> None in
-  (match jid with
-   | None -> fail (Invalid_argument "invalid jabber ID")
-   | Some x -> return x) >>= fun jid ->
+  (match Jid.string_to_jid jid with
+   | None | Some (`Bare _) -> fail (Invalid_argument "invalid jabber ID")
+   | Some (`Full f) -> return f) >>= fun jid ->
 
   (new read_inputline ~term ~prompt:"enter priority (default: 0): " ())#run >>= fun prio ->
   (if prio = "" then
@@ -103,11 +102,12 @@ let configure term () =
         let pre = " (run `openssl s_client -connect "
         and post = " -starttls xmpp | openssl x509 -sha256 -fingerprint -noout`)"
         in
+        let ((_, dom), _) = jid in
         let hostport = match hostname, port with
           | Some h, Some p -> pre ^ h ^ ":" ^ (string_of_int p) ^ post
-          | None, Some p -> pre ^ jid.JID.ldomain ^ ":" ^ (string_of_int p) ^ post
+          | None, Some p -> pre ^ dom ^ ":" ^ (string_of_int p) ^ post
           | Some h, None -> pre ^ h ^ ":5222" ^ post
-          | None, None -> pre ^ jid.JID.ldomain ^ ":5222" ^ post
+          | None, None -> pre ^ dom ^ ":5222" ^ post
         in
         (new read_inputline ~term ~prompt:("enter server certificate fingerprint" ^ hostport ^ ": ") ())#run >>= fun fp ->
         (try
