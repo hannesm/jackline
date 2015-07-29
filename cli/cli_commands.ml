@@ -189,9 +189,9 @@ let handle_connect ?out state config log redraw failure =
   let remove jid =
     let bare = Jid.t_to_bare jid in
     User.Users.remove state.users bare ;
-    if Jid.jid_matches jid state.active_contact then
+    if Jid.jid_matches bare state.active_contact then
       state.active_contact <- `Full state.myjid ;
-    if Jid.jid_matches jid state.last_active_contact then
+    if Jid.jid_matches bare state.last_active_contact then
       state.last_active_contact <- `Full state.myjid ;
     redraw ()
   and log dir txt = log (dir, txt)
@@ -217,7 +217,7 @@ let handle_connect ?out state config log redraw failure =
     in
     let resource = match Jid.resource jid with
       | Some x -> x
-      | None -> "NONE"
+      | None -> ""
     in
     let user, session = User.find_or_create_session user resource otr_config config.Config.dsa in
     User.Users.replace state.users bare user ;
@@ -233,7 +233,7 @@ let handle_connect ?out state config log redraw failure =
     redraw ()
   and inc_fp jid raw_fp =
     let bare = Jid.t_to_bare jid in
-    let resource = match Jid.resource jid with Some x -> x | None -> "NONE" in
+    let resource = match Jid.resource jid with Some x -> x | None -> "" in
     let user = User.find_or_create state.users bare in
     let fp = User.find_raw_fp user raw_fp in
     let resources =

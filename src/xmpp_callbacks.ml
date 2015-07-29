@@ -64,7 +64,7 @@ let request_disco t jid =
          match el with
          | Some (Xml.Xmlelement ((ns, "query"), _, els)) when ns = Disco.ns_disco_info ->
             (* pick el with ns_receipts *)
-            let Some receipt = ns_receipts in
+            let receipt = match ns_receipts with None -> assert false | Some x -> x in
             if List.exists (function
                              | Xml.Xmlelement ((_, "feature"), attrs, _) ->
                                 Xml.safe_get_attr_value "var" attrs = receipt
@@ -131,14 +131,16 @@ let rec restart_keepalive t =
   keepalive := Some (Lwt_engine.on_timer 45. false (fun _ -> Lwt.async doit))
 
 let send_msg t jid id body failure =
-  let session = t.user_data.session jid in
-  let x, req =
-    match id, session.User.receipt with
-    | None, _ -> ([], false)
-    | Some _, `Supported -> ([Xml.Xmlelement ((ns_receipts, "request"), [], [])], false)
-    | Some _, `Unsupported -> ([], true)
-    | Some _, `Unknown
-    | Some _, `Requested -> ([], false)
+  let x, req = match jid with
+    | `Full _ ->
+       let session = t.user_data.session jid in
+       (match id, session.User.receipt with
+        | None, _ -> ([], false)
+        | Some _, `Supported -> ([Xml.Xmlelement ((ns_receipts, "request"), [], [])], false)
+        | Some _, `Unsupported -> ([], true)
+        | Some _, `Unknown
+        | Some _, `Requested -> ([], false))
+    | `Bare _ -> ([], false)
   in
   let jid_to = Jid.jid_to_xmpp_jid jid in
   restart_keepalive t ;
