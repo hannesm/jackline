@@ -691,7 +691,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
     | Some _ -> loop ?out config term hist state network log
     | None -> loop ?out config term hist state network log
 
-let init_system log domain users mvar =
+let init_system log domain mvar =
   let err m =
     Lwt.async (fun () -> disconnect_cleanups mvar);
     log (`Local "async error", m) ;
