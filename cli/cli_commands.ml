@@ -264,7 +264,9 @@ let handle_connect ?out state config log redraw failure =
   let rec handle s =
     reconnect_event := None ;
     match s with
-    | None   -> return_unit
+    | None   ->
+       reconnect_me () ;
+       return_unit
     | Some s ->
        xmpp_session := Some s ;
        Lwt.async (fun () -> Xmpp_callbacks.parse_loop s) ;
