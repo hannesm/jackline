@@ -658,6 +658,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
        let failure reason =
          xmpp_session := None ;
          log (`Local "session error", Printexc.to_string reason) ;
+         reconnect_me () ;
          return_unit
        in
        (if Jid.bare_jid_equal contact.User.bare_jid (fst state.myjid) then
@@ -703,9 +704,7 @@ let init_system log domain users =
   let err m =
     cleanups users ;
     log (`Local "async error", m) ;
-     match !reconnect with
-     | Some f -> ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async f))
-     | None -> () ;
+    reconnect_me ()
   in
   Lwt.async_exception_hook := (function
       | Tls_lwt.Tls_failure `Error (`AuthenticationFailure (`InvalidServerName x)) ->

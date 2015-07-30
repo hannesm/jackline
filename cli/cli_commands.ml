@@ -261,23 +261,27 @@ let handle_connect ?out state config log redraw failure =
       failure ;
   }
   in
-  let rec handle = function
-  | None   -> return_unit
-  | Some s ->
-    xmpp_session := Some s ;
-    Lwt.async (fun () -> Xmpp_callbacks.parse_loop s) ;
-    Lwt_mvar.put state.state_mvar Connected >|= fun () ->
-    let cont () =
-      match !xmpp_session with
-      | None ->
-         log (`Local "") "reconnecting..." ;
-         doit user_data () >>= fun x ->
-         handle x
-      | Some _ -> Lwt.return_unit
-    in
-    reconnect := Some cont ;
-    Xmpp_callbacks.restart_keepalive s
+  let rec handle s =
+    match s with
+    | None   -> return_unit
+    | Some s ->
+       xmpp_session := Some s ;
+       reconnect_event := None ;
+       Lwt.async (fun () -> Xmpp_callbacks.parse_loop s) ;
+       Lwt_mvar.put state.state_mvar Connected >|= fun () ->
+       let cont () =
+         match !xmpp_session with
+         | None ->
+            reconnect_event := None ;
+            log (`Local "") "reconnecting..." ;
+            doit user_data () >>= fun x ->
+            handle x
+         | Some _ -> Lwt.return_unit
+       in
+       reconnect := Some cont ;
+       Xmpp_callbacks.restart_keepalive s
   in
+  reconnect_event := None ;
   doit user_data () >>= fun x ->
   handle x
 
@@ -619,7 +623,8 @@ let exec ?out input state config log redraw =
   let failure reason =
     xmpp_session := None ;
     Lwt_mvar.put state.state_mvar Disconnected >>= fun () ->
-    msg "session error" (Printexc.to_string reason)
+    msg "session error" (Printexc.to_string reason) >|= fun () ->
+    reconnect_me ()
   in
   let contact = User.Users.find state.users (Jid.t_to_bare state.active_contact) in
   let dump data =

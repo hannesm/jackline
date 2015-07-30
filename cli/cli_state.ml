@@ -161,3 +161,9 @@ let notified state jid =
     Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear)
 
 let reconnect : (unit -> unit Lwt.t) option ref = ref None
+let reconnect_event : Lwt_engine.event option ref = ref None
+
+let reconnect_me () =
+  match !reconnect, !reconnect_event with
+  | Some f, None -> reconnect_event := Some (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async f))
+  | _ -> ()
