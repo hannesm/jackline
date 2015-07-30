@@ -76,7 +76,7 @@ let start_client cfgdir debug () =
    else
      return None) >>= fun out ->
 
-  Cli_client.init_system (log ?step:None) (snd bare) users ;
+  Cli_client.init_system (log ?step:None) (snd bare) ;
 
   ignore (LTerm.save_state term);  (* save the terminal state *)
 

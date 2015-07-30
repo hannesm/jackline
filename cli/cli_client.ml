@@ -328,16 +328,9 @@ let make_prompt size time network state redraw =
      let err_prefix = try String.sub err 0 11 with Invalid_argument _ -> "" in
      ( match err_prefix, !xmpp_session with
        | (x, None) when x = "async error" || x = "session err" ->
-         Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Disconnected) ;
-         let users = User.Users.fold (fun id u acc ->
-             let act = List.map
-                 (fun s -> { s with User.presence = `Offline })
-                 u.User.active_sessions
-             in
-             (id, { u with User.active_sessions = act }) :: acc)
-             state.users []
-         in
-         List.iter (fun (id, u) -> User.Users.replace state.users id u) users
+          User.reset_status state.users ;
+          User.reset_receipt_requests state.users ;
+          Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Disconnected)
        | _ -> () )
    | _ -> () );
 
@@ -656,9 +649,9 @@ let rec loop ?out (config : Config.t) term hist state network log =
             id
        in
        let failure reason =
-         xmpp_session := None ;
+         disconnect () >|= fun () ->
          log (`Local "session error", Printexc.to_string reason) ;
-         return_unit
+         reconnect_me () ;
        in
        (if Jid.bare_jid_equal contact.User.bare_jid (fst state.myjid) then
           err "try `M-x doctor` in emacs instead"
@@ -699,10 +692,11 @@ let rec loop ?out (config : Config.t) term hist state network log =
     | Some _ -> loop ?out config term hist state network log
     | None -> loop ?out config term hist state network log
 
-let init_system log domain users =
+let init_system log domain =
   let err m =
-    cleanups users ;
-    log (`Local "async error", m)
+    Lwt.async (fun () -> disconnect ());
+    log (`Local "async error", m) ;
+    reconnect_me ()
   in
   Lwt.async_exception_hook := (function
       | Tls_lwt.Tls_failure `Error (`AuthenticationFailure (`InvalidServerName x)) ->

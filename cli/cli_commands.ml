@@ -261,19 +261,36 @@ let handle_connect ?out state config log redraw failure =
       failure ;
   }
   in
-  doit user_data () >>= function
-  | None   -> return_unit
-  | Some s ->
-    xmpp_session := Some s ;
-    Lwt.async (fun () -> Xmpp_callbacks.parse_loop s) ;
-    Lwt_mvar.put state.state_mvar Connected >|= fun () ->
-    Xmpp_callbacks.restart_keepalive s
+  let rec handle s =
+    reconnect_event := None ;
+    match s with
+    | None   ->
+       reconnect_me () ;
+       return_unit
+    | Some s ->
+       xmpp_session := Some s ;
+       Lwt.async (fun () -> Xmpp_callbacks.parse_loop s) ;
+       Lwt_mvar.put state.state_mvar Connected >|= fun () ->
+       let cont () =
+         reconnect_event := None ;
+         match !xmpp_session with
+         | None ->
+            log (`Local "") "reconnecting..." ;
+            doit user_data () >>= fun x ->
+            handle x
+         | Some _ -> Lwt.return_unit
+       in
+       reconnect := Some cont ;
+       Xmpp_callbacks.restart_keepalive s
+  in
+  reconnect_event := None ;
+  doit user_data () >>= fun x ->
+  handle x
 
-let handle_disconnect s users msg =
-  Xmpp_callbacks.close s >>= fun () ->
-  msg "session error" "disconnected" ;
-  cleanups users ;
-  return_unit
+let handle_disconnect msg =
+  reconnect := None ;
+  disconnect () >>= fun () ->
+  msg "session error" "disconnected"
 
 let send_status s presence status priority failure =
   let open Xmpp_callbacks.XMPPClient in
@@ -604,9 +621,9 @@ let exec ?out input state config log redraw =
   let msg = tell_user log in
   let err = msg "error" in
   let failure reason =
-    xmpp_session := None ;
-    Lwt_mvar.put state.state_mvar Disconnected >>= fun () ->
-    msg "session error" (Printexc.to_string reason)
+    disconnect () >>= fun () ->
+    msg "session error" (Printexc.to_string reason) >|= fun () ->
+    reconnect_me ()
   in
   let contact = User.Users.find state.users (Jid.t_to_bare state.active_contact) in
   let dump data =
@@ -638,9 +655,7 @@ let exec ?out input state config log redraw =
   (* disconnect *)
   | ("disconnect", _) ->
     ( match !xmpp_session with
-      | Some x ->
-        handle_disconnect x state.users (msg ?prefix:None) >>= fun () ->
-        Lwt_mvar.put state.state_mvar Disconnected
+      | Some _ -> handle_disconnect (msg ?prefix:None)
       | None   -> err "not connected" )
 
   (* own things *)

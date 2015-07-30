@@ -138,11 +138,12 @@ let random_string () =
   let rnd = Rng.generate 12 in
   Cstruct.to_string (Base64.encode rnd)
 
-let cleanups users =
-  User.reset_receipt_requests users ;
+let disconnect () =
   Xmpp_callbacks.cancel_keepalive () ;
   Xmpp_callbacks.keepalive_running := false ;
-  xmpp_session := None
+  match !xmpp_session with
+  | Some s -> xmpp_session := None ; Xmpp_callbacks.close s
+  | None -> Lwt.return_unit
 
 let notify state jid =
   if List.exists (fun x -> Jid.jid_matches x jid) state.notifications ||
@@ -159,3 +160,11 @@ let notified state jid =
                            state.notifications ;
   if List.length state.notifications = 0 then
     Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear)
+
+let reconnect : (unit -> unit Lwt.t) option ref = ref None
+let reconnect_event : Lwt_engine.event option ref = ref None
+
+let reconnect_me () =
+  match !reconnect, !reconnect_event with
+  | Some f, None -> reconnect_event := Some (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async f))
+  | _ -> ()
