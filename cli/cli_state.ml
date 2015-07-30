@@ -138,14 +138,12 @@ let random_string () =
   let rnd = Rng.generate 12 in
   Cstruct.to_string (Base64.encode rnd)
 
-let disconnect_cleanups mvar =
+let disconnect () =
   Xmpp_callbacks.cancel_keepalive () ;
   Xmpp_callbacks.keepalive_running := false ;
-  let (>>=) = Lwt.(>>=) in
-  (match !xmpp_session with
-   | Some s -> xmpp_session := None ; Xmpp_callbacks.close s
-   | None -> Lwt.return_unit) >>= fun () ->
-  Lwt_mvar.put mvar Disconnected
+  match !xmpp_session with
+  | Some s -> xmpp_session := None ; Xmpp_callbacks.close s
+  | None -> Lwt.return_unit
 
 let notify state jid =
   if List.exists (fun x -> Jid.jid_matches x jid) state.notifications ||

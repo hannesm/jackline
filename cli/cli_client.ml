@@ -329,7 +329,8 @@ let make_prompt size time network state redraw =
      ( match err_prefix, !xmpp_session with
        | (x, None) when x = "async error" || x = "session err" ->
           User.reset_status state.users ;
-          User.reset_receipt_requests state.users
+          User.reset_receipt_requests state.users ;
+          Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Disconnected)
        | _ -> () )
    | _ -> () );
 
@@ -648,7 +649,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
             id
        in
        let failure reason =
-         disconnect_cleanups state.state_mvar >|= fun () ->
+         disconnect () >|= fun () ->
          log (`Local "session error", Printexc.to_string reason) ;
          reconnect_me () ;
        in
@@ -691,9 +692,9 @@ let rec loop ?out (config : Config.t) term hist state network log =
     | Some _ -> loop ?out config term hist state network log
     | None -> loop ?out config term hist state network log
 
-let init_system log domain mvar =
+let init_system log domain =
   let err m =
-    Lwt.async (fun () -> disconnect_cleanups mvar);
+    Lwt.async (fun () -> disconnect ());
     log (`Local "async error", m) ;
     reconnect_me ()
   in
