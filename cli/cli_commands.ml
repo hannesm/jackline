@@ -261,17 +261,30 @@ let handle_connect ?out state config log redraw failure =
       failure ;
   }
   in
-  doit user_data () >>= function
+  let rec handle = function
   | None   -> return_unit
   | Some s ->
     xmpp_session := Some s ;
     Lwt.async (fun () -> Xmpp_callbacks.parse_loop s) ;
     Lwt_mvar.put state.state_mvar Connected >|= fun () ->
+    let cont () =
+      match !xmpp_session with
+      | None ->
+         log (`Local "") "reconnecting..." ;
+         doit user_data () >>= fun x ->
+         handle x
+      | Some _ -> Lwt.return_unit
+    in
+    reconnect := Some cont ;
     Xmpp_callbacks.restart_keepalive s
+  in
+  doit user_data () >>= fun x ->
+  handle x
 
 let handle_disconnect s users msg =
   Xmpp_callbacks.close s >>= fun () ->
   msg "session error" "disconnected" ;
+  reconnect := None ;
   cleanups users ;
   return_unit
 

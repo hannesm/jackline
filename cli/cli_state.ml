@@ -159,3 +159,5 @@ let notified state jid =
                            state.notifications ;
   if List.length state.notifications = 0 then
     Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear)
+
+let reconnect : (unit -> unit Lwt.t) option ref = ref None

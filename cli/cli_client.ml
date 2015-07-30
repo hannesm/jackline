@@ -702,7 +702,10 @@ let rec loop ?out (config : Config.t) term hist state network log =
 let init_system log domain users =
   let err m =
     cleanups users ;
-    log (`Local "async error", m)
+    log (`Local "async error", m) ;
+     match !reconnect with
+     | Some f -> ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async f))
+     | None -> () ;
   in
   Lwt.async_exception_hook := (function
       | Tls_lwt.Tls_failure `Error (`AuthenticationFailure (`InvalidServerName x)) ->
