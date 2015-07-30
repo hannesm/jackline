@@ -656,7 +656,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
             id
        in
        let failure reason =
-         xmpp_session := None ;
+         cleanups state.users ;
          log (`Local "session error", Printexc.to_string reason) ;
          reconnect_me () ;
          return_unit

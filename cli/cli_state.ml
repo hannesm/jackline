@@ -142,6 +142,9 @@ let cleanups users =
   User.reset_receipt_requests users ;
   Xmpp_callbacks.cancel_keepalive () ;
   Xmpp_callbacks.keepalive_running := false ;
+  (match !xmpp_session with
+   | Some s -> Lwt.async (fun () -> Xmpp_callbacks.close s)
+   | None -> ()) ;
   xmpp_session := None
 
 let notify state jid =

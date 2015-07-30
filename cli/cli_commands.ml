@@ -621,7 +621,7 @@ let exec ?out input state config log redraw =
   let msg = tell_user log in
   let err = msg "error" in
   let failure reason =
-    xmpp_session := None ;
+    cleanups state.users ;
     Lwt_mvar.put state.state_mvar Disconnected >>= fun () ->
     msg "session error" (Printexc.to_string reason) >|= fun () ->
     reconnect_me ()
