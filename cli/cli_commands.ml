@@ -285,12 +285,10 @@ let handle_connect ?out state config log redraw failure =
   doit user_data () >>= fun x ->
   handle x
 
-let handle_disconnect s users msg =
-  Xmpp_callbacks.close s >>= fun () ->
-  msg "session error" "disconnected" ;
+let handle_disconnect mvar msg =
   reconnect := None ;
-  cleanups users ;
-  return_unit
+  disconnect_cleanups mvar >>= fun () ->
+  msg "session error" "disconnected"
 
 let send_status s presence status priority failure =
   let open Xmpp_callbacks.XMPPClient in
@@ -621,8 +619,7 @@ let exec ?out input state config log redraw =
   let msg = tell_user log in
   let err = msg "error" in
   let failure reason =
-    cleanups state.users ;
-    Lwt_mvar.put state.state_mvar Disconnected >>= fun () ->
+    disconnect_cleanups state.state_mvar >>= fun () ->
     msg "session error" (Printexc.to_string reason) >|= fun () ->
     reconnect_me ()
   in
@@ -656,9 +653,7 @@ let exec ?out input state config log redraw =
   (* disconnect *)
   | ("disconnect", _) ->
     ( match !xmpp_session with
-      | Some x ->
-        handle_disconnect x state.users (msg ?prefix:None) >>= fun () ->
-        Lwt_mvar.put state.state_mvar Disconnected
+      | Some _ -> handle_disconnect state.state_mvar (msg ?prefix:None)
       | None   -> err "not connected" )
 
   (* own things *)
