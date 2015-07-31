@@ -5,7 +5,7 @@ Synopsis:    XMPP Client
 Authors:     Hannes Mehnert <hannes@mehnert.org>
 Maintainers: Hannes Mehnert <hannes@mehnert.org>
 Homepage:    https://github.com/hannesm/jackline
-License:     FreeBSD
+License:     PROP
 Plugins:     META (0.4), DevFiles (0.4)
 BuildTools:  ocamlbuild
 Description:
