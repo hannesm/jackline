@@ -9,6 +9,8 @@ open React
 
 open Cli_state
 
+let dbg = Xmpp_connection.dbg
+
 let rec take x l acc =
   match x, l with
   | 0, _       -> List.rev acc
@@ -41,30 +43,61 @@ let pad x s =
 
 let rec find_index id i = function
   | []                                  -> 0
-  | x::_ when User.Jid.jid_matches x id -> i
+  | x::_ when User.Jid.jid_matches id x -> i
   | _::xs                               -> find_index id (succ i) xs
 
-let color_session u su = function
+let color_session self = function
   | Some x when User.(encrypted x.otr) -> green
-  | Some _ when u = su -> default
+  | Some _ when self -> default
   | Some _ -> red
   | None -> default
 
+let show_buddy_list users show_offline self active notifications =
+  let really_show jid =
+    let jid_m = User.Jid.jid_matches jid in
+    show_offline || jid_m (`Bare (fst self)) || List.exists jid_m notifications || jid_m active
+  in
+  let show id user =
+    match
+      List.fold_right (fun s acc ->
+        if s.User.presence <> `Offline || really_show (`Full (id, s.User.resource)) then
+          s :: acc
+        else
+          acc)
+        user.User.active_sessions []
+    with
+    | [] when really_show (`Bare id) -> [(user, [])]
+    | [] -> []
+    | xs -> let sorted = List.sort User.compare_session xs in
+            [(user, sorted)]
+  in
+  let buddies = List.sort
+    (fun (x, _) (y, _) -> User.Jid.compare_bare_jid x.User.bare_jid y.User.bare_jid)
+    (User.Users.fold (fun id u acc -> show id u @ acc) users [])
+  in
+  dbg ((string_of_int (List.length buddies)) ^ " buddies") ;
+  buddies
+
+let flatten_buddies us =
+  let fl = List.fold_right (fun (user, xs) acc ->
+    let bare = user.User.bare_jid in
+    match xs with
+    | [] -> (match User.active_session user with
+             | None -> `Bare bare
+             | Some s -> `Full (bare, s.User.resource)) :: acc
+    | [s] -> `Full (bare, s.User.resource) :: acc
+    | xs when user.User.expand ->
+       `Bare bare :: (List.map (fun s -> `Full (bare, s.User.resource)) xs) @ acc
+    | _ -> (match User.active_session user with
+            | None -> `Bare bare
+            | Some s -> `Full (bare, s.User.resource)) :: acc)
+    us []
+  in
+  dbg ((string_of_int (List.length fl)) ^ " flattened buddies") ;
+  fl
+
 let show_buddies users show_offline self active notifications =
-  List.fold_right (fun id acc ->
-      let u = User.Users.find users id in
-      let session = User.active_session u in
-      let presence = match session with
-        | None -> `Offline
-        | Some s -> s.User.presence
-      in
-      let rly_show = u = self || u = active || List.mem u notifications in
-      match rly_show, show_offline, presence with
-      | true,  _    , _        -> `Bare id :: acc
-      | false, true , _        -> `Bare id :: acc
-      | false, false, `Offline -> acc
-      | false, false, _        -> `Bare id :: acc)
-    (User.keys users) []
+  flatten_buddies (show_buddy_list users show_offline self active notifications)
 
 let rec line_wrap ?raw ~max_length entries acc : string list =
   let pre = match raw with
@@ -146,40 +179,42 @@ let format_log log =
   in
   List.map print_log log
 
-let format_buddies show_offline buddies users self active notifications width =
-  let notification = "*"
-  and multi = "+"
-  and multi_notify = Zed_utf8.singleton (UChar.of_int 0x2600) (* black sun with rays (combined * and +) *)
-  and show_multiple user =
-    let open User in
-    let big l = List.length l > 1
-    and not_off s = s.presence <> `Offline
+let format_buddies buddies self active notifications width =
+  let draw expanded print user session =
+    let jid = match session with
+      | None -> `Bare user.User.bare_jid
+      | Some s -> `Full (user.User.bare_jid, s.User.resource)
     in
-    show_offline && big user.active_sessions ||
-      big (List.filter not_off user.active_sessions)
-  in
-
-  let draw_one draw user fg =
-    let notify = List.mem user notifications in
+    let jid_m o = User.Jid.jid_matches o jid in
+    let notify = List.exists jid_m notifications
+    and self = jid_m (`Bare (fst self))
+    in
     let item =
-      let st = match notify, not user.User.expand && show_multiple user with
-        | true , false -> notification
-        | true , true  -> multi_notify
-        | false, true  -> multi
-        | false, false -> " "
-      and f, t =
-        if user = self then
-          ("{", "}")
-        else
-          User.subscription_to_chars user.User.subscription
+      let f, t = if self then
+                   ("{", "}")
+                 else
+                   User.subscription_to_chars user.User.subscription
+      and st = match notify, expanded with
+        | true , true  -> "*"
+        | false, false -> "+"
+        | true , false -> Zed_utf8.singleton (UChar.of_int 0x2600)
+        | false, true  -> " "
+      and presence =
+        let p = match session with
+          | None -> `Offline
+          | Some s -> s.User.presence
+        in
+        User.presence_to_char p
+      and bare = User.Jid.t_to_bare jid
       in
-      let data = draw st f t in
+      let data = print st f presence t (User.Jid.bare_jid_to_string bare) (User.Jid.resource jid) in
       pad width data
     and highlight, e_highlight =
-      if user = active then
+      if jid = active || (not user.User.expand && jid_m active) then
         ([ B_reverse true ], [ E_reverse ])
       else
         ([], [])
+    and fg = color_session self session
     in
     let show = highlight @ [B_fg fg ; S item ; E_fg ] @ e_highlight in
     if notify then
@@ -187,41 +222,22 @@ let format_buddies show_offline buddies users self active notifications width =
     else
       show
   in
+  let draw_single st f p t jid r = Printf.sprintf "%s%s%s%s %s%s" st f p t jid (match r with None -> "" | Some r -> "/" ^ r)
+  and draw_user st f _ t jid _ = Printf.sprintf "%s%s %s %s" st f t jid
+  and draw_session st _ p _ _ r = Printf.sprintf " %s%s   %s" st p (match r with None -> "NONE" | Some r -> r)
+  in
 
-  List.fold_left (fun acc (`Bare id) ->
-    let u = User.Users.find users id in
-    let s = User.active_session u in
-    let presence session =
-      let p = match session with
-        | None -> `Offline
-        | Some s -> s.User.presence
-      in
-      User.presence_to_char p
-    and fg session = color_session u self session
-    in
-
-    if u.User.expand && show_multiple u then
-      let draw st f t =
-        Printf.sprintf "%s%s%s%s %s" st f (presence s) t (User.jid u)
-      in
-      let first = draw_one draw u (fg s)
-      and others =
-        List.map (fun s ->
-          let s_opt = Some s in
-          let draw st _ _ =
-            Printf.sprintf " %s%s   %s" st (presence s_opt) s.User.resource
-          in
-          draw_one draw u (fg s_opt))
-          (List.sort User.compare_session u.User.active_sessions)
-        in
-        first :: others @ acc
-    else
-      let draw st f t =
-        Printf.sprintf "%s%s%s%s %s" st f (presence s) t (User.jid u)
-      in
-      draw_one draw u (fg s) :: acc)
-    []
-    (List.rev buddies)
+  List.fold_right (fun (user, sessions) acc ->
+    match sessions with
+    | [] -> draw true draw_single user (User.active_session user) :: acc
+    | [s] -> draw true draw_single user (Some s) :: acc
+    | xs when user.User.expand ->
+       draw true draw_user user None ::
+         List.map (draw true draw_session user)
+           (List.map (fun s -> Some s) xs) @
+         acc
+    | xs -> draw (List.length xs <= 1) draw_single user (User.active_session user) :: acc)
+    buddies []
 
 let format_messages msgs =
   let open User in
@@ -240,12 +256,12 @@ let format_messages msgs =
   List.map printmsg msgs
 
 let buddy_list users show_offline self active notifications length width =
-  let buddies = show_buddies users show_offline self active notifications in
-  let formatted_buddies = format_buddies show_offline buddies users self active notifications width in
+  let buddies = show_buddy_list users show_offline self active notifications in
+  let formatted_buddies = format_buddies buddies self active notifications width in
 
   let bs = List.length buddies
   and up, down = (length / 2, (length + 1) / 2)
-  and active_idx = find_index (`Bare active.User.bare_jid) 0 buddies
+  and active_idx = find_index active 0 (flatten_buddies buddies)
   in
   match length >= bs with
   | true  -> let pad = [ S (String.make width ' ') ] in
@@ -424,7 +440,7 @@ let make_prompt size time network state redraw =
           state.notifications
       in
 
-      let fg_color = color_session active self active_session in
+      let fg_color = color_session (self = active) active_session in
 
       let main_window =
         let data =
@@ -444,7 +460,7 @@ let make_prompt size time network state redraw =
           let chat = line_wrap ~max_length:chat_width data [] in
           let chat = scroll chat in
 
-          let buddies = buddy_list state.users state.show_offline self active notifications main_size buddy_width in
+          let buddies = buddy_list state.users state.show_offline state.myjid state.active_contact state.notifications main_size buddy_width in
           let comb = List.combine buddies chat in
           let pipe = S (Zed_utf8.singleton (UChar.of_int 0x2502)) in
           List.map (fun (buddy, chat) ->
@@ -542,13 +558,18 @@ let navigate_message_buffer state direction =
   | Up, n -> state.scrollback <- n + 1; force_redraw ()
 
 let navigate_buddy_list state direction =
+<<<<<<< HEAD
   let find u = User.Users.find state.users (User.Jid.t_to_bare u) in
   let active = find state.active_contact in
   let notifications = List.map find state.notifications in
   let self = find (`Full state.config.Config.jid) in
   let userlist = show_buddies state.users state.show_offline self active notifications in
+=======
+  let userlist = show_buddies state.users state.show_offline state.myjid state.active_contact state.notifications in
+>>>>>>> more work on user interface, should now be less surprising:
   let set_active idx =
     let user = List.nth userlist idx in
+    dbg ("activating [" ^ (string_of_int idx) ^ "]" ^ (User.Jid.jid_to_string user)) ;
     activate_user state user
   and active_idx = find_index state.active_contact 0 userlist
   in
@@ -733,7 +754,14 @@ let rec loop term hist state network log =
     | Some _ ->
        let bare = User.Jid.t_to_bare state.active_contact in
        let active = User.Users.find state.users bare in
-       User.Users.replace state.users state.active_contact { active with User.expand = not active.User.expand } ;
+       User.Users.replace state.users bare { active with User.expand = not active.User.expand } ;
+       let userlist = show_buddies state.users state.show_offline state.myjid state.active_contact state.notifications in
+       let state =
+         if find_index state.active_contact 0 userlist = 0 then
+           { state with active_contact = `Bare bare }
+         else
+           state
+       in
        loop term hist state network log
     | None -> loop term hist state network log
 

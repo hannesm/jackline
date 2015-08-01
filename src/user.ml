@@ -51,6 +51,11 @@ module Jid = struct
 
   let bare_jid_equal (u, d) (u', d') = u = u' && d = d'
 
+  let compare_bare_jid (u, d) (u', d') =
+    match compare u u' with
+    | 0 -> compare d d'
+    | x -> x
+
   (*
    xmpp resources should be unique for each client, thus multiple
    sessions between two contacts can be established. great idea!
@@ -487,12 +492,12 @@ let active_session user =
   if List.length user.active_sessions = 0 then
     None
   else
-    let s = List.filter (fun x -> x.presence <> `Offline) user.active_sessions in
+    let sorted = List.sort compare_session user.active_sessions in
+    let s = List.filter (fun x -> x.presence <> `Offline) sorted in
     if List.length s = 0 then
-      Some (List.hd user.active_sessions)
+      Some (List.hd sorted)
     else
-      let ss = List.sort compare_session s in
-      Some (List.hd ss)
+      Some (List.hd s)
 
 let db_version = 1
 
