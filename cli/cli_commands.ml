@@ -149,7 +149,7 @@ let handle_help msg = function
     msg "available commands (try [/help cmd])" cmds
 
 let resolve config log =
-  let domain = JID.to_idn (Jid.jid_to_xmpp_jid (`Full config.Config.jid))
+  let domain = JID.to_idn (User.Jid.jid_to_xmpp_jid (`Full config.Config.jid))
   and hostname = config.Config.hostname
   and port = config.Config.port
   in
@@ -173,7 +173,7 @@ let handle_connect ?out state config log redraw failure =
       try_lwt
         (resolve config log >>= fun sockaddr ->
          let certname = match config.Config.certificate_hostname with
-           | None -> JID.to_idn (Jid.jid_to_xmpp_jid (`Full config.Config.jid))
+           | None -> JID.to_idn (User.Jid.jid_to_xmpp_jid (`Full config.Config.jid))
            | Some x -> x
          in
          (X509_lwt.authenticator (match config.Config.authenticator with
@@ -187,11 +187,11 @@ let handle_connect ?out state config log redraw failure =
   in
 
   let remove jid =
-    let bare = Jid.t_to_bare jid in
+    let bare = User.Jid.t_to_bare jid in
     User.Users.remove state.users bare ;
-    if Jid.jid_matches (`Bare bare) state.active_contact then
+    if User.Jid.jid_matches (`Bare bare) state.active_contact then
       state.active_contact <- `Full state.myjid ;
-    if Jid.jid_matches (`Bare bare) state.last_active_contact then
+    if User.Jid.jid_matches (`Bare bare) state.last_active_contact then
       state.last_active_contact <- `Full state.myjid ;
     redraw ()
   and log dir txt = log (dir, txt)
@@ -200,22 +200,22 @@ let handle_connect ?out state config log redraw failure =
     notify state jid ;
     redraw ()
   and receipt jid id =
-    let bare = Jid.t_to_bare jid in
+    let bare = User.Jid.t_to_bare jid in
     let user = User.find_or_create state.users bare in
     let user = User.received_message user id in
     User.Users.replace state.users bare user ;
     redraw ()
   and user jid =
-    let jid = Jid.t_to_bare jid in
+    let jid = User.Jid.t_to_bare jid in
     User.find_or_create state.users jid
   and session jid =
-    let bare = Jid.t_to_bare jid in
+    let bare = User.Jid.t_to_bare jid in
     let user = User.find_or_create state.users bare in
     let otr_config = match user.User.otr_custom_config with
       | None -> config.Config.otr_config
       | Some x -> x
     in
-    let resource = match Jid.resource jid with
+    let resource = match User.Jid.resource jid with
       | Some x -> x
       | None -> ""
     in
@@ -223,7 +223,7 @@ let handle_connect ?out state config log redraw failure =
     User.Users.replace state.users bare user ;
     session
   and update_session jid session =
-    let bare = Jid.t_to_bare jid in
+    let bare = User.Jid.t_to_bare jid in
     let user = User.find_or_create state.users bare in
     User.replace_session state.users user session
   and update_user user alert =
@@ -232,8 +232,8 @@ let handle_connect ?out state config log redraw failure =
     if alert then notify state (`Bare jid) ;
     redraw ()
   and inc_fp jid raw_fp =
-    let bare = Jid.t_to_bare jid in
-    let resource = match Jid.resource jid with Some x -> x | None -> "" in
+    let bare = User.Jid.t_to_bare jid in
+    let resource = match User.Jid.resource jid with Some x -> x | None -> "" in
     let user = User.find_or_create state.users bare in
     let fp = User.find_raw_fp user raw_fp in
     let resources =
@@ -357,7 +357,7 @@ let handle_log mvar users dump user v a =
 let handle_authorization s failure dump user arg =
   let open Xmpp_callbacks.XMPPClient in
   let doit kind m =
-    (try_lwt send_presence s ~jid_to:(Jid.jid_to_xmpp_jid (`Bare user.User.bare_jid)) ~kind ()
+    (try_lwt send_presence s ~jid_to:(User.Jid.jid_to_xmpp_jid (`Bare user.User.bare_jid)) ~kind ()
      with e -> failure e) >|= fun () ->
      dump m ;
      Some ()
@@ -625,13 +625,13 @@ let exec ?out input state config log redraw =
     msg "session error" (Printexc.to_string reason) >|= fun () ->
     reconnect_me ()
   in
-  let contact = User.Users.find state.users (Jid.t_to_bare state.active_contact) in
+  let contact = User.Users.find state.users (User.Jid.t_to_bare state.active_contact) in
   let dump data =
-    let contact = User.Users.find state.users (Jid.t_to_bare state.active_contact) in
+    let contact = User.Users.find state.users (User.Jid.t_to_bare state.active_contact) in
     let user = User.insert_message contact (`Local "") false false data in
     User.Users.replace state.users user.User.bare_jid user
   in
-  let self = Jid.jid_matches (`Bare contact.User.bare_jid) (`Full state.myjid) in
+  let self = User.Jid.jid_matches (`Bare contact.User.bare_jid) (`Full state.myjid) in
   let own_session () =
     let user = User.Users.find state.users (fst state.myjid) in
     let resource = snd state.myjid in

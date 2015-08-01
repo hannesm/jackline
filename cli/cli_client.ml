@@ -40,9 +40,9 @@ let pad x s =
   | _ (* when d < 0 *) -> String.sub s 0 x
 
 let rec find_index id i = function
-  | []                             -> 0
-  | x::_ when Jid.jid_matches x id -> i
-  | _::xs                          -> find_index id (succ i) xs
+  | []                                  -> 0
+  | x::_ when User.Jid.jid_matches x id -> i
+  | _::xs                               -> find_index id (succ i) xs
 
 let color_session u su = function
   | Some x when User.(encrypted x.otr) -> green
@@ -137,7 +137,7 @@ let format_log log =
   let print_log { direction ; timestamp ; message ; _ } =
     let time = print_time ~now timestamp in
     let from = match direction with
-      | `From jid -> Jid.jid_to_string jid ^ ":"
+      | `From jid -> User.Jid.jid_to_string jid ^ ":"
       | `Local x when x = "" -> "***"
       | `Local x -> "*** " ^ x ^ " ***"
       | `To _ -> ">>>"
@@ -170,7 +170,7 @@ let format_buddies buddies users self active notifications width =
       let item =
         let data = Printf.sprintf "%s%s%s%s %s"
             (if notify then "*" else " ")
-            f (User.presence_to_char presence) t (Jid.bare_jid_to_string id)
+            f (User.presence_to_char presence) t (User.Jid.bare_jid_to_string id)
         in
         pad width data
       in
@@ -374,11 +374,11 @@ let make_prompt size time network state redraw =
         String.concat "\n" data
       in
 
-      let active = User.Users.find state.users (Jid.t_to_bare state.active_contact) in
+      let active = User.Users.find state.users (User.Jid.t_to_bare state.active_contact) in
       let active_session = User.active_session active in
       let notifications =
         List.map
-          (fun id -> User.Users.find state.users (Jid.t_to_bare id))
+          (fun id -> User.Users.find state.users (User.Jid.t_to_bare id))
           state.notifications
       in
 
@@ -500,7 +500,7 @@ let navigate_message_buffer state direction =
   | Up, n -> state.scrollback <- n + 1; force_redraw ()
 
 let navigate_buddy_list state direction =
-  let find u = User.Users.find state.users (Jid.t_to_bare u) in
+  let find u = User.Users.find state.users (User.Jid.t_to_bare u) in
   let active = find state.active_contact in
   let notifications = List.map find state.notifications in
   let self = find (`Full state.myjid) in
@@ -632,7 +632,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
     | Some message when String.length message > 0 ->
        LTerm_history.add hist message ;
        let err data = log (`Local "error", data) ; return_unit in
-       let contact = User.Users.find state.users (Jid.t_to_bare state.active_contact) in
+       let contact = User.Users.find state.users (User.Jid.t_to_bare state.active_contact) in
        let handle_otr_out user_out =
          let add_msg direction enc data =
            User.add_message state.users state.active_contact direction enc false data
@@ -653,7 +653,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
          log (`Local "session error", Printexc.to_string reason) ;
          reconnect_me () ;
        in
-       (if Jid.bare_jid_equal contact.User.bare_jid (fst state.myjid) then
+       (if User.Jid.bare_jid_equal contact.User.bare_jid (fst state.myjid) then
           err "try `M-x doctor` in emacs instead"
         else
           match User.active_session contact, !xmpp_session with

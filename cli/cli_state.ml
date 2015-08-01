@@ -18,17 +18,17 @@ type notify_v =
 
 type ui_state = {
   config_directory            : string                    ; (* set initially *)
-  myjid                       : Jid.full_jid               ; (* set initially *)
+  myjid                       : User.Jid.full_jid         ; (* set initially *)
 
   state_mvar                  : notify_v Lwt_mvar.t       ; (* set initially *)
   user_mvar                   : User.user Lwt_mvar.t      ; (* set initially *)
 
   users                       : User.users                ; (* read from disk, extended by xmpp callbacks *)
 
-  mutable active_contact      : Jid.t                     ; (* modified by scrolling *)
-  mutable last_active_contact : Jid.t                     ; (* modified by scrolling *)
+  mutable active_contact      : User.Jid.t                ; (* modified by scrolling *)
+  mutable last_active_contact : User.Jid.t                ; (* modified by scrolling *)
 
-  mutable notifications       : Jid.t list                ; (* list to blink *)
+  mutable notifications       : User.Jid.t list           ; (* list to blink *)
 
   mutable show_offline        : bool                      ; (* F5 stuff *)
   mutable window_mode         : display_mode              ; (* F12 stuff *)
@@ -64,7 +64,7 @@ module Notify = struct
       | None -> Lwt.return_unit
       | Some x ->
         Lwt.catch (fun () ->
-            system (x ^ " " ^ Jid.full_jid_to_string jid ^ " " ^ buf) >>= fun _ ->
+            system (x ^ " " ^ User.Jid.full_jid_to_string jid ^ " " ^ buf) >>= fun _ ->
             Lwt.return_unit)
           (fun _ -> Lwt.return_unit)
     in
@@ -146,8 +146,8 @@ let disconnect () =
   | None -> Lwt.return_unit
 
 let notify state jid =
-  if List.exists (fun x -> Jid.jid_matches x jid) state.notifications ||
-       (Jid.jid_matches state.active_contact jid && state.scrollback = 0)
+  if List.exists (fun x -> User.Jid.jid_matches x jid) state.notifications ||
+       (User.Jid.jid_matches state.active_contact jid && state.scrollback = 0)
   then
     ()
   else
@@ -156,7 +156,7 @@ let notify state jid =
 
 let notified state jid =
   state.notifications <- List.filter
-                           (fun x -> not (Jid.jid_matches jid x))
+                           (fun x -> not (User.Jid.jid_matches jid x))
                            state.notifications ;
   if List.length state.notifications = 0 then
     Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear)

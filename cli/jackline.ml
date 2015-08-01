@@ -31,7 +31,7 @@ let start_client cfgdir debug () =
 
   ( match config.Config.password with
     | None ->
-       let jid = Jid.full_jid_to_string config.Config.jid in
+       let jid = User.Jid.full_jid_to_string config.Config.jid in
        (new Cli_config.read_password term ~prompt:("password for " ^ jid ^ ": "))#run >|= fun password ->
        Some password
     | Some x -> return (Some x)) >>= fun password ->

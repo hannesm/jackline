@@ -21,14 +21,14 @@ open Lwt
 
 type user_data = {
   log            : User.direction -> string -> unit ;
-  remove         : Jid.t -> unit ;
-  message        : Jid.t -> User.direction -> bool -> string -> unit ;
-  user           : Jid.t -> User.user ;
-  session        : Jid.t -> User.session ;
+  remove         : User.Jid.t -> unit ;
+  message        : User.Jid.t -> User.direction -> bool -> string -> unit ;
+  user           : User.Jid.t -> User.user ;
+  session        : User.Jid.t -> User.session ;
   update_user    : User.user -> bool -> unit ;
-  update_session : Jid.t -> User.session -> unit ;
-  receipt        : Jid.t -> string -> unit ;
-  inc_fp         : Jid.t -> string -> (bool * int * bool) ;
+  update_session : User.Jid.t -> User.session -> unit ;
+  receipt        : User.Jid.t -> string -> unit ;
+  inc_fp         : User.Jid.t -> string -> (bool * int * bool) ;
   failure        : exn -> unit Lwt.t ;
 }
 
@@ -78,7 +78,7 @@ let request_disco t jid =
       (match jid_from with
         | None -> fail BadRequest
         | Some x -> return x ) >>= fun jid_from ->
-      match Jid.string_to_jid jid_from with
+      match User.Jid.string_to_jid jid_from with
       | None -> fail BadRequest
       | Some jid ->
          let session = t.user_data.session jid in
@@ -87,7 +87,7 @@ let request_disco t jid =
   in
   let session = t.user_data.session jid in
   t.user_data.update_session jid { session with User.receipt = `Requested } ;
-  let jid_to = Jid.jid_to_xmpp_jid jid in
+  let jid_to = User.Jid.jid_to_xmpp_jid jid in
   (try_lwt
      make_iq_request t ~jid_to (IQGet (Disco.make_disco_query [])) callback
    with e -> t.user_data.failure e)
@@ -142,7 +142,7 @@ let send_msg t jid id body failure =
         | Some _, `Requested -> ([], false))
     | `Bare _ -> ([], false)
   in
-  let jid_to = Jid.jid_to_xmpp_jid jid in
+  let jid_to = User.Jid.jid_to_xmpp_jid jid in
   restart_keepalive t ;
   (try_lwt
      send_message t ~kind:Chat ~jid_to ~body ~x ?id ()
@@ -171,7 +171,7 @@ let message_callback (t : user_data session_data) stanza =
   match stanza.jid_from with
   | None -> t.user_data.log (`Local "error") "no from in stanza" ; return_unit
   | Some jidt ->
-    let jid = Jid.xmpp_jid_to_jid jidt in
+    let jid = User.Jid.xmpp_jid_to_jid jidt in
     let msg dir enc txt =
       let data =
         let txt = validate_utf8 txt in
@@ -251,7 +251,7 @@ let message_error t ?id ?jid_from ?jid_to ?lang error =
   ignore id ; ignore jid_to ; ignore lang ;
   let jid = match jid_from with
     | None -> `Bare ("unknown", "host")
-    | Some x -> Jid.xmpp_jid_to_jid x
+    | Some x -> User.Jid.xmpp_jid_to_jid x
   in
   let msg =
     let con = "error; reason: " ^ (string_of_condition error.err_condition) in
@@ -268,7 +268,7 @@ let presence_callback t stanza =
   (match stanza.jid_from with
    | None     -> log (`Local "error") "presence received without sending jid, ignoring"
    | Some jidt ->
-     let jid = Jid.xmpp_jid_to_jid jidt in
+     let jid = User.Jid.xmpp_jid_to_jid jidt in
      let status, statstring = match stanza.content.status with
        | None -> (None, "")
        | Some x when x = "" -> (None, "")
@@ -325,7 +325,7 @@ let presence_error t ?id ?jid_from ?jid_to ?lang error =
   ignore id ; ignore jid_to ; ignore lang ;
   let jid = match jid_from with
     | None -> `Bare ("unknown", "host")
-    | Some x -> Jid.xmpp_jid_to_jid x
+    | Some x -> User.Jid.xmpp_jid_to_jid x
   in
   let msg =
     let con = "presence error; reason: " ^ (string_of_condition error.err_condition) in
@@ -354,7 +354,7 @@ let roster_callback user item =
     in
     let name = if item.Roster.name = "" then None else Some item.Roster.name in
     let groups = item.Roster.group in
-    let jid = Jid.xmpp_jid_to_jid item.Roster.jid in
+    let jid = User.Jid.xmpp_jid_to_jid item.Roster.jid in
     let user = user jid in
     Some { user with User.name = name ;
                      User.groups = groups ;
@@ -513,7 +513,7 @@ let connect ?out sockaddr myjid certname password priority authenticator user_da
        return (module TLS_module : XMPPClient.Socket)
      in
 
-     let myjid = Jid.jid_to_xmpp_jid (`Full myjid) in
+     let myjid = User.Jid.jid_to_xmpp_jid (`Full myjid) in
      XMPPClient.setup_session
        ~user_data
        ~myjid
