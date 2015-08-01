@@ -172,9 +172,6 @@ let format_buddies show_offline buddies users self active notifications width =
           ("{", "}")
         else
           User.subscription_to_chars user.User.subscription
-      and pre = match prefix with
-        | None -> ""
-        | Some x -> x
       in
       let data = draw st f t in
       pad width data
@@ -734,7 +731,7 @@ let rec loop term hist state network log =
              err "no active session, try to connect first") >>= fun () ->
        loop term hist state network log
     | Some _ ->
-       let bare = Jid.t_to_bare state.active_contact in
+       let bare = User.Jid.t_to_bare state.active_contact in
        let active = User.Users.find state.users bare in
        User.Users.replace state.users state.active_contact { active with User.expand = not active.User.expand } ;
        loop term hist state network log
