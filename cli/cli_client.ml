@@ -71,15 +71,12 @@ let show_buddy_list users show_offline self active notifications =
     | xs -> let sorted = List.sort User.compare_session xs in
             [(user, sorted)]
   in
-  let buddies = List.sort
+  List.sort
     (fun (x, _) (y, _) -> User.Jid.compare_bare_jid x.User.bare_jid y.User.bare_jid)
     (User.Users.fold (fun id u acc -> show id u @ acc) users [])
-  in
-  dbg ((string_of_int (List.length buddies)) ^ " buddies") ;
-  buddies
 
 let flatten_buddies us =
-  let fl = List.fold_right (fun (user, xs) acc ->
+  List.fold_right (fun (user, xs) acc ->
     let bare = user.User.bare_jid in
     match xs with
     | [] -> (match User.active_session user with
@@ -92,9 +89,6 @@ let flatten_buddies us =
             | None -> `Bare bare
             | Some s -> `Full (bare, s.User.resource)) :: acc)
     us []
-  in
-  dbg ((string_of_int (List.length fl)) ^ " flattened buddies") ;
-  fl
 
 let show_buddies users show_offline self active notifications =
   flatten_buddies (show_buddy_list users show_offline self active notifications)
@@ -569,7 +563,6 @@ let navigate_buddy_list state direction =
 >>>>>>> more work on user interface, should now be less surprising:
   let set_active idx =
     let user = List.nth userlist idx in
-    dbg ("activating [" ^ (string_of_int idx) ^ "]" ^ (User.Jid.jid_to_string user)) ;
     activate_user state user
   and active_idx = find_index state.active_contact 0 userlist
   in
