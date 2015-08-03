@@ -253,9 +253,10 @@ let buddy_list users show_offline self active notifications length width =
   let buddies = show_buddy_list users show_offline self active notifications in
   let formatted_buddies = format_buddies buddies self active notifications width in
 
-  let bs = List.length buddies
+  let flattened = flatten_buddies buddies in
+  let bs = List.length flattened
   and up, down = (length / 2, (length + 1) / 2)
-  and active_idx = find_index active 0 (flatten_buddies buddies)
+  and active_idx = find_index active 0 flattened
   in
   match length >= bs with
   | true  -> let pad = [ S (String.make width ' ') ] in
