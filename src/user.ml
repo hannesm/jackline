@@ -142,7 +142,7 @@ module Jid = struct
     match jid, jid' with
     | `Bare bare, `Bare bare' -> bare_jid_equal bare bare'
     | `Bare bare, `Full (bare', _) -> bare_jid_equal bare bare'
-    | `Full (bare, resource), `Full (bare', resource') -> bare_jid_equal bare bare' && resource_similar resource resource'
+    | `Full (bare, resource), `Full (bare', resource') -> bare_jid_equal bare bare' && resource = resource'
     | _ -> false
 
 
@@ -474,6 +474,7 @@ let find_or_create_session user resource config dsa =
     let others = match similar with
       | None   -> user.active_sessions
       | Some x ->
+        (* XXX: need to revise notifications! *)
         let others = List.filter (fun s -> x.resource <> s.resource) user.active_sessions in
         if x.presence = `Offline then
           others
