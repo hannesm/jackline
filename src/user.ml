@@ -26,25 +26,12 @@ module Jid = struct
     | `Bare bare -> bare_jid_to_string bare
 
   let string_to_jid_helper s =
-    let parts = Stringext.split ~max:2 ~on:'@' s in
-    if List.length parts = 2 then
-      let user = List.nth parts 0
-      and rest = List.nth parts 1
-      in
-      let domain, resource =
-        if String.contains rest '/' then
-          let parts = Stringext.split ~max:2 ~on:'/' rest in
-          (List.hd parts,
-           if List.length parts = 2 then
-             Some (List.nth parts 1)
-           else
-             None)
-        else
-          (rest, None)
-      in
-      Some (user, domain, resource)
-    else
-      None
+    match Astring.String.cut ~sep:"@" s with
+    | None -> None
+    | Some (user, rest) ->
+       match Astring.String.cut ~sep:"/" rest with
+       | None -> Some (user, rest, None)
+       | Some (domain, resource) -> Some (user, domain, Some resource)
 
   let string_to_bare_jid s =
     match string_to_jid_helper s with

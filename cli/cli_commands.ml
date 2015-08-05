@@ -2,9 +2,12 @@ open Cli_state
 
 let string_normalize_fingerprint fpstr =
   let fpstr = String.lowercase fpstr in
-  let chars = Stringext.to_list fpstr in
-  let hexchars = List.filter (function '0'..'9' | 'a'..'f' -> true | _ -> false) chars in
-  Stringext.of_list hexchars
+  Astring.String.fold_right
+    (fun c acc -> if Astring.Char.Ascii.is_hex_digit c then
+                    Astring.String.of_char c ^ acc
+                  else
+                    acc)
+    fpstr ""
 
 type command = {
   name : string ;
