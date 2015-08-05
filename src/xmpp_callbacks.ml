@@ -74,16 +74,16 @@ let request_disco t jid =
             else
               `Unsupported
          | _ ->  `Unsupported
-      in
-      (match jid_from with
-        | None -> fail BadRequest
-        | Some x -> return x ) >>= fun jid_from ->
-      match User.Jid.string_to_jid jid_from with
-      | None -> fail BadRequest
-      | Some jid ->
-         let session = t.user_data.session jid in
-         t.user_data.update_session jid { session with User.receipt = receipt } ;
-         return_unit
+    in
+    (match jid_from with
+     | None -> fail BadRequest
+     | Some x -> return x ) >>= fun jid_from ->
+    match User.Jid.string_to_jid jid_from with
+    | None -> fail BadRequest
+    | Some jid ->
+       let session = t.user_data.session jid in
+       t.user_data.update_session jid { session with User.receipt = receipt } ;
+       return_unit
   in
   let session = t.user_data.session jid in
   t.user_data.update_session jid { session with User.receipt = `Requested } ;
