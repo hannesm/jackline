@@ -137,8 +137,8 @@ let send_msg t jid id body failure =
        (match id, session.User.receipt with
         | None, _ -> ([], false)
         | Some _, `Supported -> ([Xml.Xmlelement ((ns_receipts, "request"), [], [])], false)
-        | Some _, `Unsupported -> ([], true)
-        | Some _, `Unknown
+        | Some _, `Unknown -> ([], true)
+        | Some _, `Unsupported
         | Some _, `Requested -> ([], false))
     | `Bare _ -> ([], false)
   in
