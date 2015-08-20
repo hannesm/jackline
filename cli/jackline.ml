@@ -65,6 +65,9 @@ let start_client cfgdir debug () =
      Lwt.return_unit) >>= fun () ->
 
   (* dump histories every 10 minutes *)
+  (* NOTE: this might be racy if dump_histories does not finish within
+           600 seconds, should ensure that only one dumper is running
+           at a given time *)
   let hist_dumper =
     let dump () = Persistency.dump_histories cfgdir users in
     Lwt_engine.on_timer 600. true (fun _ -> Lwt.async dump)
