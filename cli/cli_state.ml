@@ -108,9 +108,11 @@ module Connect = struct
     Xmpp_callbacks.cancel_keepalive () ;
     Xmpp_callbacks.keepalive_running := false ;
     match !xmpp_session with
-    | Some s -> Xmpp_callbacks.close s >|= fun () ->
-                xmpp_session := None
-    | None   -> Lwt.return_unit
+    | Some s ->
+       Xmpp_callbacks.close s >|= fun () ->
+       xmpp_session := None
+    | None   ->
+       Lwt.return_unit
 
   let resolve config log =
     let domain = JID.to_idn (User.Jid.jid_to_xmpp_jid (`Full config.Config.jid))

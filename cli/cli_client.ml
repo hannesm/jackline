@@ -693,10 +693,11 @@ let rec loop term hist state network log =
 
 let init_system log domain connect_mvar =
   let err m =
-    Lwt.async (fun () -> Connect.disconnect ());
-    log (`Local "async error", m) ;
-    ignore (Lwt_engine.on_timer 10. false (fun _ ->
-              Lwt.async (fun () -> Lwt_mvar.put connect_mvar Reconnect)))
+    Lwt.async (fun () ->
+      Connect.disconnect () >|= fun () ->
+      log (`Local "async error", m) ;
+      ignore (Lwt_engine.on_timer 10. false (fun _ ->
+                Lwt.async (fun () -> Lwt_mvar.put connect_mvar Reconnect))))
   in
   Lwt.async_exception_hook := (function
       | Tls_lwt.Tls_failure `Error (`AuthenticationFailure (`InvalidServerName x)) ->
@@ -707,7 +708,8 @@ let init_system log domain connect_mvar =
         (match X509.hostnames x with
          | x::_ -> err (Printf.sprintf "%s, but got %s" pre x) ; err (warn x)
          | [] -> err (Printf.sprintf "%s, but found no name" pre))
-      | exn ->
-        err (Printexc.to_string exn)
+      | Unix.Unix_error (Unix.EBADF, "check_descriptor", _ ) as exn ->
+         xmpp_session := None ; err (Printexc.to_string exn)
+      | exn -> err (Printexc.to_string exn)
   )
 

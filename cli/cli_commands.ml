@@ -563,8 +563,8 @@ let exec input state log redraw =
   let err = msg "error" in
   let failure reason =
     Connect.disconnect () >>= fun () ->
-    msg "session error" (Printexc.to_string reason) >>= fun () ->
-    Lwt_mvar.put state.connect_mvar Reconnect
+    msg "session error" (Printexc.to_string reason) >|= fun () ->
+    ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async (fun () -> Lwt_mvar.put state.connect_mvar Reconnect)))
   in
   let contact = User.Users.find state.users (User.Jid.t_to_bare state.active_contact) in
   let dump data =
