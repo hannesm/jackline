@@ -16,7 +16,7 @@ type notify_v =
   | Clear
   | Quit
 
-type ui_state = {
+type state = {
   config_directory            : string                    ; (* set initially *)
   myjid                       : User.Jid.full_jid         ; (* set initially *)
 
@@ -92,7 +92,7 @@ module Notify = struct
     mvar
 end
 
-let empty_ui_state config_directory notify_callback myjid users =
+let empty_state config_directory notify_callback myjid users =
   let state_mvar =
     let file = Filename.concat config_directory "notification.state" in
     Notify.notify_writer myjid notify_callback file
@@ -141,6 +141,7 @@ let random_string () =
 let disconnect () =
   Xmpp_callbacks.cancel_keepalive () ;
   Xmpp_callbacks.keepalive_running := false ;
+  let (>|=) = Lwt.(>|=) in
   match !xmpp_session with
   | Some s -> Xmpp_callbacks.close s >|= fun () ->
               xmpp_session := None
