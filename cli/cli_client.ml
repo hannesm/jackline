@@ -588,7 +588,7 @@ class read_line ~term ~network ~history ~state = object(self)
                        self#size time network redraw)
 end
 
-let rec loop ?out (config : Config.t) term hist state network log =
+let rec loop ?out term hist state network log =
   let history = LTerm_history.contents hist in
   match_lwt
     try_lwt
@@ -603,8 +603,8 @@ let rec loop ?out (config : Config.t) term hist state network log =
     | Some command when (String.length command > 0) && String.get command 0 = '/' ->
        LTerm_history.add hist command ;
        if String.trim command <> "/quit" then
-         Cli_commands.exec ?out command state config log force_redraw >>= fun () ->
-         loop ?out config term hist state network log
+         Cli_commands.exec ?out command state log force_redraw >>= fun () ->
+         loop ?out term hist state network log
        else
          begin
            ( match !xmpp_session with
@@ -675,10 +675,10 @@ let rec loop ?out (config : Config.t) term hist state network log =
               | None -> return_unit)
           | None        , Some t ->
              let cfg = match contact.User.otr_custom_config with
-               | None -> config.Config.otr_config
+               | None -> state.config.Config.otr_config
                | Some x -> x
              in
-             let ctx = Otr.State.new_session cfg config.Config.dsa () in
+             let ctx = Otr.State.new_session cfg state.config.Config.dsa () in
              let _, out, user_out = Otr.Engine.send_otr ctx message in
              let id = handle_otr_out user_out in
              (match out with
@@ -688,9 +688,9 @@ let rec loop ?out (config : Config.t) term hist state network log =
               | None -> return_unit)
           | _           , None ->
              err "no active session, try to connect first") >>= fun () ->
-       loop ?out config term hist state network log
-    | Some _ -> loop ?out config term hist state network log
-    | None -> loop ?out config term hist state network log
+       loop ?out term hist state network log
+    | Some _ -> loop ?out term hist state network log
+    | None -> loop ?out term hist state network log
 
 let init_system log domain =
   let err m =

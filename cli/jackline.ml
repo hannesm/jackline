@@ -81,7 +81,7 @@ let start_client cfgdir debug () =
   ignore (LTerm.save_state term);  (* save the terminal state *)
 
   (* main loop *)
-  Cli_client.loop ?out config term history state n (log ?step:None) >>= fun state ->
+  Cli_client.loop ?out term history state n (log ?step:None) >>= fun state ->
 
   (match out with
    | None -> return_unit

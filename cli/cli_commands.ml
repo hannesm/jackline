@@ -168,24 +168,24 @@ let resolve config log =
   report sa ;
   sa
 
-let handle_connect ?out state config log redraw failure =
+let handle_connect ?out state log redraw failure =
   let doit user_data () =
-    match config.Config.password with
+    match state.config.Config.password with
     | None -> failure (Invalid_argument "no password provided, please restart") >|= fun () -> None
     | Some password ->
       try_lwt
-        (resolve config log >>= fun sockaddr ->
-         let certname = match config.Config.certificate_hostname with
-           | None -> JID.to_idn (User.Jid.jid_to_xmpp_jid (`Full config.Config.jid))
+        (resolve state.config log >>= fun sockaddr ->
+         let certname = match state.config.Config.certificate_hostname with
+           | None -> JID.to_idn (User.Jid.jid_to_xmpp_jid (`Full state.config.Config.jid))
            | Some x -> x
          in
-         (X509_lwt.authenticator (match config.Config.authenticator with
+         (X509_lwt.authenticator (match state.config.Config.authenticator with
               | `Trust_anchor x -> `Ca_file x
               | `Fingerprint fp -> `Hex_fingerprints (`SHA256, [(certname, fp)])))
          >>= fun authenticator ->
          Xmpp_callbacks.connect ?out sockaddr
-           config.Config.jid certname password
-           config.Config.priority authenticator user_data)
+           state.config.Config.jid certname password
+           state.config.Config.priority authenticator user_data)
       with exn -> failure exn >|= fun () -> None
   in
 
@@ -215,14 +215,14 @@ let handle_connect ?out state config log redraw failure =
     let bare = User.Jid.t_to_bare jid in
     let user = User.find_or_create state.users bare in
     let otr_config = match user.User.otr_custom_config with
-      | None -> config.Config.otr_config
+      | None -> state.config.Config.otr_config
       | Some x -> x
     in
     let resource = match User.Jid.resource jid with
       | Some x -> x
       | None -> ""
     in
-    let user, session = User.find_or_create_session user resource otr_config config.Config.dsa in
+    let user, session = User.find_or_create_session user resource otr_config state.config.Config.dsa in
     User.Users.replace state.users bare user ;
     session
   and update_session jid session =
@@ -397,8 +397,8 @@ let handle_otr_info dump user =
   | None ->
     dump ("(no active session) OTR fingerprints: " ^ (dump_otr_fps user.User.otr_fingerprints))
 
-let handle_own_otr_info dump config =
-  let otr_fp = Otr.Utils.own_fingerprint config.Config.dsa in
+let handle_own_otr_info dump dsa =
+  let otr_fp = Otr.Utils.own_fingerprint dsa in
   dump ("your otr fingerprint:  " ^ (User.format_fp (User.hex_fingerprint otr_fp)))
 
 let common_info dump user cfgdir =
@@ -445,10 +445,10 @@ let handle_info dump user cfgdir =
       dump act (marshal_session s))
       (List.sort User.compare_session user.User.active_sessions)
 
-let handle_own_info dump user cfgdir config res =
+let handle_own_info dump user cfgdir dsa res =
   let dump a b = dump (a ^ ": " ^ b) in
   common_info dump user cfgdir ;
-  let otr_fp = Otr.Utils.own_fingerprint config.Config.dsa in
+  let otr_fp = Otr.Utils.own_fingerprint dsa in
   dump "own otr fingerprint" (User.format_fp (User.hex_fingerprint otr_fp)) ;
   let active = User.active_session user in
   List.iteri (fun i s ->
@@ -620,7 +620,7 @@ let tell_user (log:(User.direction * string) -> unit) ?(prefix:string option) (f
   log (`Local f, msg) ;
   return_unit
 
-let exec ?out input state config log redraw =
+let exec ?out input state log redraw =
   let msg = tell_user log in
   let err = msg "error" in
   let failure reason =
@@ -652,7 +652,7 @@ let exec ?out input state config log redraw =
   (* connect *)
   | ("connect", _) ->
     ( match !xmpp_session with
-      | None   -> handle_connect ?out state config log redraw failure
+      | None   -> handle_connect ?out state log redraw failure
       | Some _ -> err "already connected" )
 
   (* disconnect *)
@@ -696,20 +696,20 @@ let exec ?out input state config log redraw =
 
   | ("info", _) ->
     ( if self then
-        handle_own_info dump contact state.config_directory config (own_session ()).User.resource
+        handle_own_info dump contact state.config_directory state.config.Config.dsa (own_session ()).User.resource
       else
         handle_info dump contact state.config_directory );
     return_unit
 
   | ("otrpolicy", x) ->
     let cfg, pref = match contact.User.otr_custom_config with
-      | None -> (config.Config.otr_config, "default ")
+      | None -> (state.config.Config.otr_config, "default ")
       | Some x -> (x, "")
     in
     (match x with
      | None -> print_otr_policy dump pref cfg ; return_unit
      | Some _ when self -> err "cannot adjust own otr policy"
-     | Some z -> adjust_otr_policy state.user_mvar dump state.users config.Config.otr_config cfg contact z
+     | Some z -> adjust_otr_policy state.user_mvar dump state.users state.config.Config.otr_config cfg contact z
     )
 
   | ("otr", x) ->
@@ -717,7 +717,7 @@ let exec ?out input state config log redraw =
       | None -> handle_help (msg ~prefix:"argument required") (Some "otr")
       | Some x when x = "info" ->
         ( if self then
-            handle_own_otr_info dump config
+            handle_own_otr_info dump state.config.Config.dsa
           else
             handle_otr_info dump contact ) ;
         return_unit
@@ -726,10 +726,10 @@ let exec ?out input state config log redraw =
           | Some s when x = "start" ->
             if self then err "do not like to talk to myself" else
               let cfg = match contact.User.otr_custom_config with
-                | None -> config.Config.otr_config
+                | None -> state.config.Config.otr_config
                 | Some x -> x
               in
-              handle_otr_start s state.users dump failure cfg config.Config.dsa contact
+              handle_otr_start s state.users dump failure cfg state.config.Config.dsa contact
           | Some s when x = "stop" ->
             if self then err "do not like to talk to myself" else
               handle_otr_stop s state.users dump err failure contact
@@ -759,9 +759,9 @@ let exec ?out input state config log redraw =
     ( match x with
       | None    ->
         ( if self then
-            handle_own_otr_info dump config
+            handle_own_otr_info dump state.config.Config.dsa
           else
-            (handle_own_otr_info dump config ;
+            (handle_own_otr_info dump state.config.Config.dsa ;
              current_otr_fp dump contact ;
              dump "/fingerprint: argument expected") ) ;
         return_unit
