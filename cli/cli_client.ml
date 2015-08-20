@@ -376,8 +376,12 @@ let status_line now user session notify log redraw fg_color width =
 
 let make_prompt size time network state redraw =
   (* network should be an event, then I wouldn't need a check here *)
+  let dump (dir, msg) =
+    Printf.sprintf "%s: %s" (Sexplib.Sexp.to_string_hum (User.sexp_of_direction dir)) msg
+  in
   (if state.last_status <> network then
-     (add_status state (fst network) (snd network) ;
+     (dbg ("inserting state " ^ dump network ^ " was " ^ dump state.last_status) ;
+      add_status state (fst network) (snd network) ;
       state.last_status <- network) ) ;
 
   (* we might have gotten a connection termination - if so mark everything offline *)
@@ -553,15 +557,7 @@ let navigate_message_buffer state direction =
   | Up, n -> state.scrollback <- n + 1; force_redraw ()
 
 let navigate_buddy_list state direction =
-<<<<<<< HEAD
-  let find u = User.Users.find state.users (User.Jid.t_to_bare u) in
-  let active = find state.active_contact in
-  let notifications = List.map find state.notifications in
-  let self = find (`Full state.config.Config.jid) in
-  let userlist = show_buddies state.users state.show_offline self active notifications in
-=======
   let userlist = show_buddies state.users state.show_offline state.myjid state.active_contact state.notifications in
->>>>>>> more work on user interface, should now be less surprising:
   let set_active idx =
     let user = List.nth userlist idx in
     activate_user state user
