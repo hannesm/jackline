@@ -291,7 +291,7 @@ let status_line now user session notify log redraw fg_color width =
   let jid_pre, left = maybe_trim "< " left in
   let jid_post, left = maybe_trim " >─" left in
 
-  let styled_jid = if log then B_fg red :: jid @ [ E_fg ] else jid in
+  let styled_jid = if log then B_reverse true :: jid @ [ E_reverse ] else jid in
 
   let status, left = maybe_trim status left in
   let status_pre, left = maybe_trim "[ " left in
@@ -316,7 +316,7 @@ let status_line now user session notify log redraw fg_color width =
 
   first @
   [ B_fg fg_color ] @ time_pre @ time @ time_post @
-  jid_pre @ [ E_fg ] @ styled_jid @ [ B_fg fg_color ] @ jid_post @
+  jid_pre @ styled_jid @ jid_post @
   fill @
   status_pre @ [ E_fg ; B_fg status_color ] @ status @ [ E_fg ; B_fg fg_color ] @ status_post @
   [ E_fg ; E_bold ]

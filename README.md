@@ -149,7 +149,8 @@ horizontal line
 - green OTR: key is verified
 
 status line
-- red jabber id: logging to disk is enabled for this contact
+- own jabber id in reverse colors: logging to disk is enabled for this contact
+- own jabber id in usual colors: no logging to disk for this contact
 
 ### FAQ
 
