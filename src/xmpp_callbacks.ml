@@ -280,9 +280,10 @@ let presence_callback t stanza =
        in
        match
          session.User.presence = presence,
-         session.User.status = status
+         session.User.status = status,
+         session.User.priority = priority
        with
-       | true, true -> ()
+       | true, true, true -> ()
        | _ ->
           let old = User.presence_to_char session.User.presence in
           let session = { session with User.presence ; status ; priority } in
