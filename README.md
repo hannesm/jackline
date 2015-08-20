@@ -89,8 +89,8 @@ The configuration file is stored in
 directory by using the `-f` command line argument.  Next to the
 configuration, there is a file containing your `password` (unless you
 decided to enter it on every start of jackline), a `otr_dsa.sexp`
-containing your OTR key, a `users.sexp` with buddy list information
-(OTR fingerprints).
+containing your OTR key, a `users` directory with a file for each
+buddy (OTR fingerprints, custom OTR policies, ...).
 
 ### Using jackline
 
@@ -115,11 +115,11 @@ A message is sent to the active contact by typing it followed by `return`.
 In the chat window, each message is prefixed with 3 characters:
 - `***` is a local message.
 - `<--` is an incoming unencrypted message.
-- `<O-` is an incoming encrypted message (`O` indicates OTR encryption).
-- `-->` is an outgoing unencrypted message, which has been received by the other client.
+- `<O-` is an incoming OTR encrypted message
+- `-->` is an outgoing unencrypted message, which has been received by the other client (XEP 184).
 - `?->` is an outgoing unencrypted message waiting for a message delivery receipt (XEP 184).
-- `-O>` is an outgoing encrypted message, which was received.
-- `?O>` is an outgoing encrypted message waiting for receipt.
+- `-O>` is an outgoing OTR encrypted message, which has been received by the other client (XEP 184).
+- `?O>` is an outgoing OTR encrypted message waiting for receipt (XEP 184).
 
 Active keys:
 - `PgUp`, `PgDown` navigates through the contact list
@@ -127,8 +127,8 @@ Active keys:
 - `Ctrl-x` jumps to last active user
 - `F5` toggles display of offline contacts
 - `F12` toggles between display of contact list, full screen chat, and raw (only received messages)
-- `F11` and `Shift-F11` increase and decrease width of buddy list
-- `F10` and `Shift-F10` increase and decrease height of log window
+- `F11` and `Shift-F11` increases and decreases width of buddy list
+- `F10` and `Shift-F10` increases and decreases height of log window
 - `Ctrl-PgUp`, `Ctrl-PgDown` scrolls chat window
 - `<tab>` tab completion (largest prefix)
 - `Ctrl-a` (jump to beginning of line), `Ctrl-e` (jump to end of line), `Ctrl-k` (kill text to the right of cursor), `Ctrl-u` (kill text to the left of cursor), `Ctrl-left` (jump word backwards), `Ctrl-right` (jump word forwards), `Ctrl-f` (forward one character), `Ctrl-b` (backward one character)
@@ -154,7 +154,7 @@ status line
 
 ### FAQ
 
-- How do I prevent jackline from doing DNS lookups? -- Interactive configuration or specify `(hostname ("bla.com"))` in `config.sexp`.
+- How do I prevent jackline from doing DNS lookups? -- Interactive configuration or specify `(hostname ("146.255.57.229"))` in `config.sexp`.
 - The server certificate does not match the server name, how do I fix this? -- Interactive configuration or specify `(cert_hostname ("blabla.com"))` in `config.sexp`.
 - Keys do not work on MacOSX -- [This](https://github.com/timothybasanov/terminal-app-function-keys#full-list-of-all-bindings) might be useful.
 - `Ctrl-D` terminates a session, this is insane. -- Create a `~/.lambda-term-inputrc` with the following content:
