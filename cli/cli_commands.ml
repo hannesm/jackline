@@ -151,44 +151,7 @@ let handle_help msg = function
     let cmds = String.concat " " (keys ()) in
     msg "available commands (try [/help cmd])" cmds
 
-let resolve config log =
-  let domain = JID.to_idn (User.Jid.jid_to_xmpp_jid (`Full config.Config.jid))
-  and hostname = config.Config.hostname
-  and port = config.Config.port
-  in
-  let report sockaddr =
-    let addr = match sockaddr with
-      | Unix.ADDR_INET (inet_addr, port) ->
-        Unix.string_of_inet_addr inet_addr ^ " on port " ^ string_of_int port
-      | Unix.ADDR_UNIX str -> str
-    in
-    log (`Local "connecting", "to " ^ domain ^ " (" ^ addr ^ ")") ;
-  in
-  Xmpp_callbacks.resolve hostname port domain >|= fun sa ->
-  report sa ;
-  sa
-
-let handle_connect ?out state log redraw failure =
-  let doit user_data () =
-    match state.config.Config.password with
-    | None -> failure (Invalid_argument "no password provided, please restart") >|= fun () -> None
-    | Some password ->
-      try_lwt
-        (resolve state.config log >>= fun sockaddr ->
-         let certname = match state.config.Config.certificate_hostname with
-           | None -> JID.to_idn (User.Jid.jid_to_xmpp_jid (`Full state.config.Config.jid))
-           | Some x -> x
-         in
-         (X509_lwt.authenticator (match state.config.Config.authenticator with
-              | `Trust_anchor x -> `Ca_file x
-              | `Fingerprint fp -> `Hex_fingerprints (`SHA256, [(certname, fp)])))
-         >>= fun authenticator ->
-         Xmpp_callbacks.connect ?out sockaddr
-           state.config.Config.jid certname password
-           state.config.Config.priority authenticator user_data)
-      with exn -> failure exn >|= fun () -> None
-  in
-
+let handle_connect state log redraw failure =
   let remove jid =
     let bare = User.Jid.t_to_bare jid in
     User.Users.remove state.users bare ;
@@ -264,35 +227,10 @@ let handle_connect ?out state log redraw failure =
       failure ;
   }
   in
-  let rec handle s =
-    reconnect_event := None ;
-    match s with
-    | None   ->
-       reconnect_me () ;
-       return_unit
-    | Some s ->
-       xmpp_session := Some s ;
-       Lwt.async (fun () -> Xmpp_callbacks.parse_loop s) ;
-       Lwt_mvar.put state.state_mvar Connected >|= fun () ->
-       let cont () =
-         reconnect_event := None ;
-         match !xmpp_session with
-         | None ->
-            log (`Local "") "reconnecting..." ;
-            doit user_data () >>= fun x ->
-            handle x
-         | Some _ -> Lwt.return_unit
-       in
-       reconnect := Some cont ;
-       Xmpp_callbacks.restart_keepalive s
-  in
-  reconnect_event := None ;
-  doit user_data () >>= fun x ->
-  handle x
+  Lwt_mvar.put state.Cli_state.connect_mvar (Connect user_data)
 
 let handle_disconnect msg =
-  reconnect := None ;
-  disconnect () >>= fun () ->
+  Connect.disconnect () >>= fun () ->
   msg "session error" "disconnected"
 
 let send_status s presence status priority failure =
@@ -620,13 +558,13 @@ let tell_user (log:(User.direction * string) -> unit) ?(prefix:string option) (f
   log (`Local f, msg) ;
   return_unit
 
-let exec ?out input state log redraw =
+let exec input state log redraw =
   let msg = tell_user log in
   let err = msg "error" in
   let failure reason =
-    disconnect () >>= fun () ->
-    msg "session error" (Printexc.to_string reason) >|= fun () ->
-    reconnect_me ()
+    Connect.disconnect () >>= fun () ->
+    msg "session error" (Printexc.to_string reason) >>= fun () ->
+    Lwt_mvar.put state.connect_mvar Reconnect
   in
   let contact = User.Users.find state.users (User.Jid.t_to_bare state.active_contact) in
   let dump data =
@@ -652,7 +590,7 @@ let exec ?out input state log redraw =
   (* connect *)
   | ("connect", _) ->
     ( match !xmpp_session with
-      | None   -> handle_connect ?out state log redraw failure
+      | None   -> handle_connect state log redraw failure
       | Some _ -> err "already connected" )
 
   (* disconnect *)

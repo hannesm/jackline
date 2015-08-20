@@ -322,6 +322,11 @@ let status_line now user session notify log redraw fg_color width =
   [ E_fg ; E_bold ]
 
 let make_prompt size time network state redraw =
+  (* network should be an event, then I wouldn't need a check here *)
+  (if state.last_status <> network then
+     (add_status state (fst network) (snd network) ;
+      state.last_status <- network) ) ;
+
   (* we might have gotten a connection termination - if so mark everything offline *)
   (match fst network with
    | `Local err ->
@@ -333,11 +338,6 @@ let make_prompt size time network state redraw =
           Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Disconnected)
        | _ -> () )
    | _ -> () );
-
-  (* network should be an event, then I wouldn't need a check here *)
-  (if state.last_status <> network then
-     (add_status state (fst network) (snd network) ;
-      state.last_status <- network) ) ;
 
   let log_size = state.log_height in
   let main_size =
@@ -588,7 +588,7 @@ class read_line ~term ~network ~history ~state = object(self)
                        self#size time network redraw)
 end
 
-let rec loop ?out term hist state network log =
+let rec loop term hist state network log =
   let history = LTerm_history.contents hist in
   match_lwt
     try_lwt
@@ -603,8 +603,8 @@ let rec loop ?out term hist state network log =
     | Some command when (String.length command > 0) && String.get command 0 = '/' ->
        LTerm_history.add hist command ;
        if String.trim command <> "/quit" then
-         Cli_commands.exec ?out command state log force_redraw >>= fun () ->
-         loop ?out term hist state network log
+         Cli_commands.exec command state log force_redraw >>= fun () ->
+         loop term hist state network log
        else
          begin
            ( match !xmpp_session with
@@ -649,9 +649,8 @@ let rec loop ?out term hist state network log =
             id
        in
        let failure reason =
-         disconnect () >|= fun () ->
+         Connect.disconnect () >|= fun () ->
          log (`Local "session error", Printexc.to_string reason) ;
-         reconnect_me ()
        in
        (if User.Jid.bare_jid_equal contact.User.bare_jid (fst state.config.Config.jid) then
           err "try `M-x doctor` in emacs instead"
@@ -688,15 +687,16 @@ let rec loop ?out term hist state network log =
               | None -> return_unit)
           | _           , None ->
              err "no active session, try to connect first") >>= fun () ->
-       loop ?out term hist state network log
-    | Some _ -> loop ?out term hist state network log
-    | None -> loop ?out term hist state network log
+       loop term hist state network log
+    | Some _ -> loop term hist state network log
+    | None -> loop term hist state network log
 
-let init_system log domain =
+let init_system log domain connect_mvar =
   let err m =
-    Lwt.async (fun () -> disconnect ());
+    Lwt.async (fun () -> Connect.disconnect ());
     log (`Local "async error", m) ;
-    reconnect_me ()
+    ignore (Lwt_engine.on_timer 10. false (fun _ ->
+              Lwt.async (fun () -> Lwt_mvar.put connect_mvar Reconnect)))
   in
   Lwt.async_exception_hook := (function
       | Tls_lwt.Tls_failure `Error (`AuthenticationFailure (`InvalidServerName x)) ->

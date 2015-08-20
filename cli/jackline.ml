@@ -51,8 +51,20 @@ let start_client cfgdir debug () =
   let user, _ = User.find_or_create_session user resource config.Config.otr_config config.Config.dsa in
   User.Users.replace users bare user ;
 
-  let state = Cli_state.empty_state cfgdir config users in
   let n, log = S.create (`Local "welcome to jackline", "type /help for help") in
+
+  (if debug then
+     Persistency.open_append (Unix.getenv "PWD") "out.txt" >|= fun fd ->
+     Some fd
+   else
+     return None) >>= fun out ->
+
+  let state_mvar =
+    let file = Filename.concat cfgdir "notification.state" in
+    Cli_state.Notify.notify_writer myjid config.Config.notification_callback file
+  in
+  let connect_mvar = Cli_state.Connect.connect_me config (log ?step:None) out state_mvar in
+  let state = Cli_state.empty_state cfgdir config users connect_mvar state_mvar in
 
   let us = User.Users.fold (fun _ v acc -> v :: acc) users [] in
 
@@ -73,18 +85,12 @@ let start_client cfgdir debug () =
     Lwt_engine.on_timer 600. true (fun _ -> Lwt.async dump)
   in
 
-  (if debug then
-     Persistency.open_append (Unix.getenv "PWD") "out.txt" >|= fun fd ->
-     Some fd
-   else
-     return None) >>= fun out ->
-
-  Cli_client.init_system (log ?step:None) (snd bare) ;
+  Cli_client.init_system (log ?step:None) (snd bare) connect_mvar ;
 
   ignore (LTerm.save_state term);  (* save the terminal state *)
 
   (* main loop *)
-  Cli_client.loop ?out term history state n (log ?step:None) >>= fun state ->
+  Cli_client.loop term history state n (log ?step:None) >>= fun state ->
 
   (match out with
    | None -> return_unit

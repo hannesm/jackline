@@ -363,7 +363,7 @@ let roster_callback user item =
   with
   _ -> None
 
-let session_callback ?priority t =
+let session_callback ?priority mvar t =
   let err txt = t.user_data.log (`Local "handling error") txt in
 
   register_iq_request_handler t Roster.ns_roster
@@ -441,8 +441,11 @@ let session_callback ?priority t =
       List.iter (function None -> () | Some x -> t.user_data.update_user x false) mods ;
       return () ) >>= fun () ->
 
-  try_lwt send_presence t ?priority ()
-  with e -> t.user_data.failure e
+  (try_lwt send_presence t ?priority ()
+   with e -> t.user_data.failure e) >>= fun () ->
+
+  restart_keepalive t ;
+  mvar ()
 
 let tls_epoch_to_line t =
   let open Tls in
@@ -486,7 +489,7 @@ let resolve (hostname : string option) (port : int option) (jid_idn : string) =
   | Some x -> to_ipv4 x
   | None -> resolve jid_idn
 
-let connect ?out sockaddr myjid certname password priority authenticator user_data =
+let connect ?out sockaddr myjid certname password priority authenticator user_data mvar =
   debug_out := out ;
 
   let err_log msg = user_data.log (`Local "error") msg
@@ -520,7 +523,7 @@ let connect ?out sockaddr myjid certname password priority authenticator user_da
        ~plain_socket:(module Socket_module : XMPPClient.Socket)
        ~tls_socket:make_tls
        ~password
-       (session_callback ?priority) >|= fun session ->
+       (session_callback ?priority mvar) >|= fun session ->
      Some session
 
 let close session_data =
