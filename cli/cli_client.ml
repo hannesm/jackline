@@ -708,7 +708,7 @@ let init_system log domain connect_mvar =
         (match X509.hostnames x with
          | x::_ -> err (Printf.sprintf "%s, but got %s" pre x) ; err (warn x)
          | [] -> err (Printf.sprintf "%s, but found no name" pre))
-      | Unix.Unix_error (Unix.EBADF, "check_descriptor", _ ) as exn ->
+      | Unix.Unix_error (Unix.EBADF, _, _ ) as exn ->
          xmpp_session := None ; err (Printexc.to_string exn)
       | exn -> err (Printexc.to_string exn)
   )
