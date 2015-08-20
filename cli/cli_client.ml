@@ -651,7 +651,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
        let failure reason =
          disconnect () >|= fun () ->
          log (`Local "session error", Printexc.to_string reason) ;
-         reconnect_me () ;
+         reconnect_me ()
        in
        (if User.Jid.bare_jid_equal contact.User.bare_jid (fst state.myjid) then
           err "try `M-x doctor` in emacs instead"

@@ -142,8 +142,9 @@ let disconnect () =
   Xmpp_callbacks.cancel_keepalive () ;
   Xmpp_callbacks.keepalive_running := false ;
   match !xmpp_session with
-  | Some s -> xmpp_session := None ; Xmpp_callbacks.close s
-  | None -> Lwt.return_unit
+  | Some s -> Xmpp_callbacks.close s >|= fun () ->
+              xmpp_session := None
+  | None   -> Lwt.return_unit
 
 let notify state jid =
   if List.exists (fun x -> User.Jid.jid_matches x jid) state.notifications ||
