@@ -357,7 +357,7 @@ let make_prompt size time network state redraw =
     eval ([S "need more space"])
   else
     begin
-      let self = User.Users.find state.users (fst state.myjid) in
+      let self = User.Users.find state.users (fst state.config.Config.jid) in
       let statusses = self.User.message_history in
       let logs =
         let entries =
@@ -436,7 +436,7 @@ let make_prompt size time network state redraw =
       let notify = List.length notifications > 0 in
       let log = active.User.preserve_messages in
       let mysession =
-        let r = snd state.myjid in
+        let r = snd state.config.Config.jid in
         List.find (fun s -> s.User.resource = r) self.User.active_sessions in
       let status = status_line time self mysession notify log redraw fg_color size.cols in
       let main = List.flatten main_window in
@@ -503,7 +503,7 @@ let navigate_buddy_list state direction =
   let find u = User.Users.find state.users (User.Jid.t_to_bare u) in
   let active = find state.active_contact in
   let notifications = List.map find state.notifications in
-  let self = find (`Full state.myjid) in
+  let self = find (`Full state.config.Config.jid) in
   let userlist = show_buddies state.users state.show_offline self active notifications in
   let set_active idx =
     let user = List.nth userlist idx in
@@ -653,7 +653,7 @@ let rec loop ?out (config : Config.t) term hist state network log =
          log (`Local "session error", Printexc.to_string reason) ;
          reconnect_me ()
        in
-       (if User.Jid.bare_jid_equal contact.User.bare_jid (fst state.myjid) then
+       (if User.Jid.bare_jid_equal contact.User.bare_jid (fst state.config.Config.jid) then
           err "try `M-x doctor` in emacs instead"
         else
           match User.active_session contact, !xmpp_session with

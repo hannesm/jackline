@@ -193,9 +193,9 @@ let handle_connect ?out state config log redraw failure =
     let bare = User.Jid.t_to_bare jid in
     User.Users.remove state.users bare ;
     if User.Jid.jid_matches (`Bare bare) state.active_contact then
-      state.active_contact <- `Full state.myjid ;
+      state.active_contact <- `Full state.config.Config.jid ;
     if User.Jid.jid_matches (`Bare bare) state.last_active_contact then
-      state.last_active_contact <- `Full state.myjid ;
+      state.last_active_contact <- `Full state.config.Config.jid ;
     redraw ()
   and log dir txt = log (dir, txt)
   and message jid dir enc txt =
@@ -634,10 +634,10 @@ let exec ?out input state config log redraw =
     let user = User.insert_message contact (`Local "") false false data in
     User.Users.replace state.users user.User.bare_jid user
   in
-  let self = User.Jid.jid_matches (`Bare contact.User.bare_jid) (`Full state.myjid) in
+  let self = User.Jid.jid_matches (`Bare contact.User.bare_jid) (`Full state.config.Config.jid) in
   let own_session () =
-    let user = User.Users.find state.users (fst state.myjid) in
-    let resource = snd state.myjid in
+    let id, resource = state.config.Config.jid in
+    let user = User.Users.find state.users id in
     List.find (fun s -> s.User.resource = resource) user.User.active_sessions
   in
 

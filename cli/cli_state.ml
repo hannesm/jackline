@@ -18,7 +18,7 @@ type notify_v =
 
 type state = {
   config_directory            : string                    ; (* set initially *)
-  myjid                       : User.Jid.full_jid         ; (* set initially *)
+  config                      : Config.t                  ; (* set initially *)
 
   state_mvar                  : notify_v Lwt_mvar.t       ; (* set initially *)
   user_mvar                   : User.user Lwt_mvar.t      ; (* set initially *)
@@ -92,17 +92,17 @@ module Notify = struct
     mvar
 end
 
-let empty_state config_directory notify_callback myjid users =
+let empty_state config_directory config users =
   let state_mvar =
     let file = Filename.concat config_directory "notification.state" in
-    Notify.notify_writer myjid notify_callback file
+    Notify.notify_writer config.Config.jid config.Config.notification_callback file
   and user_mvar = Persistency.notify_user config_directory
   and last_status = (`Local "", "")
-  and active = `Full myjid
+  and active = `Full config.Config.jid
   in
   {
     config_directory                ;
-    myjid                           ;
+    config                          ;
 
     state_mvar                      ;
     user_mvar                       ;
@@ -126,7 +126,7 @@ let empty_state config_directory notify_callback myjid users =
 
 
 let add_status state dir msg =
-  User.add_message state.users (`Full state.myjid) dir false true msg
+  User.add_message state.users (`Full state.config.Config.jid) dir false true msg
 
 let (xmpp_session : Xmpp_callbacks.user_data Xmpp_callbacks.XMPPClient.session_data option ref) = ref None
 
