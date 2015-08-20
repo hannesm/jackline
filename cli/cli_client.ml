@@ -459,7 +459,7 @@ let make_prompt size time network state redraw =
           let chat = line_wrap ~max_length:chat_width data [] in
           let chat = scroll chat in
 
-          let buddies = buddy_list state.users state.show_offline state.myjid state.active_contact state.notifications main_size buddy_width in
+          let buddies = buddy_list state.users state.show_offline state.config.Config.jid state.active_contact state.notifications main_size buddy_width in
           let comb = List.combine buddies chat in
           let pipe = S (Zed_utf8.singleton (UChar.of_int 0x2502)) in
           List.map (fun (buddy, chat) ->
@@ -557,7 +557,7 @@ let navigate_message_buffer state direction =
   | Up, n -> state.scrollback <- n + 1; force_redraw ()
 
 let navigate_buddy_list state direction =
-  let userlist = show_buddies state.users state.show_offline state.myjid state.active_contact state.notifications in
+  let userlist = show_buddies state.users state.show_offline state.config.Config.jid state.active_contact state.notifications in
   let set_active idx =
     let user = List.nth userlist idx in
     activate_user state user
@@ -745,7 +745,7 @@ let rec loop term hist state network log =
        let bare = User.Jid.t_to_bare state.active_contact in
        let active = User.Users.find state.users bare in
        User.Users.replace state.users bare { active with User.expand = not active.User.expand } ;
-       let userlist = show_buddies state.users state.show_offline state.myjid state.active_contact state.notifications in
+       let userlist = show_buddies state.users state.show_offline state.config.Config.jid state.active_contact state.notifications in
        let state =
          if find_index state.active_contact 0 userlist = 0 then
            { state with active_contact = `Bare bare }
