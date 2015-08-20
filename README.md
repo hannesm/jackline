@@ -149,8 +149,7 @@ horizontal line
 - green OTR: key is verified
 
 status line
-- red your jabber id: logging is enabled for this contact
-- blue your jabber id: logging is disabled for this contact
+- red jabber id: logging to disk is enabled for this contact
 
 ### FAQ
 
