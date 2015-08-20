@@ -280,7 +280,7 @@ let status_line now user session notify log redraw fg_color width =
     Printf.sprintf "%02d:%02d" now.Unix.tm_hour now.Unix.tm_min
   in
 
-  let jid_color = if log then red else lblue in
+  let jid_color = if log then red else cyan in
 
   let status_color =
     if session.User.presence = `Offline then
@@ -309,7 +309,7 @@ let status_line now user session notify log redraw fg_color width =
   let first =
     let rnd = [ B_fg col ] @ redraw @ [ E_fg ] in
     if notify then
-      [ B_bold true ; B_blink true ; B_fg blue ; S "#" ] @ redraw @ [ E_fg ; E_blink ]
+      [ B_bold true ; B_blink true ; B_fg cyan ; S "#" ] @ redraw @ [ E_fg ; E_blink ]
     else
       [ B_bold true ; B_fg fg_color ; S (Zed_utf8.make 1 (UChar.of_int 0x2500)) ; E_fg ] @ rnd
   in
