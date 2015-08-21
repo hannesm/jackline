@@ -177,11 +177,8 @@ let handle_connect state log redraw failure =
   and session jid =
     let bare = User.Jid.t_to_bare jid in
     let user = User.find_or_create state.users bare in
-    let otr_config = match user.User.otr_custom_config with
-      | None -> state.config.Config.otr_config
-      | Some x -> x
-    in
-    let resource = match User.Jid.resource jid with
+    let otr_config = otr_config user state
+    and resource = match User.Jid.resource jid with
       | Some x -> x
       | None -> ""
     in
@@ -486,13 +483,13 @@ let handle_remove s dump user failure =
          return_unit)
    with e -> failure e)
 
-let print_otr_policy dump pref cfg =
+let print_otr_policy dump cfg =
   let policies = String.concat ", "
       (List.map Otr.State.policy_to_string cfg.Otr.State.policies)
   and versions = String.concat ", "
       (List.map Otr.State.version_to_string cfg.Otr.State.versions)
   in
-  dump ("OTR " ^ pref ^ "versions: " ^ versions ^ " policies: " ^ policies)
+  dump ("OTR versions: " ^ versions ^ " policies: " ^ policies)
 
 let adjust_otr_policy mvar dump users default_cfg cfg contact data =
   let try_decode str =
@@ -542,7 +539,7 @@ let adjust_otr_policy mvar dump users default_cfg cfg contact data =
       User.Users.replace users contact.User.bare_jid user ;
       (match cfg with
        | None -> dump "reverted to default otr policy"
-       | Some x -> print_otr_policy dump "" x ) ;
+       | Some x -> print_otr_policy dump x ) ;
       Lwt_mvar.put mvar user
     else
       (dump "nothing changed" ;
@@ -640,12 +637,9 @@ let exec input state log redraw =
     return_unit
 
   | ("otrpolicy", x) ->
-    let cfg, pref = match contact.User.otr_custom_config with
-      | None -> (state.config.Config.otr_config, "default ")
-      | Some x -> (x, "")
-    in
+    let cfg = otr_config contact state in
     (match x with
-     | None -> print_otr_policy dump pref cfg ; return_unit
+     | None -> print_otr_policy dump cfg ; return_unit
      | Some _ when self -> err "cannot adjust own otr policy"
      | Some z -> adjust_otr_policy state.user_mvar dump state.users state.config.Config.otr_config cfg contact z
     )
@@ -663,10 +657,7 @@ let exec input state log redraw =
           | None -> err "not connected"
           | Some s when x = "start" ->
             if self then err "do not like to talk to myself" else
-              let cfg = match contact.User.otr_custom_config with
-                | None -> state.config.Config.otr_config
-                | Some x -> x
-              in
+              let cfg = otr_config contact state in
               handle_otr_start s state.users dump failure cfg state.config.Config.dsa contact
           | Some s when x = "stop" ->
             if self then err "do not like to talk to myself" else

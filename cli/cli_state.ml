@@ -242,3 +242,8 @@ let notified state jid =
                            state.notifications ;
   if List.length state.notifications = 0 then
     Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear)
+
+let otr_config user state =
+  match user.User.otr_custom_config with
+  | None -> state.config.Config.otr_config
+  | Some x -> x

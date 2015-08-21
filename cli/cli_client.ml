@@ -726,11 +726,7 @@ let rec loop term hist state network log =
                  send t jid (Some id) body failure
               | None -> return_unit)
           | None        , Some t ->
-             let cfg = match contact.User.otr_custom_config with
-               | None -> state.config.Config.otr_config
-               | Some x -> x
-             in
-             let ctx = Otr.State.new_session cfg state.config.Config.dsa () in
+             let ctx = Otr.State.new_session (otr_config contact state) state.config.Config.dsa () in
              let _, out, user_out = Otr.Engine.send_otr ctx message in
              let id = handle_otr_out user_out in
              (match out with
