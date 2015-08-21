@@ -492,6 +492,17 @@ let compare_session a b =
   | 0 -> compare_presence b.presence a.presence
   | x -> x
 
+let session users jid otr dsa =
+  let user = find_or_create users jid
+  and resource = Jid.resource jid
+  in
+  match resource with
+  | Some x ->
+     let user, session = find_or_create_session user x otr dsa in
+     replace_user users user ;
+     session
+  | None -> assert false
+
 let active_session user =
   if List.length user.active_sessions = 0 then
     None

@@ -283,11 +283,10 @@ let maybe_trim str left =
     ([], 0)
 
 let horizontal_line user session fg_color buddy_width scrollback show_buddy_list width =
-  let open User in
   let buddy, presence, status, otr, otrcolor = match session with
     | Some s ->
       let presence = User.presence_to_string s.User.presence in
-      let status = match s.status with
+      let status = match s.User.status with
         | None   -> ""
         | Some x ->
           let stripped =
@@ -296,12 +295,12 @@ let horizontal_line user session fg_color buddy_width scrollback show_buddy_list
           in
           " - " ^ stripped
       in
-      let otrcolor, otr = match otr_fingerprint s.otr with
-        | Some raw when verified_fp user raw -> (fg_color, " - OTR verified")
-        | Some raw                           -> (red, " - unverified OTR: " ^ (User.format_fp raw))
-        | None                               -> (red, " - no OTR")
+      let otrcolor, otr = match User.otr_fingerprint s.User.otr with
+        | Some raw when User.verified_fp user raw -> (fg_color, " - OTR verified")
+        | Some raw                                -> (red, " - unverified OTR: " ^ (User.format_fp raw))
+        | None                                    -> (red, " - no OTR")
       in
-      (userid user s, " -- " ^ presence, status, otr, otrcolor)
+      (User.userid user s, " -- " ^ presence, status, otr, otrcolor)
     | None -> (User.jid user, "", "", "", default)
   in
   let pre =

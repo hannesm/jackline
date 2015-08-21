@@ -272,29 +272,34 @@ let presence_callback t stanza =
        | Some x -> let data = validate_utf8 x in (Some data, " - " ^ data)
      in
      let handle_presence presence =
-       let session = t.user_data.session jid in
-       let priority = match stanza.content.priority with
-         | None -> 0
-         | Some x -> x
+       let n = User.presence_to_char presence
+       and nl = User.presence_to_string presence
        in
-       match
-         session.User.presence = presence,
-         session.User.status = status,
-         session.User.priority = priority
-       with
-       | true, true, true -> ()
-       | _ ->
-          let old = User.presence_to_char session.User.presence in
-          let session = { session with User.presence ; status ; priority } in
-          t.user_data.update_session jid session ;
-
-          let n = User.presence_to_char presence
-          and nl = User.presence_to_string presence
-          in
-          let info =
-            "presence changed: [" ^ old ^ ">" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring
-          in
+       match jid with
+       | `Bare _ ->
+          let info = "presence [_>" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring in
           log (`From jid) info
+       | _ ->
+          let session = t.user_data.session jid in
+          let priority = match stanza.content.priority with
+            | None -> 0
+            | Some x -> x
+          in
+          match
+            session.User.presence = presence,
+            session.User.status = status,
+            session.User.priority = priority
+          with
+          | true, true, true -> ()
+          | _ ->
+             let old = User.presence_to_char session.User.presence in
+             let session = { session with User.presence ; status ; priority } in
+             t.user_data.update_session jid session ;
+
+             let info =
+               "presence changed: [" ^ old ^ ">" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring
+             in
+             log (`From jid) info
      in
      let handle_subscription txt hlp =
        t.user_data.message jid (`Local txt) false hlp

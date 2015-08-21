@@ -173,15 +173,8 @@ let handle_connect state log redraw failure =
   and user jid =
     User.find_or_create state.users jid
   and session jid =
-    let user = User.find_or_create state.users jid in
-    let otr_config = otr_config user state
-    and resource = match User.Jid.resource jid with
-      | Some x -> x
-      | None -> ""
-    in
-    let user, session = User.find_or_create_session user resource otr_config state.config.Config.dsa in
-    User.replace_user state.users user ;
-    session
+    let otr_config = otr_config (User.find_or_create state.users jid) state in
+    User.session state.users jid otr_config state.config.Config.dsa
   and update_session jid session =
     let user = User.find_or_create state.users jid in
     User.replace_session state.users user session
