@@ -347,9 +347,7 @@ let received_message u id =
 
 let encrypted = Otr.State.is_encrypted
 
-let userid u s = match s.resource with
-  | r when r = "" -> Jid.bare_jid_to_string u.bare_jid
-  | r -> Jid.jid_to_string (`Full (u.bare_jid, r))
+let userid u s = Jid.jid_to_string (`Full (u.bare_jid, s.resource))
 
 let format_fp e =
   String.((sub e 0 8) ^ " " ^ (sub e 8 8) ^ " " ^ (sub e 16 8) ^ " " ^ (sub e 24 8) ^ " " ^ (sub e 32 8))
