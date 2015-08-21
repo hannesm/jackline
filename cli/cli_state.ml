@@ -154,15 +154,16 @@ module Connect = struct
                (match config.Config.authenticator with
                 | `Trust_anchor x -> `Ca_file x
                 | `Fingerprint fp -> `Hex_fingerprints (`SHA256, [(certname, fp)]))) >>= fun authenticator ->
-            Xmpp_callbacks.connect ?out sockaddr
-                                   config.Config.jid certname password
-                                   config.Config.priority authenticator user_data
-                                   (fun () -> Lwt_mvar.put mvar (Success user_data)) ) >|= function
+            Xmpp_callbacks.connect
+              ?out sockaddr
+              config.Config.jid certname password
+              config.Config.priority authenticator user_data
+              (fun () -> Lwt_mvar.put mvar (Success user_data)) ) >|= function
               | None -> ()
               | Some session ->
                  xmpp_session := Some session ;
                  Lwt.async (fun () -> Xmpp_callbacks.parse_loop session)
-      with exn -> failure exn >|= fun () -> ()
+      with exn -> failure exn
     in
     let rec reconnect_loop user_data =
       Lwt_mvar.take mvar >>= function
