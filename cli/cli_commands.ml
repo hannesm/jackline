@@ -183,20 +183,22 @@ let handle_connect state log redraw failure =
     if alert then notify state (`Bare user.User.bare_jid) ;
     redraw ()
   and inc_fp jid raw_fp =
-    let resource = match User.Jid.resource jid with Some x -> x | None -> "" in
-    let user = User.find_or_create state.users jid in
-    let fp = User.find_raw_fp user raw_fp in
-    let resources =
-      if List.mem resource fp.User.resources then
-        fp.User.resources
-      else
-        resource :: fp.User.resources
-    in
-    let fp = { fp with User.session_count = succ fp.User.session_count ; User.resources = resources } in
-    let u = User.replace_fp user fp in
-    User.replace_user state.users u ;
-    Lwt.async (fun () -> Lwt_mvar.put state.user_mvar u) ;
-    (fp.User.verified, pred fp.User.session_count, List.exists (fun x -> x.User.verified) user.User.otr_fingerprints)
+    match User.Jid.resource jid with
+    | None -> assert false
+    | Some resource ->
+       let user = User.find_or_create state.users jid in
+       let fp = User.find_raw_fp user raw_fp in
+       let resources =
+         if List.mem resource fp.User.resources then
+           fp.User.resources
+         else
+           resource :: fp.User.resources
+       in
+       let fp = { fp with User.session_count = succ fp.User.session_count ; User.resources = resources } in
+       let u = User.replace_fp user fp in
+       User.replace_user state.users u ;
+       Lwt.async (fun () -> Lwt_mvar.put state.user_mvar u) ;
+       (fp.User.verified, pred fp.User.session_count, List.exists (fun x -> x.User.verified) user.User.otr_fingerprints)
   in
   let (user_data : Xmpp_callbacks.user_data) = {
       Xmpp_callbacks.log ;
