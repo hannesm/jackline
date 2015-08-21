@@ -738,13 +738,12 @@ let rec loop term hist state network log =
              err "no active session, try to connect first") >>= fun () ->
        loop term hist state network log
     | Some _ ->
-       let bare = User.Jid.t_to_bare state.active_contact in
-       let active = User.Users.find state.users bare in
-       User.Users.replace state.users bare { active with User.expand = not active.User.expand } ;
+       let active = User.find_or_create state.users state.active_contact in
+       User.replace_user state.users { active with User.expand = not active.User.expand } ;
        let userlist = show_buddies state.users state.show_offline state.config.Config.jid state.active_contact state.notifications in
        let state =
          if find_index state.active_contact 0 userlist = 0 then
-           { state with active_contact = `Bare bare }
+           { state with active_contact = `Bare active.User.bare_jid }
          else
            state
        in
