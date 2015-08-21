@@ -391,8 +391,7 @@ let handle_own_info dump user cfgdir dsa res =
     user.User.active_sessions
 
 let handle_otr_start s users dump failure otr_cfg dsa user =
-  let send_over session body =
-    let jid = `Full (user.User.bare_jid, session.User.resource) in
+  let send_over jid body =
     send s jid None body failure
   in
   match User.active_session user with
@@ -402,14 +401,14 @@ let handle_otr_start s users dump failure otr_cfg dsa user =
     let ctx, out = Otr.Engine.start_otr session.User.otr in
     User.replace_session users user { session with User.otr = ctx } ;
     dump "starting OTR session" ;
-    send_over session out
+    send_over (`Full (user.User.bare_jid, session.User.resource)) out
   | None ->
     (* no OTR context, but we're sending only an OTR query anyways
        (and if we see a reply, we'll get some resource from the other side) *)
-    let _, session = User.find_or_create_session user "" otr_cfg dsa in
-    let _, out = Otr.Engine.start_otr session.User.otr in
+    let ctx = Otr.State.new_session otr_cfg dsa () in
+    let _, out = Otr.Engine.start_otr ctx in
     dump "starting OTR session" ;
-    send_over session out
+    send_over (`Bare user.User.bare_jid) out
 
 let handle_otr_stop s users dump err failure user =
   match User.active_session user with
