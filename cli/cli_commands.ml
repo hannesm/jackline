@@ -166,38 +166,32 @@ let handle_connect state log redraw failure =
     notify state jid ;
     redraw ()
   and receipt jid id =
-    let bare = User.Jid.t_to_bare jid in
-    let user = User.find_or_create state.users bare in
+    let user = User.find_or_create state.users jid in
     let user = User.received_message user id in
-    User.Users.replace state.users bare user ;
+    User.replace_user state.users user ;
     redraw ()
   and user jid =
-    let jid = User.Jid.t_to_bare jid in
     User.find_or_create state.users jid
   and session jid =
-    let bare = User.Jid.t_to_bare jid in
-    let user = User.find_or_create state.users bare in
+    let user = User.find_or_create state.users jid in
     let otr_config = otr_config user state
     and resource = match User.Jid.resource jid with
       | Some x -> x
       | None -> ""
     in
     let user, session = User.find_or_create_session user resource otr_config state.config.Config.dsa in
-    User.Users.replace state.users bare user ;
+    User.replace_user state.users user ;
     session
   and update_session jid session =
-    let bare = User.Jid.t_to_bare jid in
-    let user = User.find_or_create state.users bare in
+    let user = User.find_or_create state.users jid in
     User.replace_session state.users user session
   and update_user user alert =
-    let jid = user.User.bare_jid in
-    User.Users.replace state.users jid user ;
-    if alert then notify state (`Bare jid) ;
+    User.replace_user state.users user ;
+    if alert then notify state (`Bare user.User.bare_jid) ;
     redraw ()
   and inc_fp jid raw_fp =
-    let bare = User.Jid.t_to_bare jid in
     let resource = match User.Jid.resource jid with Some x -> x | None -> "" in
-    let user = User.find_or_create state.users bare in
+    let user = User.find_or_create state.users jid in
     let fp = User.find_raw_fp user raw_fp in
     let resources =
       if List.mem resource fp.User.resources then
@@ -207,7 +201,7 @@ let handle_connect state log redraw failure =
     in
     let fp = { fp with User.session_count = succ fp.User.session_count ; User.resources = resources } in
     let u = User.replace_fp user fp in
-    User.Users.replace state.users bare u ;
+    User.replace_user state.users u ;
     Lwt.async (fun () -> Lwt_mvar.put state.user_mvar u) ;
     (fp.User.verified, pred fp.User.session_count, List.exists (fun x -> x.User.verified) user.User.otr_fingerprints)
   in
@@ -277,7 +271,7 @@ let handle_fingerprint mvar users dump err fp user =
       | Some key when User.hex_fingerprint key = manual_fp ->
         let otr_fp = User.find_raw_fp user manual_fp in
         let user = User.replace_fp user { otr_fp with User.verified = true } in
-        User.Users.replace users user.User.bare_jid user ;
+        User.replace_user users user ;
         dump ("fingerprint " ^ fp ^ " is now marked verified") ;
         Lwt_mvar.put mvar user
       | _ -> err "provided fingerprint does not match the one of this active session" )
@@ -286,7 +280,7 @@ let handle_fingerprint mvar users dump err fp user =
 let handle_log mvar users dump user v a =
   if user.User.preserve_messages <> v then
     (let user = { user with User.preserve_messages = v } in
-     User.Users.replace users user.User.bare_jid user ;
+     User.replace_user users user ;
      dump ("logging turned " ^ a) ;
      Lwt_mvar.put mvar user)
   else
@@ -536,7 +530,7 @@ let adjust_otr_policy mvar dump users default_cfg cfg contact data =
           contact.User.active_sessions
       in
       let user = { contact with User.otr_custom_config = cfg ; active_sessions } in
-      User.Users.replace users contact.User.bare_jid user ;
+      User.replace_user users user ;
       (match cfg with
        | None -> dump "reverted to default otr policy"
        | Some x -> print_otr_policy dump x ) ;
@@ -567,7 +561,7 @@ let exec input state log redraw =
   let dump data =
     let contact = User.Users.find state.users (User.Jid.t_to_bare state.active_contact) in
     let user = User.insert_message contact (`Local "") false false data in
-    User.Users.replace state.users user.User.bare_jid user
+    User.replace_user state.users user
   in
   let self = User.Jid.jid_matches (`Bare contact.User.bare_jid) (`Full state.config.Config.jid) in
   let own_session () =
@@ -581,7 +575,7 @@ let exec input state log redraw =
   | ("help" , x) -> handle_help (msg ?prefix:None) x
   | ("clear", _) ->
     let user = { contact with User.message_history = [] } in
-    User.Users.replace state.users user.User.bare_jid user ;
+    User.replace_user state.users user ;
     return_unit
 
   (* connect *)

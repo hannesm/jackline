@@ -429,13 +429,16 @@ let find users jid =
     None
 
 let find_or_create users jid =
-  match find users jid with
+  let bare = Jid.t_to_bare jid in
+  match find users bare with
     | Some x -> x
     | None   ->
-      let user = new_user ~jid () in
-      Users.replace users jid user ;
+      let user = new_user ~jid:bare () in
+      Users.replace users bare user ;
       user
 
+let replace_user users user =
+  Users.replace users user.bare_jid user
 
 let replace_session users user session =
   let others = List.filter (fun s -> s.resource <> session.resource) user.active_sessions in
