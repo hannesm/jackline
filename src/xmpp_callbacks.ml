@@ -141,7 +141,6 @@ let send_msg t jid id body failure =
     | `Bare _ -> ([], false)
   in
   let jid_to = User.Jid.jid_to_xmpp_jid jid in
-  restart_keepalive t ;
   (try_lwt
      send_message t ~kind:Chat ~jid_to ~body ~x ?id ()
    with e -> failure e) >>= fun () ->
