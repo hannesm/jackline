@@ -438,7 +438,7 @@ let find_or_create users jid =
 let replace_user users user =
   Users.replace users user.bare_jid user
 
-let replace_session users user session =
+let replace_session_1 user session =
   let others = List.filter (fun s -> s.resource <> session.resource) user.active_sessions in
   let active_sessions =
     if session.dispose && session.presence = `Offline then
@@ -446,7 +446,10 @@ let replace_session users user session =
     else
       session :: others
   in
-  let user = { user with active_sessions } in
+  { user with active_sessions }
+
+let replace_session users user session =
+  let user = replace_session_1 user session in
   Users.replace users user.bare_jid user
 
 let get_session user tst =
