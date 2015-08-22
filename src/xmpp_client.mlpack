@@ -1,9 +1,10 @@
 # OASIS_START
-# DO NOT EDIT (digest: 730efa152ae120242b476c7195f78ab4)
+# DO NOT EDIT (digest: 25001015b88de34d0cdf364be767d66d)
 Config
 User
 Persistency
 Xmpp_connection
 Xmpp_callbacks
 Escape
+Utils
 # OASIS_STOP
