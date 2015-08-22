@@ -316,9 +316,9 @@ let presence_callback t stanza =
        end
      | Some Probe        -> handle_subscription "probed" statstring
      | Some Subscribe    -> handle_subscription "subscription request" ("(use /authorization allow cancel) to accept/deny" ^ statstring)
-     | Some Subscribed   -> handle_subscription "you successfully subscribed to their presence update" statstring
+     | Some Subscribed   -> handle_subscription "you are now subscribed to their presence" statstring
      | Some Unsubscribe  -> handle_subscription "wants to unsubscribe from your presence" ("(use /authorization cancel allow) to accept/deny" ^ statstring)
-     | Some Unsubscribed -> handle_subscription "you have been unsubscribed from their buddy list" statstring
+     | Some Unsubscribed -> handle_subscription "you have been unsubscribed from their presence" statstring
      | Some Unavailable  -> handle_presence `Offline
   ) ;
   return_unit
