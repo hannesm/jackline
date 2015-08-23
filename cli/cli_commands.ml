@@ -727,20 +727,19 @@ let exec input state log redraw =
                    | _ -> handle_help (msg ~prefix:"argument required") (Some "smp"))
               | _ -> err "need a secure session, use /otr start first")
           | _ -> handle_help (msg ~prefix:"unknown command") None) >>=
-          function
-          | (datas, None) ->
-             let user =
-               List.fold_left
-                 (fun c d -> User.insert_message c (`Local "") false false d)
-                 contact datas
+          fun (datas, u) ->
+             let user old =
+               let u = List.fold_left
+                         (fun c d -> User.insert_message c (`Local "") false false d)
+                         old datas
+               in
+               User.replace_user state.users u ;
+               u
              in
-             User.replace_user state.users user ;
-             Lwt.return_unit
-          | (datas, Some x) ->
-             let user =
-               List.fold_left
-                 (fun c d -> User.insert_message c (`Local "") false false d)
-                 x datas
-             in
-             User.replace_user state.users user ;
-             Lwt_mvar.put state.user_mvar x
+             match u with
+             | None   ->
+                ignore (user contact) ;
+                Lwt.return_unit
+             | Some x ->
+                let u = user x in
+                Lwt_mvar.put state.user_mvar u
