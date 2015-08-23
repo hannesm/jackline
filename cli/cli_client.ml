@@ -715,12 +715,8 @@ let rec loop term hist state network log =
        | 0, _ ->
           User.replace_user state.users { active with User.expand = not active.User.expand } ;
           let userlist = show_buddies state.users state.show_offline state.config.Config.jid state.active_contact state.notifications in
-          let state =
-            if find_index state.active_contact 0 userlist = 0 then
-              { state with active_contact = `Bare active.User.bare_jid }
-            else
-              state
-          in
+          if find_index state.active_contact 0 userlist = 0 then
+            state.active_contact <- `Bare active.User.bare_jid ;
           loop term hist state network log
        | _, Some '/' ->
           LTerm_history.add hist message ;
