@@ -654,7 +654,7 @@ let exec input state contact session self failure log redraw =
                if self then
                  handle_own_info contact own_session state.config_directory state.config.Config.dsa
                else
-                 handle_info contact (session state.active_contact) state.config_directory
+                 handle_info contact (session state) state.config_directory
              in
              (datas, None, None)
 
@@ -665,14 +665,14 @@ let exec input state contact session self failure log redraw =
          | ("fingerprint", None), _ ->
             let datas =
               handle_own_otr_info state.config.Config.dsa @
-                current_otr_fp (session state.active_contact)
+                current_otr_fp (session state)
             in
             (datas, None, None)
          | ("fingerprint", Some fp), _ ->
             if self then
               err "won't talk to myself"
             else
-              handle_fingerprint contact (session state.active_contact) err fp
+              handle_fingerprint contact (session state) err fp
 
          | ("authorization", _), None -> err "not connected"
          | ("authorization", None), _ -> handle_help (msg ~prefix:"argument required") (Some "authorization")
@@ -705,7 +705,7 @@ let exec input state contact session self failure log redraw =
             if self then
               (handle_own_otr_info state.config.Config.dsa, None, None)
             else
-              (handle_otr_info contact (session state.active_contact), None, None)
+              (handle_otr_info contact (session state), None, None)
 
          | ("otr", Some _), None  -> err "not connected"
          | ("otr", Some "start"), Some _ ->
@@ -713,13 +713,13 @@ let exec input state contact session self failure log redraw =
               err "do not like to talk to myself"
             else
               let cfg = otr_config contact state in
-              handle_otr_start contact (session state.active_contact) cfg state.config.Config.dsa
+              handle_otr_start contact (session state) cfg state.config.Config.dsa
 
          | ("otr", Some "stop"), Some _ ->
             if self then
               err "do not like to talk to myself"
             else
-              handle_otr_stop contact (session state.active_contact) err
+              handle_otr_stop contact (session state) err
 
          | ("otr", Some _), _ -> handle_help (msg ~prefix:"unknown argument") (Some "otr")
 
@@ -728,7 +728,7 @@ let exec input state contact session self failure log redraw =
          | ("smp", _), None -> err "not connected"
 
          | ("smp", Some a), Some _ ->
-            (match session state.active_contact with
+            (match session state with
              | Some session when User.encrypted session.User.otr ->
                 (match split_ws a with
                  | "abort", _ -> handle_smp_abort contact session

@@ -440,15 +440,8 @@ let make_prompt size time network state redraw =
         String.concat "\n" data
       in
 
-      let active, session =
-        let u = User.Users.find state.users (User.Jid.t_to_bare state.active_contact) in
-        match state.active_contact with
-          | `Full (_, r) ->
-             let u, s = User.find_or_create_session u r (otr_config u state) state.config.Config.dsa in
-             User.replace_user state.users u ;
-             (u, Some s)
-          | `Bare _ -> (u, User.active_session u)
-      in
+      let active = active state in
+      let session = session state in
       let notifications =
         List.map
           (fun id -> User.Users.find state.users (User.Jid.t_to_bare id))
@@ -695,17 +688,8 @@ let rec loop term hist state network log =
   with
     | None -> loop term hist state network log
     | Some message ->
-       let active =
-         User.find_or_create state.users state.active_contact
-       in
-       let session = function
-         | `Bare _ -> User.active_session active
-         | `Full (_, r) ->
-            let otr = otr_config active state in
-            let u, s = User.find_or_create_session active r otr state.config.Config.dsa in
-            User.replace_user state.users u ;
-            Some s
-       and failure reason =
+       let active = active state in
+       let failure reason =
          Connect.disconnect () >>= fun () ->
          log (`Local (state.active_contact, "session error"), Printexc.to_string reason) ;
          ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async (fun () ->
@@ -772,7 +756,7 @@ let rec loop term hist state network log =
                  send t jid (Some (handle_otr_out user_out)) body failure)
               out
           in
-          (match session state.active_contact, !xmpp_session with
+          (match session state, !xmpp_session with
            | Some session, Some t ->
               let ctx = session.User.otr in
               let msg =
