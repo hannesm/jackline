@@ -390,13 +390,14 @@ let status_line now user session notify log redraw fg_color width =
 
 let make_prompt size time network state redraw =
   (* network should be an event, then I wouldn't need a check here *)
-  let dump (dir, msg) =
-    Printf.sprintf "%s: %s" (Sexplib.Sexp.to_string_hum (User.sexp_of_direction dir)) msg
+  let dump (dir, _) =
+    Sexplib.Sexp.to_string_hum (User.sexp_of_direction dir)
   in
   (if state.last_status <> network then
      (dbg ("inserting state " ^ dump network ^ " was " ^ dump state.last_status) ;
       add_status state (fst network) (snd network) ;
-      state.last_status <- network) ) ;
+      state.last_status <- network ;
+      dbg "state inserted" ; ()) ) ;
 
   (* we might have gotten a connection termination - if so mark everything offline *)
   (match fst network with
@@ -550,7 +551,8 @@ type direction = Up | Down
 
 let activate_user state active =
   if state.active_contact <> active then
-    (state.last_active_contact <- state.active_contact ;
+    (dbg ("activating " ^ User.Jid.jid_to_string active) ;
+     state.last_active_contact <- state.active_contact ;
      state.active_contact      <- active ;
      state.scrollback          <- 0 ;
      state.window_mode         <- BuddyList ;
