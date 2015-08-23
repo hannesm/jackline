@@ -21,6 +21,7 @@ open Lwt
 
 type user_data = {
   log            : User.direction -> string -> unit ;
+  locallog       : string -> string -> unit ;
   remove         : User.Jid.t -> unit ;
   message        : User.Jid.t -> User.direction -> bool -> string -> unit ;
   user           : User.Jid.t -> User.user ;
@@ -45,7 +46,7 @@ let request_server_disco t =
                   feature :: acc
                 | _ -> "bla" :: acc) [] els
             in
-            t.user_data.log (`Local "disco") (String.concat ", " fs) ;
+            t.user_data.locallog "disco" (String.concat ", " fs) ;
             return_unit
           | _ ->  return_unit)
       | IQError _ -> return_unit
@@ -165,7 +166,7 @@ let validate_utf8 txt =
 let message_callback (t : user_data session_data) stanza =
   restart_keepalive t ;
   match stanza.jid_from with
-  | None -> t.user_data.log (`Local "error") "no from in stanza" ; return_unit
+  | None -> t.user_data.locallog "error" "no from in stanza" ; return_unit
   | Some jidt ->
     let jid = User.Jid.xmpp_jid_to_jid jidt in
     let msg dir enc txt =
@@ -191,7 +192,7 @@ let message_callback (t : user_data session_data) stanza =
       let from = `From jid in
       List.iter (function
           | `Established_encrypted_session ssid ->
-            msg (`Local "OTR") false ("encrypted connection established (ssid " ^ ssid ^ ")") ;
+            msg (`Local (jid, "OTR")) false ("encrypted connection established (ssid " ^ ssid ^ ")") ;
             let raw_fp = match User.otr_fingerprint ctx with Some fp -> fp | _ -> assert false in
             let verify = "verify /fingerprint [fp] over second channel" in
             let otrmsg =
@@ -202,15 +203,15 @@ let message_callback (t : user_data session_data) stanza =
               | false, 0, false -> "new unverified key! please " ^ verify
               | false, n, false -> "unverified key (used " ^ (string_of_int n) ^ " times). please " ^ verify
             in
-            msg (`Local "OTR key") false otrmsg
-          | `Warning w               -> msg (`Local "OTR warning") false w
+            msg (`Local (jid, "OTR key")) false otrmsg
+          | `Warning w               -> msg (`Local (jid, "OTR warning")) false w
           | `Received_error e        -> msg from false e
           | `Received m              -> msg from false m
           | `Received_encrypted e    -> msg from true e
-          | `SMP_awaiting_secret     -> msg (`Local "OTR SMP") false "awaiting SMP secret, answer with /smp answer [secret]"
-          | `SMP_received_question q -> msg (`Local "OTR SMP") false ("received SMP question (answer with /smp answer [secret]) " ^ q)
-          | `SMP_success             -> msg (`Local "OTR SMP") false "successfully verified!"
-          | `SMP_failure             -> msg (`Local "OTR SMP") false "failure" )
+          | `SMP_awaiting_secret     -> msg (`Local (jid, "OTR SMP")) false "awaiting SMP secret, answer with /smp answer [secret]"
+          | `SMP_received_question q -> msg (`Local (jid, "OTR SMP")) false ("received SMP question (answer with /smp answer [secret]) " ^ q)
+          | `SMP_success             -> msg (`Local (jid, "OTR SMP")) false "successfully verified!"
+          | `SMP_failure             -> msg (`Local (jid, "OTR SMP")) false "failure" )
         ret ;
       (Lwt_list.iter_s (function
           | Xml.Xmlelement ((ns_rec, "request"), _, _) when
@@ -260,9 +261,8 @@ let message_error t ?id ?jid_from ?jid_to ?lang error =
 
 let presence_callback t stanza =
   restart_keepalive t ;
-  let log = t.user_data.log in
   (match stanza.jid_from with
-   | None     -> log (`Local "error") "presence received without sending jid, ignoring"
+   | None     -> t.user_data.locallog "error" "presence received without sending jid, ignoring"
    | Some jidt ->
      let jid = User.Jid.xmpp_jid_to_jid jidt in
      let status, statstring = match stanza.content.status with
@@ -277,7 +277,7 @@ let presence_callback t stanza =
        match jid with
        | `Bare _ ->
           let info = "presence [_>" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring in
-          log (`From jid) info
+          t.user_data.log (`From jid) info
        | _ ->
           let session = t.user_data.session jid in
           let priority = match stanza.content.priority with
@@ -298,10 +298,10 @@ let presence_callback t stanza =
              let info =
                "presence changed: [" ^ old ^ ">" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring
              in
-             log (`From jid) info
+             t.user_data.log (`From jid) info
      in
      let handle_subscription txt hlp =
-       t.user_data.message jid (`Local txt) false hlp
+       t.user_data.message jid (`Local (jid, txt)) false hlp
      in
      match stanza.content.presence_type with
      | None ->
@@ -366,7 +366,7 @@ let roster_callback user item =
   _ -> None
 
 let session_callback ?priority mvar t =
-  let err txt = t.user_data.log (`Local "handling error") txt in
+  let err txt = t.user_data.locallog "handling error" txt in
 
   register_iq_request_handler t Roster.ns_roster
     (fun ev jid_from jid_to lang () ->
@@ -494,8 +494,8 @@ let resolve (hostname : string option) (port : int option) (jid_idn : string) =
 let connect ?out sockaddr myjid certname password priority authenticator user_data mvar =
   debug_out := out ;
 
-  let err_log msg = user_data.log (`Local "error") msg
-  and info info data = user_data.log (`Local info) data
+  let err_log msg = user_data.locallog "error" msg
+  and info info data = user_data.locallog info data
   in
 
   (try_lwt PlainSocket.open_connection sockaddr >>= fun s -> return (Some s)

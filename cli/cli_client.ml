@@ -164,8 +164,8 @@ let format_log log =
     let time = print_time ~now timestamp in
     let from = match direction with
       | `From jid -> User.Jid.jid_to_string jid ^ ":"
-      | `Local x when x = "" -> "***"
-      | `Local x -> "*** " ^ x ^ " ***"
+      | `Local (_, x) when x = "" -> "***"
+      | `Local (_, x) -> "*** " ^ x ^ " ***"
       | `To _ -> ">>>"
     in
     time ^ from ^ " " ^ message
@@ -240,19 +240,23 @@ let format_messages jid msgs =
     let pre = match direction with
       | `From _ -> "<" ^ en ^ "- "
       | `To _   -> (if received then "-" else "?") ^ en ^ "> "
-      | `Local x when x = "" -> "*** "
-      | `Local x -> "***" ^ x ^ "*** "
+      | `Local (_, x) when x = "" -> "*** "
+      | `Local (_, x) -> "***" ^ x ^ "*** "
     in
     time ^ pre ^ message
   in
-  let jid_tst = User.Jid.jid_matches jid in
+  let jid_tst o =
+    match jid with
+    | `Bare _ -> User.Jid.jid_matches jid o
+    | `Full _ -> User.Jid.jid_matches o jid
+  in
   List.map printmsg
     (List.filter (fun m ->
        match m.User.direction with
        | `From fjid when jid_tst fjid -> true
-       | `From _ -> false
-       | `To _ -> true
-       | `Local _ -> true)
+       | `To (tjid, _) when jid_tst tjid -> true
+       | `Local (ljid, _) when jid_tst ljid -> true
+       | _ -> false)
        msgs)
 
 let buddy_list users show_offline self active notifications length width =
@@ -391,7 +395,7 @@ let make_prompt size time network state redraw =
 
   (* we might have gotten a connection termination - if so mark everything offline *)
   (match fst network with
-   | `Local err ->
+   | `Local (_, err) ->
      let err_prefix = try String.sub err 0 11 with Invalid_argument _ -> "" in
      ( match err_prefix, !xmpp_session with
        | (x, None) when x = "async error" || x = "session err" ->
@@ -696,25 +700,25 @@ let rec loop term hist state network log =
          end
     | Some message when String.length message > 0 ->
        LTerm_history.add hist message ;
-       let err data = log (`Local "error", data) ; return_unit in
+       let err data = log (`Local (state.active_contact, "error"), data) ; return_unit in
        let handle_otr_out user_out =
          let add_msg direction enc data =
            User.add_message state.users state.active_contact direction enc false data
          in
          match user_out with
-          | `Warning msg      -> add_msg (`Local "OTR Warning") false msg ; ""
+          | `Warning msg      -> add_msg (`Local (state.active_contact, "OTR Warning")) false msg ; ""
           | `Sent m           ->
             let id = random_string () in
-            add_msg (`To id) false m ;
+            add_msg (`To (state.active_contact, id)) false m ;
             id
           | `Sent_encrypted m ->
             let id = random_string () in
-            add_msg (`To id) true (Escape.unescape m) ;
+            add_msg (`To (state.active_contact, id)) true (Escape.unescape m) ;
             id
        in
        let failure reason =
          Connect.disconnect () >|= fun () ->
-         log (`Local "session error", Printexc.to_string reason) ;
+         log (`Local (state.active_contact, "session error"), Printexc.to_string reason) ;
        in
        let contact, session =
          let u = User.Users.find state.users (User.Jid.t_to_bare state.active_contact) in
@@ -771,11 +775,12 @@ let rec loop term hist state network log =
        loop term hist state network log
     | None -> loop term hist state network log
 
-let init_system log domain connect_mvar =
+let init_system log myjid connect_mvar =
+  let domain = snd (fst myjid) in
   let err m =
     Lwt.async (fun () ->
       Connect.disconnect () >|= fun () ->
-      log (`Local "async error", m) ;
+      log (`Local (`Full myjid, "async error"), m) ;
       ignore (Lwt_engine.on_timer 10. false (fun _ ->
                 Lwt.async (fun () -> Lwt_mvar.put connect_mvar Reconnect))))
   in

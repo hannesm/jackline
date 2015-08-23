@@ -160,7 +160,11 @@ let handle_connect state log redraw failure =
     if User.Jid.jid_matches (`Bare bare) state.last_active_contact then
       state.last_active_contact <- `Full state.config.Config.jid ;
     redraw ()
-  and log dir txt = log (dir, txt)
+  and log dir txt =
+    log (dir, txt)
+  and locallog str txt =
+    let d = `Local (state.active_contact, str) in
+    log (d, txt)
   and message jid dir enc txt =
     User.add_message state.users jid dir enc true txt ;
     notify state jid ;
@@ -202,6 +206,7 @@ let handle_connect state log redraw failure =
   in
   let (user_data : Xmpp_callbacks.user_data) = {
       Xmpp_callbacks.log ;
+      locallog ;
       remove ;
       message ;
       user ;
@@ -573,15 +578,15 @@ let adjust_otr_policy default_cfg cfg contact data =
   with
     _ -> (["unable to parse argument"], None, None)
 
-let tell_user (log:(User.direction * string) -> unit) ?(prefix:string option) (from:string) (msg:string) =
+let tell_user (log:(User.direction * string) -> unit) jid ?(prefix:string option) (from:string) (msg:string) =
   let f = match prefix with
     | None -> from
     | Some x -> x ^ "; " ^ from
   in
-  log (`Local f, msg)
+  log (`Local (jid, f), msg)
 
 let exec input state log redraw =
-  let msg = tell_user log in
+  let msg = tell_user log state.active_contact in
   let err = msg "error" in
   let failure reason =
     Connect.disconnect () >|= fun () ->
@@ -752,7 +757,7 @@ let exec input state log redraw =
 
         let user old =
           let u = List.fold_left
-                    (fun c d -> User.insert_message c (`Local "") false false d)
+                    (fun c d -> User.insert_message c (`Local (state.active_contact, "")) false false d)
                     old datas
           in
           User.replace_user state.users u ;

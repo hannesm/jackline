@@ -141,6 +141,7 @@ let load_user_dir cfgdir users =
         | Some x ->
            let message_history =
              User.load_history
+               (`Bare x.User.bare_jid)
                (Filename.concat hist_dir (User.jid x))
                x.User.preserve_messages
            in

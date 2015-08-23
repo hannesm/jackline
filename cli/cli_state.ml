@@ -125,7 +125,7 @@ module Connect = struct
            Unix.string_of_inet_addr inet_addr ^ " on port " ^ string_of_int port
         | Unix.ADDR_UNIX str -> str
       in
-      log (`Local "connecting", "to " ^ domain ^ " (" ^ addr ^ ")") ;
+      log (`Local (`Full config.Config.jid, "connecting"), "to " ^ domain ^ " (" ^ addr ^ ")") ;
     in
     Xmpp_callbacks.resolve hostname port domain >|= fun sa ->
     report sa ;
@@ -135,7 +135,7 @@ module Connect = struct
     let mvar = Lwt_mvar.create Cancel in
     let failure reason =
       disconnect () >>= fun () ->
-      log (`Local "session error", Printexc.to_string reason) ;
+      log (`Local (`Full config.Config.jid, "session error"), Printexc.to_string reason) ;
       let conn = fun () -> Lwt_mvar.put mvar Reconnect in
       ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async conn)) ;
       Lwt.return_unit
@@ -187,7 +187,7 @@ end
 
 let empty_state config_directory config users connect_mvar state_mvar =
   let user_mvar = Persistency.notify_user config_directory
-  and last_status = (`Local "", "")
+  and last_status = (`Local (`Full config.Config.jid, ""), "")
   and active = `Full config.Config.jid
   in
   {

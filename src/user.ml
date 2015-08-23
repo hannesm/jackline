@@ -290,10 +290,11 @@ type property = [
 
 type direction = [
   | `From of Jid.t
-  | `To of string (* id *)
-  | `Local of string
+  | `To of Jid.t * string (* id *)
+  | `Local of Jid.t * string
 ] with sexp
 
+(* TODO: should likely life within each session *)
 type message = {
   direction  : direction ;
   encrypted  : bool ;
@@ -334,7 +335,7 @@ let insert_message u dir enc rcvd msg =
 
 let received_message u id =
   let tst msg = match msg.direction with
-    | `To x when x = id -> true
+    | `To (_, x) when x = id -> true
     | _ -> false
   in
   try
@@ -614,13 +615,35 @@ let tr_m s =
      List (List.rev r)
   | x -> x
 
-let load_history file strict =
+let tr_1 jid s =
+  let open Sexp in
+  let tr_dir = function
+    | List [ Atom "To" ; id ] ->
+       List [ Atom "To" ; List [ Jid.sexp_of_t jid ; id ] ]
+    | List [ Atom "Local" ; data ] ->
+       List [ Atom "Local" ; List [ Jid.sexp_of_t jid ; data ] ]
+    | x -> x
+  in
+  match s with
+  | List s ->
+     let r = List.fold_left (fun acc s ->
+        let s = match s with
+          | List [ Atom "direction" ; value ] -> List [ Atom "direction" ; tr_dir value ]
+          | x -> x
+        in
+        s :: acc) [] s
+     in
+     List (List.rev r)
+  | x -> x
+
+let load_history jid file strict =
   let load_h = function
     | Sexp.List [ ver ; Sexp.List msgs ] ->
       let version = int_of_sexp ver in
       ( match version with
-        | 0 -> List.map message_of_sexp (List.map tr_m msgs)
-        | 1 -> List.map message_of_sexp msgs
+        | 0 -> List.map message_of_sexp (List.map (tr_1 jid) (List.map tr_m msgs))
+        | 1 -> List.map message_of_sexp (List.map (tr_1 jid) msgs)
+        | 2 -> List.map message_of_sexp msgs
         | _ -> Printf.printf "unknown message format" ; [] )
     | _ -> Printf.printf "parsing history failed" ; []
   in
@@ -650,6 +673,7 @@ let load_users hist_dir bytes =
                | Some u ->
                   let message_history =
                     load_history
+                      (`Bare u.bare_jid)
                       (Filename.concat hist_dir (jid u)) u.preserve_messages
                   in
                   let u = { u with message_history } in
@@ -670,7 +694,7 @@ let marshal_history user =
         user.message_history
     in
     List.iter (fun x -> x.persistent <- true) new_msgs ;
-    let hist_version = sexp_of_int 1 in
+    let hist_version = sexp_of_int 2 in
     if List.length new_msgs > 0 then
       let sexps = List.map sexp_of_message new_msgs in
       let sexp = Sexp.(List [ hist_version ; List sexps ]) in
