@@ -402,13 +402,13 @@ let make_prompt size time network state redraw =
   (match fst network with
    | `Local (_, err) ->
      let err_prefix = try String.sub err 0 11 with Invalid_argument _ -> "" in
-     ( match err_prefix, !xmpp_session with
-       | (x, None) when x = "async error" || x = "session err" ->
-          User.reset_status state.users ;
-          User.reset_receipt_requests state.users ;
-          Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Disconnected)
-       | _ -> () )
-   | _ -> () );
+     (match err_prefix, !xmpp_session with
+      | (x, None) when x = "async error" || x = "session err" ->
+         User.reset_status state.users ;
+         User.reset_receipt_requests state.users ;
+         Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Disconnected)
+      | _ -> ())
+   | _ -> ()) ;
 
   let log_size = state.log_height in
   let main_size =
