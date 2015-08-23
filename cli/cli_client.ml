@@ -64,12 +64,11 @@ let show_buddy_list users show_offline self active notifications =
           s :: acc
         else
           acc)
-        user.User.active_sessions []
+        (User.sorted_sessions user) []
     with
     | [] when really_show (`Bare id) -> [(user, [])]
     | [] -> []
-    | xs -> let sorted = List.sort User.compare_session xs in
-            [(user, sorted)]
+    | xs -> [(user, xs)]
   in
   List.sort
     (fun (x, _) (y, _) -> User.Jid.compare_bare_jid x.User.bare_jid y.User.bare_jid)

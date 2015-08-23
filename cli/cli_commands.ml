@@ -295,9 +295,9 @@ let dump_otr_fps fps =
     let ver = if fp.User.verified then "verified" else "unverified" in
     let used = string_of_int fp.User.session_count in
     let resources = String.concat ", " fp.User.resources in
-    (User.format_fp fp.User.data) ^ " " ^ ver ^ " (used in " ^ used ^ " sessions, resources: " ^ resources ^ ")"
+    "  " ^ User.format_fp fp.User.data ^ " " ^ ver ^ " (used in " ^ used ^ " sessions, resources: " ^ resources ^ ")"
   in
-  String.concat "\n" (List.map marshal_otr fps)
+  "otr fingerprints:" :: List.map marshal_otr fps
 
 let current_otr_fp session =
   Utils.option
@@ -310,21 +310,15 @@ let current_otr_fp session =
 
 let handle_otr_info user session =
   let sessions =
-    List.fold_left (fun acc s ->
+    List.map (fun s ->
       let act = match session with
         | Some x when x = s -> " (active)"
         | _ -> ""
       in
-      if User.encrypted s.User.otr then
-        let data = s.User.resource ^ act ^ ": " ^ Otr.State.session_to_string s.User.otr in
-        data :: acc
-      else
-        acc)
-      []
-      (List.sort User.compare_session user.User.active_sessions)
+      s.User.resource ^ act ^ ": " ^ Otr.State.session_to_string s.User.otr)
+      (User.sorted_sessions user)
   in
-  sessions @
-    [ "otr fingerprints: " ^ (dump_otr_fps user.User.otr_fingerprints) ]
+  sessions @ dump_otr_fps user.User.otr_fingerprints
 
 let handle_own_otr_info dsa =
   let otr_fp = Otr.Utils.own_fingerprint dsa in
@@ -377,7 +371,7 @@ let handle_info user session cfgdir =
         | _ -> "other"
       in
       act ^ ": " ^ (marshal_session s))
-      (List.sort User.compare_session user.User.active_sessions)
+      (User.sorted_sessions user)
   in
   ci @ groups @ add @ sessions
 

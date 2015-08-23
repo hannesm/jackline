@@ -493,6 +493,9 @@ let compare_session a b =
   | 0 -> compare_presence b.presence a.presence
   | x -> x
 
+let sorted_sessions user =
+  List.sort compare_session user.active_sessions
+
 let session users jid otr dsa =
   let user = find_or_create users jid
   and resource = Jid.resource jid
