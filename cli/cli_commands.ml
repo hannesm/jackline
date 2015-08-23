@@ -295,7 +295,7 @@ let dump_otr_fps fps =
     let ver = if fp.User.verified then "verified" else "unverified" in
     let used = string_of_int fp.User.session_count in
     let resources = String.concat ", " fp.User.resources in
-    "  " ^ User.format_fp fp.User.data ^ " " ^ ver ^ " (used in " ^ used ^ " sessions, resources: " ^ resources ^ ")"
+    "  " ^ ver ^ " " ^ User.format_fp fp.User.data ^ " (used in " ^ used ^ " sessions, resources: " ^ resources ^ ")"
   in
   "otr fingerprints:" :: List.map marshal_otr fps
 
@@ -312,10 +312,10 @@ let handle_otr_info user session =
   let sessions =
     List.map (fun s ->
       let act = match session with
-        | Some x when x = s -> " (active)"
+        | Some x when x = s -> "(active) "
         | _ -> ""
       in
-      s.User.resource ^ act ^ ": " ^ Otr.State.session_to_string s.User.otr)
+      act ^ s.User.resource ^ ": " ^ Otr.State.session_to_string s.User.otr)
       (User.sorted_sessions user)
   in
   sessions @ dump_otr_fps user.User.otr_fingerprints
@@ -367,10 +367,10 @@ let handle_info user session cfgdir =
   and sessions =
     List.map (fun s ->
       let act = match session with
-        | Some x when x = s -> "active"
-        | _ -> "other"
+        | Some x when x = s -> "(active) "
+        | _ -> ""
       in
-      act ^ ": " ^ (marshal_session s))
+      act ^ (marshal_session s))
       (User.sorted_sessions user)
   in
   ci @ groups @ add @ sessions
@@ -383,14 +383,14 @@ let handle_own_info user session cfgdir dsa =
     [ "own otr fingerprint: " ^ formatted ]
   and sessions =
     let active = User.active_session user in
-    List.mapi (fun i s ->
-      let own = if s = session then " (own)" else "" in
+    List.map (fun s ->
+      let own = if s = session then " (own) " else " " in
       let act =
         match active with
-        | Some x when x = s -> own ^ " (active)"
+        | Some x when x = s -> own ^ "(active) "
         | _ -> own
       in
-      "session: " ^ (string_of_int i) ^ act ^ marshal_session s)
+      act ^ marshal_session s)
       user.User.active_sessions
   in
   ci @ otr_fp @ sessions
