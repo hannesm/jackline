@@ -179,7 +179,11 @@ let format_buddies buddies self active notifications width =
       | Some s -> `Full (user.User.bare_jid, s.User.resource)
     in
     let jid_m o = User.Jid.jid_matches o jid in
-    let notify = List.exists jid_m notifications
+    let notify =
+      if expanded then
+        List.exists jid_m notifications
+      else
+        List.exists (User.Jid.jid_matches (`Bare user.User.bare_jid)) notifications
     and self = jid_m (`Bare (fst self))
     in
     let item =
@@ -243,18 +247,21 @@ let format_messages user jid msgs =
       | `Local (_, x) when x = "" -> "*** "
       | `Local (_, x) -> "***" ^ x ^ "*** "
     in
-    time ^ pre ^ message
+    let r =
+      match jid with
+      | `Bare _ ->
+         Utils.option
+           ""
+           (fun x -> "(" ^ x ^ ") ")
+           (User.Jid.resource (match direction with
+                               | `From jid -> jid
+                               | `To (jid, _) -> jid
+                               | `Local (jid, _) -> jid))
+      | `Full _ -> ""
+    in
+    time ^ r ^ pre ^ message
   in
-  (* filter out the right set of messages:
-     - if not expand, get all
-     - if expand, only those for the resource
-   *)
-  let jid_tst o =
-    if user.User.expand then
-      User.Jid.jid_matches jid o
-    else
-      true
-  in
+  let jid_tst = User.Jid.jid_matches jid in
   List.map printmsg
     (List.filter (fun m ->
        match m.User.direction with
