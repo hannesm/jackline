@@ -741,11 +741,11 @@ let rec loop term hist state network log =
           loop term hist state network log
        | _, _ ->
           LTerm_history.add hist message ;
+          let jid = state.active_contact in
           let handle_otr_out user_out =
             let add_msg direction enc data =
-              User.add_message state.users state.active_contact direction enc false data
+              User.add_message state.users jid direction enc false data
             in
-            let jid = state.active_contact in
             match user_out with
             | `Warning msg      ->
                add_msg (`Local (jid, "OTR Warning")) false msg ;
@@ -759,30 +759,32 @@ let rec loop term hist state network log =
                add_msg (`To (jid, id)) true (Escape.unescape m) ;
                id
           in
-          let maybe_send ?resource t out user_out =
+          let maybe_send t out user_out =
             Utils.option
               Lwt.return_unit
               (fun body ->
-                 let jid = match resource with
-                   | None -> `Bare active.User.bare_jid
-                   | Some r -> `Full (active.User.bare_jid, r)
-                 in
                  send t jid (Some (handle_otr_out user_out)) body failure)
               out
           in
-          (match session state, !xmpp_session with
-           | Some session, Some t ->
-              let ctx = session.User.otr in
-              let msg =
-                if Otr.State.is_encrypted ctx then
-                  Escape.escape message
-                else
-                  message
-              in
-              let ctx, out, user_out = Otr.Engine.send_otr ctx msg in
-              User.replace_session state.users active { session with User.otr = ctx } ;
-              maybe_send ~resource:session.User.resource t out user_out
-           | None        , Some t ->
+          (match jid, !xmpp_session with
+           | `Full (_, r), Some t ->
+              (match User.find_session active r with
+               | Some session ->
+                  let ctx = session.User.otr in
+                  let msg =
+                    if Otr.State.is_encrypted ctx then
+                      Escape.escape message
+                    else
+                      message
+                  in
+                  let ctx, out, user_out = Otr.Engine.send_otr ctx msg in
+                  User.replace_session state.users active { session with User.otr = ctx } ;
+                  maybe_send t out user_out
+               | None ->
+                  let ctx = Otr.State.new_session (otr_config active state) state.config.Config.dsa () in
+                  let _, out, user_out = Otr.Engine.send_otr ctx message in
+                  maybe_send t out user_out)
+           | `Bare _     , Some t ->
               let ctx = Otr.State.new_session (otr_config active state) state.config.Config.dsa () in
               let _, out, user_out = Otr.Engine.send_otr ctx message in
               maybe_send t out user_out
