@@ -721,9 +721,13 @@ let rec loop term hist state network log =
        match String.length message, fst with
        | 0, _ ->
           User.replace_user state.users { active with User.expand = not active.User.expand } ;
-          let userlist = show_buddies state.users state.show_offline state.config.Config.jid state.active_contact state.notifications in
-          if find_index state.active_contact 0 userlist = 0 then
-            state.active_contact <- `Bare active.User.bare_jid ;
+          (* transition from expanded to collapsed *)
+          if active.expand then
+            (let jid = match User.active_session active with
+               | None -> `Bare active.User.bare_jid
+               | Some s -> `Full (active.User.bare_jid, s.User.resource)
+             in
+             state.active_contact <- jid) ;
           loop term hist state network log
        | _, Some '/' ->
           LTerm_history.add hist message ;
