@@ -232,7 +232,7 @@ let format_buddies buddies self active notifications width =
     | xs -> draw (List.length xs <= 1) draw_single user (User.active_session user) :: acc)
     buddies []
 
-let format_messages jid msgs =
+let format_messages user jid msgs =
   let now = Unix.time () in
   let printmsg { User.direction ; encrypted ; received ; timestamp ; message ; _ } =
     let time = print_time ~now timestamp in
@@ -245,10 +245,15 @@ let format_messages jid msgs =
     in
     time ^ pre ^ message
   in
+  (* filter out the right set of messages:
+     - if not expand, get all
+     - if expand, only those for the resource
+   *)
   let jid_tst o =
-    match jid with
-    | `Bare _ -> User.Jid.jid_matches jid o
-    | `Full _ -> User.Jid.jid_matches o jid
+    if user.User.expand then
+      User.Jid.jid_matches jid o
+    else
+      true
   in
   List.map printmsg
     (List.filter (fun m ->
@@ -455,7 +460,7 @@ let make_prompt size time network state redraw =
           if active = self then
             format_log statusses
           else
-            format_messages state.active_contact active.User.message_history
+            format_messages active state.active_contact active.User.message_history
         in
         let scroll data =
           (* data is already in right order -- but we need to strip scrollback *)
