@@ -657,123 +657,140 @@ class read_line ~term ~network ~history ~state = object(self)
                        self#size time network redraw)
 end
 
+let quit state =
+  match !xmpp_session with
+  | None -> return_unit
+  | Some x ->
+     let otr_sessions =
+       User.Users.fold (fun _ u acc ->
+        List.fold_left (fun acc s ->
+          if User.(encrypted s.otr) then
+            (u, s) :: acc
+          else acc)
+          acc
+          u.User.active_sessions)
+       state.users []
+     in
+     let send_out (user, session) =
+       match Otr.Engine.end_otr session.User.otr with
+       | _, Some body ->
+          let jid = `Full (user.User.bare_jid, session.User.resource) in
+          send x jid None body (fun _ -> return_unit)
+       | _ -> return_unit
+     in
+     Lwt_list.iter_s send_out otr_sessions
+
+
 let rec loop term hist state network log =
   let history = LTerm_history.contents hist in
   match_lwt
     try_lwt
-      lwt command = (new read_line ~term ~history ~state ~network)#run in
+      lwt message = (new read_line ~term ~history ~state ~network)#run in
       if List.length state.notifications = 0 then
         Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) ;
-      return (Some command)
+      return (Some message)
     with
       | Sys.Break -> return None
       | LTerm_read_line.Interrupt -> return (Some "/quit")
   with
-    | Some command when String.length command > 0 && String.get command 0 = '/' ->
-       LTerm_history.add hist command ;
-       if String.trim command <> "/quit" then
-         Cli_commands.exec command state log force_redraw >>= fun () ->
-         loop term hist state network log
-       else
-         begin
-           ( match !xmpp_session with
-             | None -> return_unit
-             | Some x ->
-               let otr_sessions = User.Users.fold (fun _ u acc ->
-                   List.fold_left (fun acc s ->
-                       if User.(encrypted s.otr) then
-                         (u, s) :: acc
-                       else acc)
-                     acc
-                     u.User.active_sessions)
-                   state.users []
-               in
-               let send_out (user, session) =
-                 match Otr.Engine.end_otr session.User.otr with
-                 | _, Some body ->
-                    let jid = `Full (user.User.bare_jid, session.User.resource) in
-                    send x jid None body (fun _ -> return_unit)
-                 | _ -> return_unit
-               in
-               Lwt_list.iter_s send_out otr_sessions )
-           >|= fun () -> state
-         end
-    | Some message when String.length message > 0 ->
-       LTerm_history.add hist message ;
-       let err data = log (`Local (state.active_contact, "error"), data) ; return_unit in
-       let handle_otr_out user_out =
-         let add_msg direction enc data =
-           User.add_message state.users state.active_contact direction enc false data
-         in
-         match user_out with
-          | `Warning msg      -> add_msg (`Local (state.active_contact, "OTR Warning")) false msg ; ""
-          | `Sent m           ->
-            let id = random_string () in
-            add_msg (`To (state.active_contact, id)) false m ;
-            id
-          | `Sent_encrypted m ->
-            let id = random_string () in
-            add_msg (`To (state.active_contact, id)) true (Escape.unescape m) ;
-            id
-       in
-       let failure reason =
-         Connect.disconnect () >|= fun () ->
-         log (`Local (state.active_contact, "session error"), Printexc.to_string reason) ;
-       in
-       let contact, session =
-         let u = User.Users.find state.users (User.Jid.t_to_bare state.active_contact) in
-         match User.Jid.resource state.active_contact with
-         | None -> (u, None)
-         | Some r ->
-            let user, session =
-              User.find_or_create_session u r (otr_config u state) state.config.Config.dsa in
-            User.replace_user state.users user ;
-            (user, Some session)
-       in
-       (if User.Jid.bare_jid_equal contact.User.bare_jid (fst state.config.Config.jid) then
-          err "try `M-x doctor` in emacs instead"
-        else
-          match session, !xmpp_session with
-          | Some session, Some t ->
-             let ctx = session.User.otr in
-             let msg =
-               if Otr.State.is_encrypted ctx then
-                 Escape.escape message
-               else
-                 message
-             in
-             let ctx, out, user_out = Otr.Engine.send_otr ctx msg in
-             User.replace_session state.users contact { session with User.otr = ctx } ;
-             let id = handle_otr_out user_out in
-             (match out with
-              | Some body ->
-                 let jid = `Full (contact.User.bare_jid, session.User.resource) in
-                 send t jid (Some id) body failure
-              | None -> return_unit)
-          | None        , Some t ->
-             let ctx = Otr.State.new_session (otr_config contact state) state.config.Config.dsa () in
-             let _, out, user_out = Otr.Engine.send_otr ctx message in
-             let id = handle_otr_out user_out in
-             (match out with
-              | Some body ->
-                 let jid = `Bare contact.User.bare_jid in
-                 send t jid (Some id) body failure
-              | None -> return_unit)
-          | _           , None ->
-             err "no active session, try to connect first") >>= fun () ->
-       loop term hist state network log
-    | Some _ ->
-       let active = User.find_or_create state.users state.active_contact in
-       User.replace_user state.users { active with User.expand = not active.User.expand } ;
-       let userlist = show_buddies state.users state.show_offline state.config.Config.jid state.active_contact state.notifications in
-       let state =
-         if find_index state.active_contact 0 userlist = 0 then
-           { state with active_contact = `Bare active.User.bare_jid }
-         else
-           state
-       in
-       loop term hist state network log
     | None -> loop term hist state network log
+    | Some message ->
+       let active =
+         User.find_or_create state.users state.active_contact
+       in
+       let session = function
+         | `Bare _ -> User.active_session active
+         | `Full (_, r) ->
+            let otr = otr_config active state in
+            let u, s = User.find_or_create_session active r otr state.config.Config.dsa in
+            User.replace_user state.users u ;
+            Some s
+       and failure reason =
+         Connect.disconnect () >>= fun () ->
+         log (`Local (state.active_contact, "session error"), Printexc.to_string reason) ;
+         ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async (fun () ->
+                   Lwt_mvar.put state.connect_mvar Reconnect))) ;
+         Lwt.return_unit
+       and self = User.Jid.jid_matches (`Bare active.User.bare_jid) (`Full state.config.Config.jid)
+       and err data = log (`Local (state.active_contact, "error"), data) ; return_unit
+       in
+       let fst =
+         if String.length message = 0 then
+           None
+         else
+           Some (String.get message 0)
+       in
+       match String.length message, fst with
+       | 0, _ ->
+          User.replace_user state.users { active with User.expand = not active.User.expand } ;
+          let userlist = show_buddies state.users state.show_offline state.config.Config.jid state.active_contact state.notifications in
+          let state =
+            if find_index state.active_contact 0 userlist = 0 then
+              { state with active_contact = `Bare active.User.bare_jid }
+            else
+              state
+          in
+          loop term hist state network log
+       | _, Some '/' ->
+          LTerm_history.add hist message ;
+          if String.trim message = "/quit" then
+            quit state >|= fun () -> state
+          else
+            Cli_commands.exec message state active session self failure log force_redraw >>= fun () ->
+            loop term hist state network log
+       | _, _ when self ->
+          err "try `M-x doctor` in emacs instead" >>= fun () ->
+          loop term hist state network log
+       | _, _ ->
+          LTerm_history.add hist message ;
+          let handle_otr_out user_out =
+            let add_msg direction enc data =
+              User.add_message state.users state.active_contact direction enc false data
+            in
+            let jid = state.active_contact in
+            match user_out with
+            | `Warning msg      ->
+               add_msg (`Local (jid, "OTR Warning")) false msg ;
+               ""
+            | `Sent m           ->
+               let id = random_string () in
+               add_msg (`To (jid, id)) false m ;
+               id
+            | `Sent_encrypted m ->
+               let id = random_string () in
+               add_msg (`To (jid, id)) true (Escape.unescape m) ;
+               id
+          in
+          let maybe_send ?resource t out user_out =
+            Utils.option
+              Lwt.return_unit
+              (fun body ->
+                 let jid = match resource with
+                   | None -> `Bare active.User.bare_jid
+                   | Some r -> `Full (active.User.bare_jid, r)
+                 in
+                 send t jid (Some (handle_otr_out user_out)) body failure)
+              out
+          in
+          (match session state.active_contact, !xmpp_session with
+           | Some session, Some t ->
+              let ctx = session.User.otr in
+              let msg =
+                if Otr.State.is_encrypted ctx then
+                  Escape.escape message
+                else
+                  message
+              in
+              let ctx, out, user_out = Otr.Engine.send_otr ctx msg in
+              User.replace_session state.users active { session with User.otr = ctx } ;
+              maybe_send ~resource:session.User.resource t out user_out
+           | None        , Some t ->
+              let ctx = Otr.State.new_session (otr_config active state) state.config.Config.dsa () in
+              let _, out, user_out = Otr.Engine.send_otr ctx message in
+              maybe_send t out user_out
+           | _           , None ->
+              err "no active session, try to connect first") >>= fun () ->
+          loop term hist state network log
 
 let init_system log myjid connect_mvar =
   let domain = snd (fst myjid) in

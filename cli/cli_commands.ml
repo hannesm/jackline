@@ -585,14 +585,9 @@ let tell_user (log:(User.direction * string) -> unit) jid ?(prefix:string option
   in
   log (`Local (jid, f), msg)
 
-let exec input state log redraw =
+let exec input state contact session self failure log redraw =
   let msg = tell_user log state.active_contact in
   let err = msg "error" in
-  let failure reason =
-    Connect.disconnect () >|= fun () ->
-    msg "session error" (Printexc.to_string reason) ;
-    ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async (fun () -> Lwt_mvar.put state.connect_mvar Reconnect)))
-  in
   let own_session =
     let id, resource = state.config.Config.jid in
     match User.find_session (User.find_or_create state.users (`Bare id)) resource with
@@ -638,17 +633,6 @@ let exec input state log redraw =
 
      (* commands using active_contact as context *)
      | other, s ->
-        let contact, session =
-          let u = User.Users.find state.users (User.Jid.t_to_bare state.active_contact) in
-          match User.Jid.resource state.active_contact with
-          | None -> (u, None)
-          | Some r ->
-             let user, session =
-               User.find_or_create_session u r (otr_config u state) state.config.Config.dsa in
-             User.replace_user state.users user ;
-             (user, Some session)
-        in
-        let self = User.Jid.jid_matches (`Bare contact.User.bare_jid) (`Full state.config.Config.jid) in
         let err str =
           msg "error" str ; ([], None, None)
         in
@@ -670,7 +654,7 @@ let exec input state log redraw =
                if self then
                  handle_own_info contact own_session state.config_directory state.config.Config.dsa
                else
-                 handle_info contact session state.config_directory
+                 handle_info contact (session state.active_contact) state.config_directory
              in
              (datas, None, None)
 
@@ -681,14 +665,14 @@ let exec input state log redraw =
          | ("fingerprint", None), _ ->
             let datas =
               handle_own_otr_info state.config.Config.dsa @
-                current_otr_fp session
+                current_otr_fp (session state.active_contact)
             in
             (datas, None, None)
          | ("fingerprint", Some fp), _ ->
             if self then
               err "won't talk to myself"
             else
-              handle_fingerprint contact session err fp
+              handle_fingerprint contact (session state.active_contact) err fp
 
          | ("authorization", _), None -> err "not connected"
          | ("authorization", None), _ -> handle_help (msg ~prefix:"argument required") (Some "authorization")
@@ -719,9 +703,9 @@ let exec input state log redraw =
             handle_help (msg ~prefix:"argument required") (Some "otr")
          | ("otr", Some "info"), _  ->
             if self then
-              handle_own_otr_info state.config.Config.dsa, None, None
+              (handle_own_otr_info state.config.Config.dsa, None, None)
             else
-              handle_otr_info contact session, None, None
+              (handle_otr_info contact (session state.active_contact), None, None)
 
          | ("otr", Some _), None  -> err "not connected"
          | ("otr", Some "start"), Some _ ->
@@ -729,13 +713,13 @@ let exec input state log redraw =
               err "do not like to talk to myself"
             else
               let cfg = otr_config contact state in
-              handle_otr_start contact session cfg state.config.Config.dsa
+              handle_otr_start contact (session state.active_contact) cfg state.config.Config.dsa
 
          | ("otr", Some "stop"), Some _ ->
             if self then
               err "do not like to talk to myself"
             else
-              handle_otr_stop contact session err
+              handle_otr_stop contact (session state.active_contact) err
 
          | ("otr", Some _), _ -> handle_help (msg ~prefix:"unknown argument") (Some "otr")
 
@@ -744,7 +728,7 @@ let exec input state log redraw =
          | ("smp", _), None -> err "not connected"
 
          | ("smp", Some a), Some _ ->
-            (match session with
+            (match session state.active_contact with
              | Some session when User.encrypted session.User.otr ->
                 (match split_ws a with
                  | "abort", _ -> handle_smp_abort contact session
