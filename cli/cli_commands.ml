@@ -268,8 +268,7 @@ let handle_fingerprint user session err fp =
         | Some key when User.hex_fingerprint key = manual_fp ->
            let otr_fp = User.find_raw_fp user manual_fp in
            let user = User.replace_fp user { otr_fp with User.verified = true } in
-           return (["fingerprint " ^ fp ^ " is now marked verified"],
-                   Some user, None)
+           (["fingerprint " ^ fp ^ " is now marked verified"], Some user, None)
         | _ -> err "provided fingerprint does not match the one of this active session")
      else
        err "no active OTR session")
@@ -429,7 +428,7 @@ let handle_otr_stop user session err =
          in
          ([ "finished OTR session" ], Some clos)
     in
-    return (datas, Some user, clos)
+    (datas, Some user, clos)
   | Some _ -> err "no active encrypted session"
 
 let handle_smp_abort user session =
@@ -565,11 +564,11 @@ let adjust_otr_policy default_cfg cfg contact data =
         | Some x -> print_otr_policy x
       in
       let user = { contact with User.otr_custom_config = cfg ; active_sessions } in
-      return (datas, Some user, None)
+      (datas, Some user, None)
     else
-      return (["nothing changed"], None, None)
+      (["nothing changed"], None, None)
   with
-    _ -> return (["unable to parse argument"], None, None)
+    _ -> (["unable to parse argument"], None, None)
 
 let tell_user (log:(User.direction * string) -> unit) ?(prefix:string option) (from:string) (msg:string) =
   let f = match prefix with
@@ -643,40 +642,40 @@ let exec input state log redraw =
         in
         let self = User.Jid.jid_matches (`Bare contact.User.bare_jid) (`Full state.config.Config.jid) in
         let err str =
-          msg "error" str ; return ([], None, None)
+          msg "error" str ; ([], None, None)
         in
         let handle_help msg arg =
-          handle_help msg arg ; return ([], None, None)
+          handle_help msg arg ; ([], None, None)
         in
 
-        (match other, s with
-         | ("clear", _), _ ->
-            return ([], Some { contact with User.message_history = [] }, None)
+        let datas, u, clos = match other, s with
+          | ("clear", _), _ ->
+             ([], Some { contact with User.message_history = [] }, None)
 
-         | ("log", None), _ -> handle_help (msg ~prefix:"argument required") (Some "log")
-         | ("log", Some a), _ when a = "on"  -> return (handle_log contact true a)
-         | ("log", Some a), _ when a = "off" -> return (handle_log contact false a)
-         | ("log", Some _), _ -> handle_help (msg ~prefix:"unknown argument") (Some "log")
+          | ("log", None), _ -> handle_help (msg ~prefix:"argument required") (Some "log")
+          | ("log", Some a), _ when a = "on"  -> handle_log contact true a
+          | ("log", Some a), _ when a = "off" -> handle_log contact false a
+          | ("log", Some _), _ -> handle_help (msg ~prefix:"unknown argument") (Some "log")
 
-         | ("info", _), _ ->
-            let datas =
-              if self then
-                handle_own_info contact state.config_directory state.config.Config.dsa (snd state.config.Config.jid)
-              else
-                handle_info contact state.config_directory
-            in
-            return (datas, None, None)
+          | ("info", _), _ ->
+             let datas =
+               if self then
+                 handle_own_info contact state.config_directory state.config.Config.dsa (snd state.config.Config.jid)
+               else
+                 handle_info contact state.config_directory
+             in
+             (datas, None, None)
 
          | ("remove", _), None -> err "not connected"
          | ("remove", _), Some _ -> let clos = handle_remove contact in
-                                    return ([], None, Some clos)
+                                    ([], None, Some clos)
 
          | ("fingerprint", None), _ ->
             let datas =
               handle_own_otr_info state.config.Config.dsa @
                 current_otr_fp session
             in
-            return (datas, None, None)
+            (datas, None, None)
          | ("fingerprint", Some fp), _ ->
             if self then
               err "won't talk to myself"
@@ -698,11 +697,11 @@ let exec input state log redraw =
                        Xmpp_callbacks.XMPPClient.send_presence s ~jid_to ~kind ()
                      with e -> failure e)
                   in
-                  return ([m], None, Some clos))
+                  ([m], None, Some clos))
 
          | ("otrpolicy", None), _ ->
             let cfg = otr_config contact state in
-            return (print_otr_policy cfg, None, None)
+            (print_otr_policy cfg, None, None)
          | ("otrpolicy", Some _), _ when self -> err "cannot adjust own otr policy"
          | ("otrpolicy", Some z), _ ->
             let cfg = otr_config contact state in
@@ -712,57 +711,58 @@ let exec input state log redraw =
             handle_help (msg ~prefix:"argument required") (Some "otr")
          | ("otr", Some "info"), _  ->
             if self then
-              return (handle_own_otr_info state.config.Config.dsa, None, None)
+              handle_own_otr_info state.config.Config.dsa, None, None
             else
-              return (handle_otr_info contact session, None, None)
+              handle_otr_info contact session, None, None
 
-          | ("otr", Some _), None  -> err "not connected"
-          | ("otr", Some "start"), Some _ ->
-             if self then
-               err "do not like to talk to myself"
-             else
-               let cfg = otr_config contact state in
-               return (handle_otr_start contact session cfg state.config.Config.dsa)
+         | ("otr", Some _), None  -> err "not connected"
+         | ("otr", Some "start"), Some _ ->
+            if self then
+              err "do not like to talk to myself"
+            else
+              let cfg = otr_config contact state in
+              handle_otr_start contact session cfg state.config.Config.dsa
 
-          | ("otr", Some "stop"), Some _ ->
-             if self then
-               err "do not like to talk to myself"
-             else
-               handle_otr_stop contact session err
+         | ("otr", Some "stop"), Some _ ->
+            if self then
+              err "do not like to talk to myself"
+            else
+              handle_otr_stop contact session err
 
-          | ("otr", Some _), _ -> handle_help (msg ~prefix:"unknown argument") (Some "otr")
+         | ("otr", Some _), _ -> handle_help (msg ~prefix:"unknown argument") (Some "otr")
 
-          | ("smp", _), _ when self -> err "do not like to talk to myself"
-          | ("smp", None), _ -> handle_help (msg ~prefix:"argument required") (Some "smp")
-          | ("smp", _), None -> err "not connected"
+         | ("smp", _), _ when self -> err "do not like to talk to myself"
+         | ("smp", None), _ -> handle_help (msg ~prefix:"argument required") (Some "smp")
+         | ("smp", _), None -> err "not connected"
 
-          | ("smp", Some a), Some _ ->
-             (match session with
-              | Some session when User.encrypted session.User.otr ->
-                 ( match split_ws a with
-                   | "abort", _ -> return (handle_smp_abort contact session)
-                   | "start", Some arg -> return (handle_smp_start contact session arg)
-                   | "answer", Some arg -> return (handle_smp_answer contact session arg)
-                   | _ -> handle_help (msg ~prefix:"argument required") (Some "smp"))
-              | _ -> err "need a secure session, use /otr start first")
-          | _ -> handle_help (msg ~prefix:"unknown command") None) >>=
-          fun (datas, u, clos) ->
-             let user old =
-               let u = List.fold_left
-                         (fun c d -> User.insert_message c (`Local "") false false d)
-                         old datas
-               in
-               User.replace_user state.users u ;
-               u
-             in
-             (match u with
-              | None   ->
-                 ignore (user contact) ;
-                 Lwt.return_unit
-              | Some x ->
-                 let u = user x in
-                 Lwt_mvar.put state.user_mvar u) >>= fun () ->
-             match clos, !xmpp_session with
-             | Some x, Some s -> x s failure
-             | Some _, None -> msg "error" "not connected" ; Lwt.return_unit
-             | None, _ -> Lwt.return_unit
+         | ("smp", Some a), Some _ ->
+            (match session with
+             | Some session when User.encrypted session.User.otr ->
+                (match split_ws a with
+                 | "abort", _ -> handle_smp_abort contact session
+                 | "start", Some arg -> handle_smp_start contact session arg
+                 | "answer", Some arg -> handle_smp_answer contact session arg
+                 | _ -> handle_help (msg ~prefix:"argument required") (Some "smp"))
+             | _ -> err "need a secure session, use /otr start first")
+         | _ -> handle_help (msg ~prefix:"unknown command") None
+        in
+
+        let user old =
+          let u = List.fold_left
+                    (fun c d -> User.insert_message c (`Local "") false false d)
+                    old datas
+          in
+          User.replace_user state.users u ;
+          u
+        in
+        (match u with
+         | None   ->
+            ignore (user contact) ;
+            Lwt.return_unit
+         | Some x ->
+            let u = user x in
+            Lwt_mvar.put state.user_mvar u) >>= fun () ->
+        match clos, !xmpp_session with
+        | Some x, Some s -> x s failure
+        | Some _, None -> msg "error" "not connected" ; Lwt.return_unit
+        | None, _ -> Lwt.return_unit
