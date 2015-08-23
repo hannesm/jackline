@@ -247,3 +247,12 @@ let otr_config user state =
   match user.User.otr_custom_config with
   | None -> state.config.Config.otr_config
   | Some x -> x
+
+let active state =
+  User.Users.find state.users (User.Jid.t_to_bare state.active_contact)
+
+let session state =
+  let user = active state in
+  match state.active_contact with
+  | `Bare _ -> User.active_session user
+  | `Full (_, r) -> User.find_session user r
