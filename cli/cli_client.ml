@@ -232,10 +232,9 @@ let format_buddies buddies self active notifications width =
     | xs -> draw (List.length xs <= 1) draw_single user (User.active_session user) :: acc)
     buddies []
 
-let format_messages msgs =
-  let open User in
+let format_messages jid msgs =
   let now = Unix.time () in
-  let printmsg { direction ; encrypted ; received ; timestamp ; message ; _ } =
+  let printmsg { User.direction ; encrypted ; received ; timestamp ; message ; _ } =
     let time = print_time ~now timestamp in
     let en = if encrypted then "O" else "-" in
     let pre = match direction with
@@ -246,7 +245,15 @@ let format_messages msgs =
     in
     time ^ pre ^ message
   in
-  List.map printmsg msgs
+  let jid_tst = User.Jid.jid_matches jid in
+  List.map printmsg
+    (List.filter (fun m ->
+       match m.User.direction with
+       | `From fjid when jid_tst fjid -> true
+       | `From _ -> false
+       | `To _ -> true
+       | `Local _ -> true)
+       msgs)
 
 let buddy_list users show_offline self active notifications length width =
   let buddies = show_buddy_list users show_offline self active notifications in
@@ -429,22 +436,29 @@ let make_prompt size time network state redraw =
         String.concat "\n" data
       in
 
-      let active = User.Users.find state.users (User.Jid.t_to_bare state.active_contact) in
-      let active_session = User.active_session active in
+      let active, session =
+        let u = User.Users.find state.users (User.Jid.t_to_bare state.active_contact) in
+        match state.active_contact with
+          | `Full (_, r) ->
+             let u, s = User.find_or_create_session u r (otr_config u state) state.config.Config.dsa in
+             User.replace_user state.users u ;
+             (u, Some s)
+          | `Bare _ -> (u, User.active_session u)
+      in
       let notifications =
         List.map
           (fun id -> User.Users.find state.users (User.Jid.t_to_bare id))
           state.notifications
       in
 
-      let fg_color = color_session (self = active) active_session in
+      let fg_color = color_session (self = active) session in
 
       let main_window =
         let data =
           if active = self then
             format_log statusses
           else
-            format_messages active.User.message_history
+            format_messages state.active_contact active.User.message_history
         in
         let scroll data =
           (* data is already in right order -- but we need to strip scrollback *)
@@ -486,7 +500,7 @@ let make_prompt size time network state redraw =
         | BuddyList -> true
         | FullScreen | Raw -> false
       in
-      let hline = horizontal_line active active_session fg_color buddy_width state.scrollback showing_buddies size.cols in
+      let hline = horizontal_line active session fg_color buddy_width state.scrollback showing_buddies size.cols in
 
       let notify = List.length notifications > 0 in
       let log = active.User.preserve_messages in
