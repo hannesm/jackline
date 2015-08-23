@@ -9,8 +9,6 @@ open React
 
 open Cli_state
 
-let dbg = Xmpp_connection.dbg
-
 let rec take x l acc =
   match x, l with
   | 0, _       -> List.rev acc
@@ -236,7 +234,7 @@ let format_buddies buddies self active notifications width =
     | xs -> draw (List.length xs <= 1) draw_single user (User.active_session user) :: acc)
     buddies []
 
-let format_messages user jid msgs =
+let format_messages jid msgs =
   let now = Unix.time () in
   let printmsg { User.direction ; encrypted ; received ; timestamp ; message ; _ } =
     let time = print_time ~now timestamp in
@@ -397,14 +395,9 @@ let status_line now user session notify log redraw fg_color width =
 
 let make_prompt size time network state redraw =
   (* network should be an event, then I wouldn't need a check here *)
-  let dump (dir, _) =
-    Sexplib.Sexp.to_string_hum (User.sexp_of_direction dir)
-  in
   (if state.last_status <> network then
-     (dbg ("inserting state " ^ dump network ^ " was " ^ dump state.last_status) ;
-      add_status state (fst network) (snd network) ;
-      state.last_status <- network ;
-      dbg "state inserted" ; ()) ) ;
+     (add_status state (fst network) (snd network) ;
+      state.last_status <- network)) ;
 
   (* we might have gotten a connection termination - if so mark everything offline *)
   (match fst network with
@@ -468,7 +461,7 @@ let make_prompt size time network state redraw =
           if active = self then
             format_log statusses
           else
-            format_messages active state.active_contact active.User.message_history
+            format_messages state.active_contact active.User.message_history
         in
         let scroll data =
           (* data is already in right order -- but we need to strip scrollback *)
@@ -558,8 +551,7 @@ type direction = Up | Down
 
 let activate_user state active =
   if state.active_contact <> active then
-    (dbg ("activating " ^ User.Jid.jid_to_string active) ;
-     state.last_active_contact <- state.active_contact ;
+    (state.last_active_contact <- state.active_contact ;
      state.active_contact      <- active ;
      state.scrollback          <- 0 ;
      state.window_mode         <- BuddyList ;
@@ -722,7 +714,7 @@ let rec loop term hist state network log =
        | 0, _ ->
           User.replace_user state.users { active with User.expand = not active.User.expand } ;
           (* transition from expanded to collapsed *)
-          if active.expand then
+          if active.User.expand then
             (let jid = match User.active_session active with
                | None -> `Bare active.User.bare_jid
                | Some s -> `Full (active.User.bare_jid, s.User.resource)
