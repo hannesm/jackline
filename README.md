@@ -90,7 +90,7 @@ directory by using the `-f` command line argument.  Next to the
 configuration, there is a file containing your `password` (unless you
 decided to enter it on every start of jackline), a `otr_dsa.sexp`
 containing your OTR key, a `users` directory with a file for each
-buddy (OTR fingerprints, custom OTR policies, ...).
+contact (OTR fingerprints, custom OTR policies, ...).
 
 ### Using jackline
 
@@ -106,11 +106,17 @@ uses curly braces `{` and `}` and has initial focus.
 
 The presence is indicated by a single character (o = online, f = free,
 a = away, d = do not disturb, x = extended away, _ = offline).  The
-focussed contact reverses foreground and background color.  Blinking
-(and prepended `*`) of a contact indicates that a new message arrived
-(also, a blue # on the left bottom appears).
+focussed contact has reversed foreground and background color in the
+contact list.  Multiple active sessions are indicated by `+` (expand
+and collapse are done by `enter` (with empty input)).
 
-A message is sent to the active contact by typing it followed by `return`.
+When a new message is received, this is indicated by blinking of the
+contact, a prepended `*` (or `☀` in case of collapsed contact), a blue
+`#` in the bottom left corner, execution of `notification_callback`,
+and modification of `notification.state`.
+
+A message is sent to the active contact by typing it followed by
+`return`.
 
 In the chat window, each message is prefixed with 3 characters:
 - `***` is a local message.
@@ -127,7 +133,7 @@ Active keys:
 - `Ctrl-x` jumps to last active user
 - `F5` toggles display of offline contacts
 - `F12` toggles between display of contact list, full screen chat, and raw (only received messages)
-- `F11` and `Shift-F11` increases and decreases width of buddy list
+- `F11` and `Shift-F11` increases and decreases width of contact list
 - `F10` and `Shift-F10` increases and decreases height of log window
 - `Ctrl-PgUp`, `Ctrl-PgDown` scrolls chat window
 - `<tab>` tab completion (largest prefix)
