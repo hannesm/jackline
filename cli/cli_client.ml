@@ -34,37 +34,61 @@ let pad_l neutral len xs =
   List.rev (pad_l_rev neutral len (List.rev xs))
 
 let pad x s =
-  match x - (String.length s) with
+  match x - (Zed_utf8.length s) with
   | 0                  -> s
   | d when d > 0       -> s ^ (String.make d ' ')
-  | _ (* when d < 0 *) -> String.sub s 0 x
+  | _ (* when d < 0 *) -> Zed_utf8.sub s 0 x
 
 let rec find_index id i = function
   | []                                  -> 0
-  | x::_ when User.Jid.jid_matches x id -> i
+  | x::_ when User.Jid.jid_matches id x -> i
   | _::xs                               -> find_index id (succ i) xs
 
-let color_session u su = function
+let color_session self = function
   | Some x when User.(encrypted x.otr) -> green
-  | Some _ when u = su -> default
+  | Some _ when self -> default
   | Some _ -> red
   | None -> default
 
+let show_buddy_list users show_offline self active notifications =
+  let really_show jid =
+    let jid_m = User.Jid.jid_matches jid in
+    show_offline || jid_m (`Bare (fst self)) || List.exists jid_m notifications || jid_m active
+  in
+  let show id user =
+    match
+      List.fold_right (fun s acc ->
+        if s.User.presence <> `Offline || really_show (`Full (id, s.User.resource)) then
+          s :: acc
+        else
+          acc)
+        (User.sorted_sessions user) []
+    with
+    | [] when really_show (`Bare id) -> [(user, [])]
+    | [] -> []
+    | xs -> [(user, xs)]
+  in
+  List.sort
+    (fun (x, _) (y, _) -> User.Jid.compare_bare_jid x.User.bare_jid y.User.bare_jid)
+    (User.Users.fold (fun id u acc -> show id u @ acc) users [])
+
+let flatten_buddies us =
+  List.fold_right (fun (user, xs) acc ->
+    let bare = user.User.bare_jid in
+    match xs with
+    | [] -> (match User.active_session user with
+             | None -> `Bare bare
+             | Some s -> `Full (bare, s.User.resource)) :: acc
+    | [s] -> `Full (bare, s.User.resource) :: acc
+    | xs when user.User.expand ->
+       `Bare bare :: (List.map (fun s -> `Full (bare, s.User.resource)) xs) @ acc
+    | _ -> (match User.active_session user with
+            | None -> `Bare bare
+            | Some s -> `Full (bare, s.User.resource)) :: acc)
+    us []
+
 let show_buddies users show_offline self active notifications =
-  List.fold_right (fun id acc ->
-      let u = User.Users.find users id in
-      let session = User.active_session u in
-      let presence = match session with
-        | None -> `Offline
-        | Some s -> s.User.presence
-      in
-      let rly_show = u = self || u = active || List.mem u notifications in
-      match rly_show, show_offline, presence with
-      | true,  _    , _        -> `Bare id :: acc
-      | false, true , _        -> `Bare id :: acc
-      | false, false, `Offline -> acc
-      | false, false, _        -> `Bare id :: acc)
-    (User.keys users) []
+  flatten_buddies (show_buddy_list users show_offline self active notifications)
 
 let rec line_wrap ?raw ~max_length entries acc : string list =
   let pre = match raw with
@@ -138,72 +162,121 @@ let format_log log =
     let time = print_time ~now timestamp in
     let from = match direction with
       | `From jid -> User.Jid.jid_to_string jid ^ ":"
-      | `Local x when x = "" -> "***"
-      | `Local x -> "*** " ^ x ^ " ***"
+      | `Local (_, x) when x = "" -> "***"
+      | `Local (_, x) -> "*** " ^ x ^ " ***"
       | `To _ -> ">>>"
     in
     time ^ from ^ " " ^ message
   in
   List.map print_log log
 
-let format_buddies buddies users self active notifications width =
-  List.map (fun (`Bare id) ->
-      let u = User.Users.find users id in
-      let session = User.active_session u in
-      let presence = match session with
-        | None -> `Offline
-        | Some s -> s.User.presence
-      in
-      let fg = color_session u self session in
-      let highlight, e_highlight = if u = active then
-          ([ B_reverse true ], [ E_reverse ])
-        else
-          ([], [])
-      in
-      let f, t =
-        if u = self then
-          ("{", "}")
-        else
-          User.subscription_to_chars u.User.subscription
-      in
-      let notify = List.mem u notifications in
-      let item =
-        let data = Printf.sprintf "%s%s%s%s %s"
-            (if notify then "*" else " ")
-            f (User.presence_to_char presence) t (User.Jid.bare_jid_to_string id)
-        in
-        pad width data
-      in
-      let show = highlight @ [B_fg fg ; S item ; E_fg ] @ e_highlight in
-      if notify then
-        B_blink true :: show @ [ E_blink ]
+let format_buddies buddies self active notifications width =
+  let draw expanded print user session =
+    let jid = match session with
+      | None -> `Bare user.User.bare_jid
+      | Some s -> `Full (user.User.bare_jid, s.User.resource)
+    in
+    let jid_m o = User.Jid.jid_matches o jid in
+    let notify =
+      if expanded then
+        List.exists jid_m notifications
       else
-        show)
-    buddies
+        List.exists (User.Jid.jid_matches (`Bare user.User.bare_jid)) notifications
+    and self = jid_m (`Bare (fst self))
+    in
+    let item =
+      let f, t = if self then
+                   ("{", "}")
+                 else
+                   User.subscription_to_chars user.User.subscription
+      and st = match notify, expanded with
+        | true , true  -> "*"
+        | false, false -> "+"
+        | true , false -> Zed_utf8.singleton (UChar.of_int 0x2600)
+        | false, true  -> " "
+      and presence =
+        let p = match session with
+          | None -> `Offline
+          | Some s -> s.User.presence
+        in
+        User.presence_to_char p
+      and bare = User.Jid.t_to_bare jid
+      in
+      let data = print st f presence t (User.Jid.bare_jid_to_string bare) (User.Jid.resource jid) in
+      pad width data
+    and highlight, e_highlight =
+      if jid = active || (not user.User.expand && jid_m active) then
+        ([ B_reverse true ], [ E_reverse ])
+      else
+        ([], [])
+    and fg = color_session self session
+    in
+    let show = highlight @ [B_fg fg ; S item ; E_fg ] @ e_highlight in
+    if notify then
+      B_blink true :: show @ [ E_blink ]
+    else
+      show
+  in
+  let draw_single st f p t jid r = Printf.sprintf "%s%s%s%s %s%s" st f p t jid (match r with None -> "" | Some r -> "/" ^ r)
+  and draw_user st f _ t jid _ = Printf.sprintf "%s%s %s %s" st f t jid
+  and draw_session st _ p _ _ r = Printf.sprintf " %s%s   %s" st p (match r with None -> "NONE" | Some r -> r)
+  in
 
-let format_messages msgs =
-  let open User in
+  List.fold_right (fun (user, sessions) acc ->
+    match sessions with
+    | [] -> draw true draw_single user (User.active_session user) :: acc
+    | [s] -> draw true draw_single user (Some s) :: acc
+    | xs when user.User.expand ->
+       draw true draw_user user None ::
+         List.map (draw true draw_session user)
+           (List.map (fun s -> Some s) xs) @
+         acc
+    | xs -> draw (List.length xs <= 1) draw_single user (User.active_session user) :: acc)
+    buddies []
+
+let format_messages jid msgs =
   let now = Unix.time () in
-  let printmsg { direction ; encrypted ; received ; timestamp ; message ; _ } =
+  let printmsg { User.direction ; encrypted ; received ; timestamp ; message ; _ } =
     let time = print_time ~now timestamp in
     let en = if encrypted then "O" else "-" in
     let pre = match direction with
       | `From _ -> "<" ^ en ^ "- "
       | `To _   -> (if received then "-" else "?") ^ en ^ "> "
-      | `Local x when x = "" -> "*** "
-      | `Local x -> "***" ^ x ^ "*** "
+      | `Local (_, x) when x = "" -> "*** "
+      | `Local (_, x) -> "***" ^ x ^ "*** "
     in
-    time ^ pre ^ message
+    let r =
+      match jid with
+      | `Bare _ ->
+         Utils.option
+           ""
+           (fun x -> "(" ^ x ^ ") ")
+           (User.Jid.resource (match direction with
+                               | `From jid -> jid
+                               | `To (jid, _) -> jid
+                               | `Local (jid, _) -> jid))
+      | `Full _ -> ""
+    in
+    time ^ r ^ pre ^ message
   in
-  List.map printmsg msgs
+  let jid_tst = User.Jid.jid_matches jid in
+  List.map printmsg
+    (List.filter (fun m ->
+       match m.User.direction with
+       | `From fjid when jid_tst fjid -> true
+       | `To (tjid, _) when jid_tst tjid -> true
+       | `Local (ljid, _) when jid_tst ljid -> true
+       | _ -> false)
+       msgs)
 
 let buddy_list users show_offline self active notifications length width =
-  let buddies = show_buddies users show_offline self active notifications in
-  let formatted_buddies = format_buddies buddies users self active notifications width in
+  let buddies = show_buddy_list users show_offline self active notifications in
+  let formatted_buddies = format_buddies buddies self active notifications width in
 
-  let bs = List.length buddies
+  let flattened = flatten_buddies buddies in
+  let bs = List.length flattened
   and up, down = (length / 2, (length + 1) / 2)
-  and active_idx = find_index (`Bare active.User.bare_jid) 0 buddies
+  and active_idx = find_index active 0 flattened
   in
   match length >= bs with
   | true  -> let pad = [ S (String.make width ' ') ] in
@@ -230,11 +303,10 @@ let maybe_trim str left =
     ([], 0)
 
 let horizontal_line user session fg_color buddy_width scrollback show_buddy_list width =
-  let open User in
   let buddy, presence, status, otr, otrcolor = match session with
     | Some s ->
       let presence = User.presence_to_string s.User.presence in
-      let status = match s.status with
+      let status = match s.User.status with
         | None   -> ""
         | Some x ->
           let stripped =
@@ -243,12 +315,12 @@ let horizontal_line user session fg_color buddy_width scrollback show_buddy_list
           in
           " - " ^ stripped
       in
-      let otrcolor, otr = match otr_fingerprint s.otr with
-        | Some raw when verified_fp user raw -> (fg_color, " - OTR verified")
-        | Some raw                           -> (red, " - unverified OTR: " ^ (User.format_fp raw))
-        | None                               -> (red, " - no OTR")
+      let otrcolor, otr = match User.otr_fingerprint s.User.otr with
+        | Some raw when User.verified_fp user raw -> (fg_color, " - OTR verified")
+        | Some raw                                -> (red, " - unverified OTR: " ^ (User.format_fp raw))
+        | None                                    -> (red, " - no OTR")
       in
-      (userid user s, " -- " ^ presence, status, otr, otrcolor)
+      (User.userid user s, " -- " ^ presence, status, otr, otrcolor)
     | None -> (User.jid user, "", "", "", default)
   in
   let pre =
@@ -325,19 +397,19 @@ let make_prompt size time network state redraw =
   (* network should be an event, then I wouldn't need a check here *)
   (if state.last_status <> network then
      (add_status state (fst network) (snd network) ;
-      state.last_status <- network) ) ;
+      state.last_status <- network)) ;
 
   (* we might have gotten a connection termination - if so mark everything offline *)
   (match fst network with
-   | `Local err ->
+   | `Local (_, err) ->
      let err_prefix = try String.sub err 0 11 with Invalid_argument _ -> "" in
-     ( match err_prefix, !xmpp_session with
-       | (x, None) when x = "async error" || x = "session err" ->
-          User.reset_status state.users ;
-          User.reset_receipt_requests state.users ;
-          Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Disconnected)
-       | _ -> () )
-   | _ -> () );
+     (match err_prefix, !xmpp_session with
+      | (x, None) when x = "async error" || x = "session err" ->
+         User.reset_status state.users ;
+         User.reset_receipt_requests state.users ;
+         Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Disconnected)
+      | _ -> ())
+   | _ -> ()) ;
 
   let log_size = state.log_height in
   let main_size =
@@ -374,22 +446,22 @@ let make_prompt size time network state redraw =
         String.concat "\n" data
       in
 
-      let active = User.Users.find state.users (User.Jid.t_to_bare state.active_contact) in
-      let active_session = User.active_session active in
+      let active = active state in
+      let session = session state in
       let notifications =
         List.map
           (fun id -> User.Users.find state.users (User.Jid.t_to_bare id))
           state.notifications
       in
 
-      let fg_color = color_session active self active_session in
+      let fg_color = color_session (self = active) session in
 
       let main_window =
         let data =
           if active = self then
             format_log statusses
           else
-            format_messages active.User.message_history
+            format_messages state.active_contact active.User.message_history
         in
         let scroll data =
           (* data is already in right order -- but we need to strip scrollback *)
@@ -402,7 +474,7 @@ let make_prompt size time network state redraw =
           let chat = line_wrap ~max_length:chat_width data [] in
           let chat = scroll chat in
 
-          let buddies = buddy_list state.users state.show_offline self active notifications main_size buddy_width in
+          let buddies = buddy_list state.users state.show_offline state.config.Config.jid state.active_contact state.notifications main_size buddy_width in
           let comb = List.combine buddies chat in
           let pipe = S (Zed_utf8.singleton (UChar.of_int 0x2502)) in
           List.map (fun (buddy, chat) ->
@@ -431,7 +503,7 @@ let make_prompt size time network state redraw =
         | BuddyList -> true
         | FullScreen | Raw -> false
       in
-      let hline = horizontal_line active active_session fg_color buddy_width state.scrollback showing_buddies size.cols in
+      let hline = horizontal_line active session fg_color buddy_width state.scrollback showing_buddies size.cols in
 
       let notify = List.length notifications > 0 in
       let log = active.User.preserve_messages in
@@ -500,11 +572,7 @@ let navigate_message_buffer state direction =
   | Up, n -> state.scrollback <- n + 1; force_redraw ()
 
 let navigate_buddy_list state direction =
-  let find u = User.Users.find state.users (User.Jid.t_to_bare u) in
-  let active = find state.active_contact in
-  let notifications = List.map find state.notifications in
-  let self = find (`Full state.config.Config.jid) in
-  let userlist = show_buddies state.users state.show_offline self active notifications in
+  let userlist = show_buddies state.users state.show_offline state.config.Config.jid state.active_contact state.notifications in
   let set_active idx =
     let user = List.nth userlist idx in
     activate_user state user
@@ -588,114 +656,140 @@ class read_line ~term ~network ~history ~state = object(self)
                        self#size time network redraw)
 end
 
+let quit state =
+  match !xmpp_session with
+  | None -> return_unit
+  | Some x ->
+     let otr_sessions =
+       User.Users.fold (fun _ u acc ->
+        List.fold_left (fun acc s ->
+          if User.(encrypted s.otr) then
+            (u, s) :: acc
+          else acc)
+          acc
+          u.User.active_sessions)
+       state.users []
+     in
+     let send_out (user, session) =
+       match Otr.Engine.end_otr session.User.otr with
+       | _, Some body ->
+          let jid = `Full (user.User.bare_jid, session.User.resource) in
+          send x jid None body (fun _ -> return_unit)
+       | _ -> return_unit
+     in
+     Lwt_list.iter_s send_out otr_sessions
+
+
 let rec loop term hist state network log =
   let history = LTerm_history.contents hist in
   match_lwt
     try_lwt
-      lwt command = (new read_line ~term ~history ~state ~network)#run in
+      lwt message = (new read_line ~term ~history ~state ~network)#run in
       if List.length state.notifications = 0 then
         Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) ;
-      return (Some command)
+      return (Some message)
     with
       | Sys.Break -> return None
       | LTerm_read_line.Interrupt -> return (Some "/quit")
   with
-    | Some command when (String.length command > 0) && String.get command 0 = '/' ->
-       LTerm_history.add hist command ;
-       if String.trim command <> "/quit" then
-         Cli_commands.exec command state log force_redraw >>= fun () ->
-         loop term hist state network log
-       else
-         begin
-           ( match !xmpp_session with
-             | None -> return_unit
-             | Some x ->
-               let otr_sessions = User.Users.fold (fun _ u acc ->
-                   List.fold_left (fun acc s ->
-                       if User.(encrypted s.otr) then
-                         (u, s) :: acc
-                       else acc)
-                     acc
-                     u.User.active_sessions)
-                   state.users []
-               in
-               let send_out (user, session) =
-                 match Otr.Engine.end_otr session.User.otr with
-                 | _, Some body ->
-                    let jid = `Full (user.User.bare_jid, session.User.resource) in
-                    send x jid None body (fun _ -> return_unit)
-                 | _ -> return_unit
-               in
-               Lwt_list.iter_s send_out otr_sessions )
-           >|= fun () -> state
-         end
-    | Some message when String.length message > 0 ->
-       LTerm_history.add hist message ;
-       let err data = log (`Local "error", data) ; return_unit in
-       let contact = User.Users.find state.users (User.Jid.t_to_bare state.active_contact) in
-       let handle_otr_out user_out =
-         let add_msg direction enc data =
-           User.add_message state.users state.active_contact direction enc false data
-         in
-         match user_out with
-          | `Warning msg      -> add_msg (`Local "OTR Warning") false msg ; ""
-          | `Sent m           ->
-            let id = random_string () in
-            add_msg (`To id) false m ;
-            id
-          | `Sent_encrypted m ->
-            let id = random_string () in
-            add_msg (`To id) true (Escape.unescape m) ;
-            id
-       in
-       let failure reason =
-         Connect.disconnect () >|= fun () ->
-         log (`Local "session error", Printexc.to_string reason) ;
-       in
-       (if User.Jid.bare_jid_equal contact.User.bare_jid (fst state.config.Config.jid) then
-          err "try `M-x doctor` in emacs instead"
-        else
-          match User.active_session contact, !xmpp_session with
-          | Some session, Some t ->
-             let ctx = session.User.otr in
-             let msg =
-               if Otr.State.is_encrypted ctx then
-                 Escape.escape message
-               else
-                 message
-             in
-             let ctx, out, user_out = Otr.Engine.send_otr ctx msg in
-             User.replace_session state.users contact { session with User.otr = ctx } ;
-             let id = handle_otr_out user_out in
-             (match out with
-              | Some body ->
-                 let jid = `Full (contact.User.bare_jid, session.User.resource) in
-                 send t jid (Some id) body failure
-              | None -> return_unit)
-          | None        , Some t ->
-             let cfg = match contact.User.otr_custom_config with
-               | None -> state.config.Config.otr_config
-               | Some x -> x
-             in
-             let ctx = Otr.State.new_session cfg state.config.Config.dsa () in
-             let _, out, user_out = Otr.Engine.send_otr ctx message in
-             let id = handle_otr_out user_out in
-             (match out with
-              | Some body ->
-                 let jid = `Bare contact.User.bare_jid in
-                 send t jid (Some id) body failure
-              | None -> return_unit)
-          | _           , None ->
-             err "no active session, try to connect first") >>= fun () ->
-       loop term hist state network log
-    | Some _ -> loop term hist state network log
     | None -> loop term hist state network log
+    | Some message ->
+       let active = active state in
+       let failure reason =
+         Connect.disconnect () >>= fun () ->
+         log (`Local (state.active_contact, "session error"), Printexc.to_string reason) ;
+         ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async (fun () ->
+                   Lwt_mvar.put state.connect_mvar Reconnect))) ;
+         Lwt.return_unit
+       and self = User.Jid.jid_matches (`Bare active.User.bare_jid) (`Full state.config.Config.jid)
+       and err data = log (`Local (state.active_contact, "error"), data) ; return_unit
+       in
+       let fst =
+         if String.length message = 0 then
+           None
+         else
+           Some (String.get message 0)
+       in
+       match String.length message, fst with
+       | 0, _ ->
+          User.replace_user state.users { active with User.expand = not active.User.expand } ;
+          (* transition from expanded to collapsed *)
+          if active.User.expand then
+            (let jid = match User.active_session active with
+               | None -> `Bare active.User.bare_jid
+               | Some s -> `Full (active.User.bare_jid, s.User.resource)
+             in
+             state.active_contact <- jid) ;
+          loop term hist state network log
+       | _, Some '/' ->
+          LTerm_history.add hist message ;
+          if String.trim message = "/quit" then
+            quit state >|= fun () -> state
+          else
+            Cli_commands.exec message state active session self failure log force_redraw >>= fun () ->
+            loop term hist state network log
+       | _, _ when self ->
+          err "try `M-x doctor` in emacs instead" >>= fun () ->
+          loop term hist state network log
+       | _, _ ->
+          LTerm_history.add hist message ;
+          let jid = state.active_contact in
+          let handle_otr_out user_out =
+            let add_msg direction enc data =
+              User.add_message state.users jid direction enc false data
+            in
+            match user_out with
+            | `Warning msg      ->
+               add_msg (`Local (jid, "OTR Warning")) false msg ;
+               ""
+            | `Sent m           ->
+               let id = random_string () in
+               add_msg (`To (jid, id)) false m ;
+               id
+            | `Sent_encrypted m ->
+               let id = random_string () in
+               add_msg (`To (jid, id)) true (Escape.unescape m) ;
+               id
+          in
+          let maybe_send t out user_out =
+            Utils.option
+              Lwt.return_unit
+              (fun body ->
+                 send t jid (Some (handle_otr_out user_out)) body failure)
+              out
+          in
+          (match jid, !xmpp_session with
+           | `Full (_, r), Some t ->
+              (match User.find_session active r with
+               | Some session ->
+                  let ctx = session.User.otr in
+                  let msg =
+                    if Otr.State.is_encrypted ctx then
+                      Escape.escape message
+                    else
+                      message
+                  in
+                  let ctx, out, user_out = Otr.Engine.send_otr ctx msg in
+                  User.replace_session state.users active { session with User.otr = ctx } ;
+                  maybe_send t out user_out
+               | None ->
+                  let ctx = Otr.State.new_session (otr_config active state) state.config.Config.dsa () in
+                  let _, out, user_out = Otr.Engine.send_otr ctx message in
+                  maybe_send t out user_out)
+           | `Bare _     , Some t ->
+              let ctx = Otr.State.new_session (otr_config active state) state.config.Config.dsa () in
+              let _, out, user_out = Otr.Engine.send_otr ctx message in
+              maybe_send t out user_out
+           | _           , None ->
+              err "no active session, try to connect first") >>= fun () ->
+          loop term hist state network log
 
-let init_system log domain connect_mvar =
+let init_system log myjid connect_mvar =
+  let domain = snd (fst myjid) in
   let err m =
     Lwt.async (fun () ->
       Connect.disconnect () >|= fun () ->
-      log (`Local "async error", m) ;
+      log (`Local (`Full myjid, "async error"), m) ;
       ignore (Lwt_engine.on_timer 10. false (fun _ ->
                 Lwt.async (fun () -> Lwt_mvar.put connect_mvar Reconnect))))
   in

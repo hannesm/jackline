@@ -51,6 +51,11 @@ module Jid = struct
 
   let bare_jid_equal (u, d) (u', d') = u = u' && d = d'
 
+  let compare_bare_jid (u, d) (u', d') =
+    match compare u u' with
+    | 0 -> compare d d'
+    | x -> x
+
   (*
    xmpp resources should be unique for each client, thus multiple
    sessions between two contacts can be established. great idea!
@@ -137,7 +142,7 @@ module Jid = struct
     match jid, jid' with
     | `Bare bare, `Bare bare' -> bare_jid_equal bare bare'
     | `Bare bare, `Full (bare', _) -> bare_jid_equal bare bare'
-    | `Full (bare, resource), `Full (bare', resource') -> bare_jid_equal bare bare' && resource_similar resource resource'
+    | `Full (bare, resource), `Full (bare', resource') -> bare_jid_equal bare bare' && resource = resource'
     | _ -> false
 
 
@@ -285,10 +290,11 @@ type property = [
 
 type direction = [
   | `From of Jid.t
-  | `To of string (* id *)
-  | `Local of string
+  | `To of Jid.t * string (* id *)
+  | `Local of Jid.t * string
 ] with sexp
 
+(* TODO: should likely life within each session *)
 type message = {
   direction  : direction ;
   encrypted  : bool ;
@@ -308,14 +314,17 @@ type user = {
   message_history   : message list ; (* persistent if preserve_messages is true *)
   otr_fingerprints  : fingerprint list ;
   otr_custom_config : Otr.State.config option ;
-  active_sessions   : session list (* not persistent *)
+  active_sessions   : session list ; (* not persistent *)
+  expand            : bool ; (* not persistent *)
 }
 
 let jid u = Jid.bare_jid_to_string u.bare_jid
 
 let new_user ~jid ?(name=None) ?(groups=[]) ?(subscription=`None) ?(otr_fingerprints=[]) ?(preserve_messages=false) ?(properties=[]) ?(active_sessions=[]) ?(otr_custom_config=None) () =
-  let message_history = [] in
-  { bare_jid = jid ; name ; groups ; subscription ; properties ; otr_fingerprints ; preserve_messages ; active_sessions ; message_history ; otr_custom_config }
+  let message_history = []
+  and expand = false
+  in
+  { bare_jid = jid ; name ; groups ; subscription ; properties ; otr_fingerprints ; preserve_messages ; active_sessions ; message_history ; otr_custom_config ; expand }
 
 let message direction encrypted received message =
   { direction ; encrypted ; received ;
@@ -326,7 +335,7 @@ let insert_message u dir enc rcvd msg =
 
 let received_message u id =
   let tst msg = match msg.direction with
-    | `To x when x = id -> true
+    | `To (_, x) when x = id -> true
     | _ -> false
   in
   try
@@ -339,9 +348,7 @@ let received_message u id =
 
 let encrypted = Otr.State.is_encrypted
 
-let userid u s = match s.resource with
-  | r when r = "" -> Jid.bare_jid_to_string u.bare_jid
-  | r -> Jid.jid_to_string (`Full (u.bare_jid, r))
+let userid u s = Jid.jid_to_string (`Full (u.bare_jid, s.resource))
 
 let format_fp e =
   String.((sub e 0 8) ^ " " ^ (sub e 8 8) ^ " " ^ (sub e 16 8) ^ " " ^ (sub e 24 8) ^ " " ^ (sub e 32 8))
@@ -421,15 +428,18 @@ let find users jid =
     None
 
 let find_or_create users jid =
-  match find users jid with
+  let bare = Jid.t_to_bare jid in
+  match find users bare with
     | Some x -> x
     | None   ->
-      let user = new_user ~jid () in
-      Users.replace users jid user ;
+      let user = new_user ~jid:bare () in
+      Users.replace users bare user ;
       user
 
+let replace_user users user =
+  Users.replace users user.bare_jid user
 
-let replace_session users user session =
+let replace_session_1 user session =
   let others = List.filter (fun s -> s.resource <> session.resource) user.active_sessions in
   let active_sessions =
     if session.dispose && session.presence = `Offline then
@@ -437,7 +447,10 @@ let replace_session users user session =
     else
       session :: others
   in
-  let user = { user with active_sessions } in
+  { user with active_sessions }
+
+let replace_session users user session =
+  let user = replace_session_1 user session in
   Users.replace users user.bare_jid user
 
 let get_session user tst =
@@ -466,6 +479,7 @@ let find_or_create_session user resource config dsa =
     let others = match similar with
       | None   -> user.active_sessions
       | Some x ->
+        (* XXX: need to revise notifications! *)
         let others = List.filter (fun s -> x.resource <> s.resource) user.active_sessions in
         if x.presence = `Offline then
           others
@@ -480,16 +494,30 @@ let compare_session a b =
   | 0 -> compare_presence b.presence a.presence
   | x -> x
 
+let sorted_sessions user =
+  List.sort compare_session user.active_sessions
+
+let session users jid otr dsa =
+  let user = find_or_create users jid
+  and resource = Jid.resource jid
+  in
+  match resource with
+  | Some x ->
+     let user, session = find_or_create_session user x otr dsa in
+     replace_user users user ;
+     session
+  | None -> assert false
+
 let active_session user =
   if List.length user.active_sessions = 0 then
     None
   else
-    let s = List.filter (fun x -> x.presence <> `Offline) user.active_sessions in
+    let sorted = List.sort compare_session user.active_sessions in
+    let s = List.filter (fun x -> x.presence <> `Offline) sorted in
     if List.length s = 0 then
-      Some (List.hd user.active_sessions)
+      Some (List.hd sorted)
     else
-      let ss = List.sort compare_session s in
-      Some (List.hd ss)
+      Some (List.hd s)
 
 let db_version = 1
 
@@ -587,13 +615,35 @@ let tr_m s =
      List (List.rev r)
   | x -> x
 
-let load_history file strict =
+let tr_1 jid s =
+  let open Sexp in
+  let tr_dir = function
+    | List [ Atom "To" ; id ] ->
+       List [ Atom "To" ; List [ Jid.sexp_of_t jid ; id ] ]
+    | List [ Atom "Local" ; data ] ->
+       List [ Atom "Local" ; List [ Jid.sexp_of_t jid ; data ] ]
+    | x -> x
+  in
+  match s with
+  | List s ->
+     let r = List.fold_left (fun acc s ->
+        let s = match s with
+          | List [ Atom "direction" ; value ] -> List [ Atom "direction" ; tr_dir value ]
+          | x -> x
+        in
+        s :: acc) [] s
+     in
+     List (List.rev r)
+  | x -> x
+
+let load_history jid file strict =
   let load_h = function
     | Sexp.List [ ver ; Sexp.List msgs ] ->
       let version = int_of_sexp ver in
       ( match version with
-        | 0 -> List.map message_of_sexp (List.map tr_m msgs)
-        | 1 -> List.map message_of_sexp msgs
+        | 0 -> List.map message_of_sexp (List.map (tr_1 jid) (List.map tr_m msgs))
+        | 1 -> List.map message_of_sexp (List.map (tr_1 jid) msgs)
+        | 2 -> List.map message_of_sexp msgs
         | _ -> Printf.printf "unknown message format" ; [] )
     | _ -> Printf.printf "parsing history failed" ; []
   in
@@ -623,6 +673,7 @@ let load_users hist_dir bytes =
                | Some u ->
                   let message_history =
                     load_history
+                      (`Bare u.bare_jid)
                       (Filename.concat hist_dir (jid u)) u.preserve_messages
                   in
                   let u = { u with message_history } in
@@ -643,7 +694,7 @@ let marshal_history user =
         user.message_history
     in
     List.iter (fun x -> x.persistent <- true) new_msgs ;
-    let hist_version = sexp_of_int 1 in
+    let hist_version = sexp_of_int 2 in
     if List.length new_msgs > 0 then
       let sexps = List.map sexp_of_message new_msgs in
       let sexp = Sexp.(List [ hist_version ; List sexps ]) in

@@ -46,12 +46,9 @@ let start_client cfgdir debug () =
 
   (* setup self contact *)
   let myjid = config.Config.jid in
-  let (bare, resource) = myjid in
-  let user = User.find_or_create users bare in
-  let user, _ = User.find_or_create_session user resource config.Config.otr_config config.Config.dsa in
-  User.Users.replace users bare user ;
+  ignore (User.session users (`Full myjid) config.Config.otr_config config.Config.dsa) ;
 
-  let n, log = S.create (`Local "welcome to jackline", "type /help for help") in
+  let n, log = S.create (`Local (`Full myjid, "welcome to jackline"), "type /help for help") in
 
   (if debug then
      Persistency.open_append (Unix.getenv "PWD") "out.txt" >|= fun fd ->
@@ -85,7 +82,7 @@ let start_client cfgdir debug () =
     Lwt_engine.on_timer 600. true (fun _ -> Lwt.async dump)
   in
 
-  Cli_client.init_system (log ?step:None) (snd bare) connect_mvar ;
+  Cli_client.init_system (log ?step:None) myjid connect_mvar ;
 
   ignore (LTerm.save_state term);  (* save the terminal state *)
 

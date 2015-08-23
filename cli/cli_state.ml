@@ -125,7 +125,7 @@ module Connect = struct
            Unix.string_of_inet_addr inet_addr ^ " on port " ^ string_of_int port
         | Unix.ADDR_UNIX str -> str
       in
-      log (`Local "connecting", "to " ^ domain ^ " (" ^ addr ^ ")") ;
+      log (`Local (`Full config.Config.jid, "connecting"), "to " ^ domain ^ " (" ^ addr ^ ")") ;
     in
     Xmpp_callbacks.resolve hostname port domain >|= fun sa ->
     report sa ;
@@ -135,7 +135,7 @@ module Connect = struct
     let mvar = Lwt_mvar.create Cancel in
     let failure reason =
       disconnect () >>= fun () ->
-      log (`Local "session error", Printexc.to_string reason) ;
+      log (`Local (`Full config.Config.jid, "session error"), Printexc.to_string reason) ;
       let conn = fun () -> Lwt_mvar.put mvar Reconnect in
       ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async conn)) ;
       Lwt.return_unit
@@ -154,15 +154,16 @@ module Connect = struct
                (match config.Config.authenticator with
                 | `Trust_anchor x -> `Ca_file x
                 | `Fingerprint fp -> `Hex_fingerprints (`SHA256, [(certname, fp)]))) >>= fun authenticator ->
-            Xmpp_callbacks.connect ?out sockaddr
-                                   config.Config.jid certname password
-                                   config.Config.priority authenticator user_data
-                                   (fun () -> Lwt_mvar.put mvar (Success user_data)) ) >|= function
+            Xmpp_callbacks.connect
+              ?out sockaddr
+              config.Config.jid certname password
+              config.Config.priority authenticator user_data
+              (fun () -> Lwt_mvar.put mvar (Success user_data)) ) >|= function
               | None -> ()
               | Some session ->
                  xmpp_session := Some session ;
                  Lwt.async (fun () -> Xmpp_callbacks.parse_loop session)
-      with exn -> failure exn >|= fun () -> ()
+      with exn -> failure exn
     in
     let rec reconnect_loop user_data =
       Lwt_mvar.take mvar >>= function
@@ -186,7 +187,7 @@ end
 
 let empty_state config_directory config users connect_mvar state_mvar =
   let user_mvar = Persistency.notify_user config_directory
-  and last_status = (`Local "", "")
+  and last_status = (`Local (`Full config.Config.jid, ""), "")
   and active = `Full config.Config.jid
   in
   {
@@ -241,3 +242,17 @@ let notified state jid =
                            state.notifications ;
   if List.length state.notifications = 0 then
     Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear)
+
+let otr_config user state =
+  match user.User.otr_custom_config with
+  | None -> state.config.Config.otr_config
+  | Some x -> x
+
+let active state =
+  User.Users.find state.users (User.Jid.t_to_bare state.active_contact)
+
+let session state =
+  let user = active state in
+  match state.active_contact with
+  | `Bare _ -> User.active_session user
+  | `Full (_, r) -> User.find_session user r
