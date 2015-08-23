@@ -346,7 +346,7 @@ let marshal_session s =
   let receipts = User.receipt_state_to_string s.User.receipt in
   s.User.resource ^ " (" ^ prio ^ ") (receipts " ^ receipts ^ "): " ^ pres ^ status
 
-let handle_info user cfgdir =
+let handle_info user session cfgdir =
   let ci = common_info user cfgdir
   and groups =
     match user.User.groups with
@@ -361,9 +361,8 @@ let handle_info user cfgdir =
     let add = if String.length add > 0 then " (" ^ (String.trim add) ^ ")" else "" in
     ["subscription: " ^ ((User.subscription_to_string user.User.subscription) ^ add)]
   and sessions =
-    let active = User.active_session user in
     List.map (fun s ->
-      let act = match active with
+      let act = match session with
         | Some x when x = s -> "active"
         | _ -> "other"
       in
@@ -372,7 +371,7 @@ let handle_info user cfgdir =
   in
   ci @ groups @ add @ sessions
 
-let handle_own_info user cfgdir dsa res =
+let handle_own_info user session cfgdir dsa =
   let ci = common_info user cfgdir
   and otr_fp =
     let fp = Otr.Utils.own_fingerprint dsa in
@@ -381,7 +380,7 @@ let handle_own_info user cfgdir dsa res =
   and sessions =
     let active = User.active_session user in
     List.mapi (fun i s ->
-      let own = if s.User.resource = res then " (own)" else "" in
+      let own = if s = session then " (own)" else "" in
       let act =
         match active with
         | Some x when x = s -> own ^ " (active)"
@@ -660,9 +659,9 @@ let exec input state log redraw =
           | ("info", _), _ ->
              let datas =
                if self then
-                 handle_own_info contact state.config_directory state.config.Config.dsa (snd state.config.Config.jid)
+                 handle_own_info contact own_session state.config_directory state.config.Config.dsa
                else
-                 handle_info contact state.config_directory
+                 handle_info contact session state.config_directory
              in
              (datas, None, None)
 
