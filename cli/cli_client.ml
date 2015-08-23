@@ -652,7 +652,7 @@ let rec loop term hist state network log =
       | Sys.Break -> return None
       | LTerm_read_line.Interrupt -> return (Some "/quit")
   with
-    | Some command when (String.length command > 0) && String.get command 0 = '/' ->
+    | Some command when String.length command > 0 && String.get command 0 = '/' ->
        LTerm_history.add hist command ;
        if String.trim command <> "/quit" then
          Cli_commands.exec command state log force_redraw >>= fun () ->
@@ -684,7 +684,6 @@ let rec loop term hist state network log =
     | Some message when String.length message > 0 ->
        LTerm_history.add hist message ;
        let err data = log (`Local "error", data) ; return_unit in
-       let contact = User.Users.find state.users (User.Jid.t_to_bare state.active_contact) in
        let handle_otr_out user_out =
          let add_msg direction enc data =
            User.add_message state.users state.active_contact direction enc false data
@@ -704,10 +703,20 @@ let rec loop term hist state network log =
          Connect.disconnect () >|= fun () ->
          log (`Local "session error", Printexc.to_string reason) ;
        in
+       let contact, session =
+         let u = User.Users.find state.users (User.Jid.t_to_bare state.active_contact) in
+         match User.Jid.resource state.active_contact with
+         | None -> (u, None)
+         | Some r ->
+            let user, session =
+              User.find_or_create_session u r (otr_config u state) state.config.Config.dsa in
+            User.replace_user state.users user ;
+            (user, Some session)
+       in
        (if User.Jid.bare_jid_equal contact.User.bare_jid (fst state.config.Config.jid) then
           err "try `M-x doctor` in emacs instead"
         else
-          match User.active_session contact, !xmpp_session with
+          match session, !xmpp_session with
           | Some session, Some t ->
              let ctx = session.User.otr in
              let msg =
