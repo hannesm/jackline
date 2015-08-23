@@ -278,7 +278,7 @@ let presence_callback t stanza =
        | `Bare _ ->
           let info = "presence [_>" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring in
           t.user_data.log (`From jid) info
-       | _ ->
+       | `Full _ ->
           let session = t.user_data.session jid in
           let priority = match stanza.content.priority with
             | None -> 0
