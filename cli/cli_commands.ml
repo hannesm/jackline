@@ -309,12 +309,22 @@ let current_otr_fp session =
     session
 
 let handle_otr_info user session =
-  match session with
-  | Some session ->
-    [ "active otr session " ^ session.User.resource ^ ": " ^ Otr.State.session_to_string session.User.otr ;
-      "otr fingerprints: " ^ (dump_otr_fps user.User.otr_fingerprints) ]
-  | None ->
-    [ "(no active session) OTR fingerprints: " ^ (dump_otr_fps user.User.otr_fingerprints) ]
+  let sessions =
+    List.fold_left (fun acc s ->
+      let act = match session with
+        | Some x when x = s -> " (active)"
+        | _ -> ""
+      in
+      if User.encrypted s.User.otr then
+        let data = s.User.resource ^ act ^ ": " ^ Otr.State.session_to_string s.User.otr in
+        data :: acc
+      else
+        acc)
+      []
+      (List.sort User.compare_session user.User.active_sessions)
+  in
+  sessions @
+    [ "otr fingerprints: " ^ (dump_otr_fps user.User.otr_fingerprints) ]
 
 let handle_own_otr_info dsa =
   let otr_fp = Otr.Utils.own_fingerprint dsa in
