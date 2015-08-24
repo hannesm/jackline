@@ -101,14 +101,27 @@ their sizes.  The bottom line is read-line prompt with tab-completion.
 In the contact list, mutual presence subscription information is
 indicated by `[` and `]` (`F` if contact is only subscribed to your
 presence updates, `T` if you are subscribed to the presence updates of
-the contact), `?` for no presence subscription).  The self-contact
-uses curly braces `{` and `}` and has initial focus.
-
+the contact), `?` for no presence subscription).  The own contact uses
+curly braces `{` and `}`, and certain operations are not available.
 The presence is indicated by a single character (o = online, f = free,
-a = away, d = do not disturb, x = extended away, _ = offline).  The
-focussed contact has reversed foreground and background color in the
-contact list.  Multiple active sessions are indicated by `+` (expand
-and collapse are done by `enter` (with empty input)).
+a = away, d = do not disturb, x = extended away, _ = offline).
+
+A single contact is active, which can be modified by `PgUp/PdDown`.
+The active contact is shown in reversed foreground and background
+color.  Its chat content is displayed in the chat window.  Certain
+commands and operations (such as sending a message) require an active
+contact.
+
+XMPP allows a contact to be logged in several times.  By default, the
+resource with the highest priority (and most online status) is used
+for communication.  If a contact is logged in multiple times, a `+`
+occurs to its left side, and pressing `return` will expand the
+contact, displaying all its sessions.  Commmunicating with the
+expanded base contact will deliver the message to the bare contact, if
+a specific resource is active, messages will be sent there.  The chat
+log is filtered by messages to the specific resource, and merged in
+the base contact.  An unexpanded contact equals to the resource with
+highest priority.
 
 When a new message is received, this is indicated by blinking of the
 contact, a prepended `*` (or `☀` in case of collapsed contact), a blue
