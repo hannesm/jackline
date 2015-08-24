@@ -222,7 +222,7 @@ let handle_connect state log redraw failure =
 
 let handle_disconnect msg =
   Connect.disconnect () >|= fun () ->
-  msg "session error" "disconnected"
+  msg "session" "disconnected"
 
 let send_status s presence status priority failure =
   let open Xmpp_callbacks.XMPPClient in

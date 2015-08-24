@@ -791,12 +791,13 @@ let rec loop term hist state network log =
 
 let init_system log myjid connect_mvar =
   let domain = snd (fst myjid) in
-  let err m =
+  let err r m =
     Lwt.async (fun () ->
       Connect.disconnect () >|= fun () ->
       log (`Local (`Full myjid, "async error"), m) ;
-      ignore (Lwt_engine.on_timer 10. false (fun _ ->
-                Lwt.async (fun () -> Lwt_mvar.put connect_mvar Reconnect))))
+      if r then
+        ignore (Lwt_engine.on_timer 10. false (fun _ ->
+                  Lwt.async (fun () -> Lwt_mvar.put connect_mvar Reconnect))))
   in
   Lwt.async_exception_hook := (function
       | Tls_lwt.Tls_failure `Error (`AuthenticationFailure (`InvalidServerName x)) ->
@@ -805,10 +806,10 @@ let init_system log myjid connect_mvar =
           Printf.sprintf "inform your server administrator about that, in the meantime add '(certificate_hostname (\"%s\")' to your config.sexp"
         in
         (match X509.hostnames x with
-         | x::_ -> err (Printf.sprintf "%s, but got %s" pre x) ; err (warn x)
-         | [] -> err (Printf.sprintf "%s, but found no name" pre))
+         | x::_ -> err false (Printf.sprintf "%s, but got %s" pre x) ; err false (warn x)
+         | [] -> err false (Printf.sprintf "%s, but found no name" pre))
       | Unix.Unix_error (Unix.EBADF, _, _ ) as exn ->
-         xmpp_session := None ; err (Printexc.to_string exn)
-      | exn -> err (Printexc.to_string exn)
+         xmpp_session := None ; err false (Printexc.to_string exn)
+      | exn -> err true (Printexc.to_string exn)
   )
 
