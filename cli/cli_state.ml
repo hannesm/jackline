@@ -21,6 +21,7 @@ type connect_v =
   | Connect of Xmpp_callbacks.user_data
   | Success of Xmpp_callbacks.user_data
   | Reconnect
+  | Presence of (User.presence * string option * int option)
 
 type state = {
   config_directory            : string                    ; (* set initially *)
@@ -140,7 +141,7 @@ module Connect = struct
       ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async conn)) ;
       Lwt.return_unit
     in
-    let connect user_data =
+    let connect user_data (p, s, prio) =
       match config.Config.password with
       | None -> failure (Invalid_argument "no password provided, please restart")
       | Some password ->
@@ -154,10 +155,11 @@ module Connect = struct
                (match config.Config.authenticator with
                 | `Trust_anchor x -> `Ca_file x
                 | `Fingerprint fp -> `Hex_fingerprints (`SHA256, [(certname, fp)]))) >>= fun authenticator ->
+            let kind, show = Xmpp_callbacks.presence_to_xmpp p in
             Xmpp_callbacks.connect
               ?out sockaddr
               config.Config.jid certname password
-              config.Config.priority authenticator user_data
+              (kind, show, s, prio) authenticator user_data
               (fun () -> Lwt_mvar.put mvar (Success user_data)) ) >|= function
               | None -> ()
               | Some session ->
@@ -165,23 +167,25 @@ module Connect = struct
                  Lwt.async (fun () -> Xmpp_callbacks.parse_loop session)
       with exn -> failure exn
     in
-    let rec reconnect_loop user_data =
+    let rec reconnect_loop user_data presence =
       Lwt_mvar.take mvar >>= function
-        | Cancel -> reconnect_loop None
+        | Cancel -> reconnect_loop None presence
         | Connect user_data ->
-           connect user_data >>= fun () ->
-           reconnect_loop None
+           connect user_data presence >>= fun () ->
+           reconnect_loop None presence
         | Success user_data ->
            Lwt_mvar.put state_mvar Connected >>= fun () ->
-           reconnect_loop (Some user_data)
+           reconnect_loop (Some user_data) presence
+        | Presence p ->
+           reconnect_loop user_data p
         | Reconnect ->
            match !xmpp_session, user_data with
            | None, Some u ->
-              connect u >>= fun () ->
-              reconnect_loop (Some u)
-           | _, u -> reconnect_loop u
+              connect u presence >>= fun () ->
+              reconnect_loop (Some u) presence
+           | _, u -> reconnect_loop u presence
     in
-    Lwt.async (fun () -> reconnect_loop None) ;
+    Lwt.async (fun () -> reconnect_loop None (`Online, None, config.Config.priority)) ;
     mvar
 end
 

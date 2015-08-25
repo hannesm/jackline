@@ -224,32 +224,24 @@ let handle_disconnect msg =
   Connect.disconnect () >|= fun () ->
   msg "session error" "disconnected"
 
-let send_status s presence status priority failure =
-  let open Xmpp_callbacks.XMPPClient in
-  let user_to_xmpp = function
-    | `Offline      -> (Some Unavailable, None)
-    | `Online       -> (None            , None)
-    | `Free         -> (None            , Some ShowChat)
-    | `Away         -> (None            , Some ShowAway)
-    | `DoNotDisturb -> (None            , Some ShowDND)
-    | `ExtendedAway -> (None            , Some ShowXA)
-  in
-  let kind, show = user_to_xmpp presence in
-  let priority = match priority with 0 -> None | x -> Some x in
-  (try_lwt send_presence s ?kind ?show ?status ?priority ()
+let send_status s (presence, status, priority) failure =
+  let kind, show = Xmpp_callbacks.presence_to_xmpp presence in
+  (try_lwt Xmpp_callbacks.XMPPClient.send_presence s ?kind ?show ?status ?priority ()
    with e -> failure e)
 
 let handle_status session arg =
   let p, status = split_ws arg in
+  let priority = match session.User.priority with 0 -> None | x -> Some x in
   match User.string_to_presence p with
   | None   -> None
-  | Some x -> Some (x, status, session.User.priority)
+  | Some x -> Some (x, status, priority)
 
 let handle_priority session p =
   try
     let prio = int_of_string p in
     assert (prio >= -128 && prio <= 127) ; (* RFC 6121 4.7.2.3 *)
-    Some (session.User.presence, session.User.status, prio)
+    let priority = match prio with 0 -> None | x -> Some x in
+    Some (session.User.presence, session.User.status, priority)
   with
     _ -> None
 
@@ -623,13 +615,17 @@ let exec input state contact session self failure log redraw =
      | ("status", Some arg), Some s ->
         (match handle_status own_session arg with
          | None -> handle_help (msg ~prefix:"unknown argument") (Some "status") ; Lwt.return_unit
-         | Some (pres, stat, prio) -> send_status s pres stat prio failure)
+         | Some p ->
+            Lwt_mvar.put state.connect_mvar (Presence p) >>= fun () ->
+            send_status s p failure)
 
      (* priority *)
      | ("priority", Some p), Some s ->
         (match handle_priority own_session p with
          | None   -> handle_help (msg ~prefix:"unknown argument") (Some "priority") ; Lwt.return_unit
-         | Some (pres, stat, prio) -> send_status s pres stat prio failure)
+         | Some p ->
+            Lwt_mvar.put state.connect_mvar (Presence p) >>= fun () ->
+            send_status s p failure)
 
      (* commands using active_contact as context *)
      | other, s ->
