@@ -753,6 +753,7 @@ let exec input state contact session self failure log redraw =
             Lwt.return_unit
          | Some x ->
             let u = user x in
+            (* TODO: this is slightly too eager (too many writes) *)
             Lwt_mvar.put state.user_mvar u) >>= fun () ->
         match clos, !xmpp_session with
         | Some x, Some s -> x s failure
