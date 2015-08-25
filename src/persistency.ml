@@ -137,7 +137,7 @@ let load_user_dir cfgdir users =
       (Lwt_unix.readdir dh >>= fun f ->
        load_user dir f >>= fun x ->
        (match x with
-        | None -> Printf.printf "something went wrong\n"
+        | None -> Printf.printf "something went wrong while loading %s/%s\n" dir f
         | Some x ->
            let message_history =
              User.load_history
