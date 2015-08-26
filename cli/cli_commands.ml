@@ -450,7 +450,8 @@ let handle_smp_abort user session =
   (datas, Some user, clos)
 
 let handle_smp_start user session secret =
-  let ctx, out, ret = Otr.Engine.start_smp session.User.otr secret in
+  let sec = Astring.String.trim secret in
+  let ctx, out, ret = Otr.Engine.start_smp session.User.otr sec in
   let user = User.replace_session_1 user { session with User.otr = ctx } in
   let datas = List.fold_left (fun ds -> function
       | `Warning x -> ("SMP start warning: " ^ x) :: ds
@@ -458,6 +459,7 @@ let handle_smp_start user session secret =
     []
     (List.rev ret)
   in
+  let datas = if sec <> secret then "trimmed secret" :: datas else datas in
   let clos =
     match out with
     | None   -> None
@@ -472,10 +474,17 @@ let handle_smp_question term users user session question =
   let clos s failure =
     let jid = `Full (user.User.bare_jid, session.User.resource) in
     (new Cli_config.read_inputline ~term ~prompt:"shared secret: " ())#run >>= fun secret ->
-    let ctx, out, ret = Otr.Engine.start_smp session.User.otr ~question secret in
+    let sec = Astring.String.trim secret in
+    let ctx, out, ret = Otr.Engine.start_smp session.User.otr ~question sec in
     let user = User.replace_session_1 user { session with User.otr = ctx } in
+    let add_msg u m = User.insert_message u (`Local (jid, "")) false false m in
+    let user = if sec <> secret then
+                 add_msg user "trimmed secret"
+               else
+                 user
+    in
     let user = List.fold_left (fun c -> function
-      | `Warning x -> User.insert_message c (`Local (jid, "")) false false ("SMP start warning: " ^ x)
+      | `Warning x -> add_msg c ("SMP question warning: " ^ x)
       | _ ->  c)
       user (List.rev ret)
     in
@@ -488,7 +497,8 @@ let handle_smp_question term users user session question =
 
 
 let handle_smp_answer user session secret =
-  let ctx, out, ret = Otr.Engine.answer_smp session.User.otr secret in
+  let sec = Astring.String.trim secret in
+  let ctx, out, ret = Otr.Engine.answer_smp session.User.otr sec in
   let user = User.replace_session_1 user { session with User.otr = ctx } in
   let datas = List.fold_left (fun ds -> function
       | `Warning x -> ("SMP answer warning: " ^ x) :: ds
@@ -496,6 +506,7 @@ let handle_smp_answer user session secret =
     []
     (List.rev ret)
   in
+  let datas = if sec <> secret then "trimmed secret" :: datas else datas in
   let clos =
     match out with
     | None   -> None
