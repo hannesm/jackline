@@ -349,13 +349,9 @@ let horizontal_line user session fg_color buddy_width scrollback show_buddy_list
   let post = if left > 0 then [S (Zed_utf8.make left (UChar.of_int 0x2500))] else [] in
   B_fg fg_color :: pre @ buddy @ [ E_fg ; B_fg otrcolor ] @ otr @ [ E_fg ; B_fg fg_color ] @ presence @ status @ post @ [ E_fg ]
 
-let status_line now user session notify log redraw fg_color width =
+let status_line user session notify log redraw fg_color width =
   let status = User.presence_to_string session.User.presence in
   let jid = User.userid user session in
-  let time =
-    let now = Unix.localtime now in
-    Printf.sprintf "%02d:%02d" now.Unix.tm_hour now.Unix.tm_min
-  in
 
   let status_color =
     if session.User.presence = `Offline then
@@ -364,7 +360,7 @@ let status_line now user session notify log redraw fg_color width =
       lgreen
   in
 
-  let jid, left = maybe_trim jid (pred width) in
+  let jid, left = maybe_trim jid (width - 2) in
   let jid_pre, left = maybe_trim "< " left in
   let jid_post, left = maybe_trim " >─" left in
 
@@ -376,27 +372,23 @@ let status_line now user session notify log redraw fg_color width =
 
   let redraw, left = maybe_trim (Printf.sprintf "%02x" redraw) left in
 
-  let time, left = maybe_trim time left in
-  let time_pre, left = maybe_trim "─( " left in
-  let time_post, left = maybe_trim " )─" left in
-
   let fill = if left > 0 then [S (Zed_utf8.make left (UChar.of_int 0x2500))] else [] in
 
   let first =
+    let dash = S (Zed_utf8.make 1 (UChar.of_int 0x2500)) in
     if notify then
-      [ B_bold true ; B_blink true ; B_fg cyan ; S "#" ] @ redraw @ [ E_fg ; E_blink ]
+      [ B_bold true ; B_blink true ; B_fg cyan ; S "#" ] @ redraw @ [ dash ; E_fg ; E_blink ]
     else
-      [ B_bold true ; B_fg fg_color ; S (Zed_utf8.make 1 (UChar.of_int 0x2500)) ] @ redraw @ [ E_fg ]
+      [ B_bold true ; B_fg fg_color ; dash ] @ redraw @ [ dash ; E_fg ]
   in
 
   first @
-  [ B_fg fg_color ] @ time_pre @ time @ time_post @
-  jid_pre @ styled_jid @ jid_post @
+  [ B_fg fg_color ] @ jid_pre @ styled_jid @ jid_post @
   fill @
   status_pre @ [ E_fg ; B_fg status_color ] @ status @ [ E_fg ; B_fg fg_color ] @ status_post @
   [ E_fg ; E_bold ]
 
-let make_prompt size time network state redraw =
+let make_prompt size network state redraw =
   (* network should be an event, then I wouldn't need a check here *)
   (if state.last_status <> network then
      (add_status state (fst network) (snd network) ;
@@ -513,7 +505,7 @@ let make_prompt size time network state redraw =
       let mysession =
         let r = snd state.config.Config.jid in
         List.find (fun s -> s.User.resource = r) self.User.active_sessions in
-      let status = status_line time self mysession notify log redraw fg_color size.cols in
+      let status = status_line self mysession notify log redraw fg_color size.cols in
       let main = List.flatten main_window in
 
       try
@@ -524,12 +516,6 @@ let make_prompt size time network state redraw =
       with
         _ -> eval ([ S "error during evaluating layout"])
     end
-
-let time =
-  let time, set_time = S.create (Unix.time ()) in
-  (* Update the time every 60 seconds. *)
-  ignore (Lwt_engine.on_timer 60.0 true (fun _ -> set_time (Unix.time ())));
-  time
 
 let up = UChar.of_int 0x2500
 let down = UChar.of_int 0x2501
@@ -655,8 +641,8 @@ class read_line ~term ~network ~history ~state = object(self)
     LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = true; code = F10 })] [Edit (LTerm_edit.Zed (Zed_edit.Insert shift_f10))]);
     LTerm_read_line.(bind [LTerm_key.({ control = true; meta = false; shift = false; code = Char (UChar.of_int 0x71) })] [Edit (LTerm_edit.Zed (Zed_edit.Insert ctrlq))]);
     LTerm_read_line.(bind [LTerm_key.({ control = true; meta = false; shift = false; code = Char (UChar.of_int 0x78) })] [Edit (LTerm_edit.Zed (Zed_edit.Insert ctrlx))]);
-    self#set_prompt (S.l4 (fun size time network redraw -> make_prompt size time network state redraw)
-                       self#size time network redraw)
+    self#set_prompt (S.l3 (fun size network redraw -> make_prompt size network state redraw)
+                       self#size network redraw)
 end
 
 let quit state =
