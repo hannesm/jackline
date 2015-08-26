@@ -374,7 +374,6 @@ let status_line now user session notify log redraw fg_color width =
   let status_pre, left = maybe_trim "[ " left in
   let status_post, left = maybe_trim " ]─" left in
 
-  let col = index (redraw mod 16) in
   let redraw, left = maybe_trim (Printf.sprintf "%02x" redraw) left in
 
   let time, left = maybe_trim time left in
@@ -384,11 +383,10 @@ let status_line now user session notify log redraw fg_color width =
   let fill = if left > 0 then [S (Zed_utf8.make left (UChar.of_int 0x2500))] else [] in
 
   let first =
-    let rnd = [ B_fg col ] @ redraw @ [ E_fg ] in
     if notify then
       [ B_bold true ; B_blink true ; B_fg cyan ; S "#" ] @ redraw @ [ E_fg ; E_blink ]
     else
-      [ B_bold true ; B_fg fg_color ; S (Zed_utf8.make 1 (UChar.of_int 0x2500)) ; E_fg ] @ rnd
+      [ B_bold true ; B_fg fg_color ; S (Zed_utf8.make 1 (UChar.of_int 0x2500)) ] @ redraw @ [ E_fg ]
   in
 
   first @
