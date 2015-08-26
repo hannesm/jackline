@@ -75,8 +75,8 @@ let _ =
     "otr" "/otr [argument]" "manages OTR session by argument -- one of 'start' 'stop' or 'info'"
     [ "start" ; "stop" ; "info" ] ;
   new_command
-    "smp" "/smp [argument]" "manages SMP session by argument -- one of 'start [secret]', 'question [question]', 'answer' or 'abort' - question is optional and may _NOT_ include a whitespace!"
-    [ "start" ; "question" ; "answer" ; "abort" ] ;
+    "smp" "/smp [argument]" "manages SMP session by argument -- one of 'shared [secret]', 'question [question]', 'answer' or 'abort' - question is optional and may _NOT_ include a whitespace!"
+    [ "shared" ; "question" ; "answer" ; "abort" ] ;
   new_command
     "remove" "/remove" "remove current user from roster" [] ;
 
@@ -449,7 +449,7 @@ let handle_smp_abort user session =
   in
   (datas, Some user, clos)
 
-let handle_smp_start user session secret =
+let handle_smp_shared user session secret =
   let sec = Astring.String.trim secret in
   let ctx, out, ret = Otr.Engine.start_smp session.User.otr sec in
   let user = User.replace_session_1 user { session with User.otr = ctx } in
@@ -754,7 +754,7 @@ let exec input state term contact session self failure log redraw =
              | Some session when User.encrypted session.User.otr ->
                 (match split_ws a with
                  | "abort", _ -> handle_smp_abort contact session
-                 | "start", Some arg -> handle_smp_start contact session arg
+                 | "shared", Some arg -> handle_smp_shared contact session arg
                  | "question", Some question -> handle_smp_question term state.users contact session question
                  | "answer", Some arg -> handle_smp_answer contact session arg
                  | _ -> handle_help (msg ~prefix:"argument required") (Some "smp"))
