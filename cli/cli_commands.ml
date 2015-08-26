@@ -75,8 +75,8 @@ let _ =
     "otr" "/otr [argument]" "manages OTR session by argument -- one of 'start' 'stop' or 'info'"
     [ "start" ; "stop" ; "info" ] ;
   new_command
-    "smp" "/smp [argument]" "manages SMP session by argument -- one of 'start [?question] [secret]' 'answer' or 'abort' - question is optional and may _NOT_ include a whitespace!"
-    [ "start" ; "answer" ; "abort" ] ;
+    "smp" "/smp [argument]" "manages SMP session by argument -- one of 'start [secret]', 'question [question]', 'answer' or 'abort' - question is optional and may _NOT_ include a whitespace!"
+    [ "start" ; "question" ; "answer" ; "abort" ] ;
   new_command
     "remove" "/remove" "remove current user from roster" [] ;
 
@@ -449,12 +449,8 @@ let handle_smp_abort user session =
   in
   (datas, Some user, clos)
 
-let handle_smp_start user session args =
-  let secret, question = match split_ws args with
-    | question, Some secret -> (secret, Some question)
-    | secret, None -> (secret, None)
-  in
-  let ctx, out, ret = Otr.Engine.start_smp session.User.otr ?question secret in
+let handle_smp_start user session secret =
+  let ctx, out, ret = Otr.Engine.start_smp session.User.otr secret in
   let user = User.replace_session_1 user { session with User.otr = ctx } in
   let datas = List.fold_left (fun ds -> function
       | `Warning x -> ("SMP start warning: " ^ x) :: ds
@@ -471,6 +467,25 @@ let handle_smp_start user session args =
              send s jid None body failure)
   in
   (datas @ ["initiated SMP"], Some user, clos)
+
+let handle_smp_question term users user session question =
+  let clos s failure =
+    let jid = `Full (user.User.bare_jid, session.User.resource) in
+    (new Cli_config.read_inputline ~term ~prompt:"shared secret: " ())#run >>= fun secret ->
+    let ctx, out, ret = Otr.Engine.start_smp session.User.otr ~question secret in
+    let user = User.replace_session_1 user { session with User.otr = ctx } in
+    let user = List.fold_left (fun c -> function
+      | `Warning x -> User.insert_message c (`Local (jid, "")) false false ("SMP start warning: " ^ x)
+      | _ ->  c)
+      user (List.rev ret)
+    in
+    User.replace_user users user ;
+    match out with
+    | None      -> Lwt.return_unit
+    | Some body -> send s jid None body failure
+  in
+  ([], None, Some clos)
+
 
 let handle_smp_answer user session secret =
   let ctx, out, ret = Otr.Engine.answer_smp session.User.otr secret in
@@ -577,7 +592,7 @@ let tell_user (log:(User.direction * string) -> unit) jid ?(prefix:string option
   in
   log (`Local (jid, f), msg)
 
-let exec input state contact session self failure log redraw =
+let exec input state term contact session self failure log redraw =
   let msg = tell_user log state.active_contact in
   let err = msg "error" in
   let own_session =
@@ -729,6 +744,7 @@ let exec input state contact session self failure log redraw =
                 (match split_ws a with
                  | "abort", _ -> handle_smp_abort contact session
                  | "start", Some arg -> handle_smp_start contact session arg
+                 | "question", Some question -> handle_smp_question term state.users contact session question
                  | "answer", Some arg -> handle_smp_answer contact session arg
                  | _ -> handle_help (msg ~prefix:"argument required") (Some "smp"))
              | _ -> err "need a secure session, use /otr start first")

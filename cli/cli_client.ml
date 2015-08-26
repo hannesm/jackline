@@ -731,7 +731,7 @@ let rec loop term hist state network log =
           if String.trim message = "/quit" then
             quit state >|= fun () -> state
           else
-            Cli_commands.exec message state active session self failure log force_redraw >>= fun () ->
+            Cli_commands.exec message state term active session self failure log force_redraw >>= fun () ->
             loop term hist state network log
        | _, _ when self ->
           err "try `M-x doctor` in emacs instead" >>= fun () ->
