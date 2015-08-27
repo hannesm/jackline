@@ -396,12 +396,6 @@ let add_or_replace users user =
   else
     Users.add users user.bare_jid user
 
-let add_message users jid dir enc rcvd msg =
-  let bare = Jid.t_to_bare jid in
-  let user = Users.find users bare in
-  let user = insert_message user dir enc rcvd msg in
-  Users.replace users bare user
-
 let reset_x users f =
   List.iter (fun id ->
       let u = Users.find users id in
@@ -435,6 +429,12 @@ let find_or_create users jid =
       let user = new_user ~jid:bare () in
       Users.replace users bare user ;
       user
+
+let add_message users jid dir enc rcvd msg =
+  let bare = Jid.t_to_bare jid in
+  let user = find_or_create users jid in
+  let user = insert_message user dir enc rcvd msg in
+  Users.replace users bare user
 
 let replace_user users user =
   Users.replace users user.bare_jid user
