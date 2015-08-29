@@ -198,7 +198,7 @@ module Git : sig
 end = struct
   let describe () =
     if not (Dir.exists ".git") then "not-a-git-checkout" else
-    Cmd.read "git log --abrev-commit --oneline -1" >>& fun d ->
+    Cmd.read "git log --abbrev-commit --oneline -1" >>& fun d ->
     let len = String.length d in
     String.sub d 0 (len - 1) (* remove \n *)
 end
