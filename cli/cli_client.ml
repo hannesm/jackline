@@ -246,16 +246,19 @@ let format_messages user jid msgs =
       | `Local (_, x) -> "***" ^ x ^ "*** "
     in
     let r =
+      let other = User.jid_of_direction direction in
       match jid with
       | `Bare _ ->
          Utils.option
            ""
            (fun x -> "(" ^ x ^ ") ")
-           (User.Jid.resource (match direction with
-                               | `From jid -> jid
-                               | `To (jid, _) -> jid
-                               | `Local (jid, _) -> jid))
-      | `Full _ -> ""
+           (User.Jid.resource other)
+      | `Full (_, r) ->
+         Utils.option "" (fun x -> "(" ^ x ^ ") ")
+                      (match User.Jid.resource other with
+                       | None -> None
+                       | Some x when x = r -> None
+                       | Some x -> Some x)
     in
     time ^ r ^ pre ^ message
   in
@@ -266,13 +269,7 @@ let format_messages user jid msgs =
       User.Jid.jid_matches jid o
   in
   List.map printmsg
-    (List.filter (fun m ->
-       match m.User.direction with
-       | `From fjid when jid_tst fjid -> true
-       | `To (tjid, _) when jid_tst tjid -> true
-       | `Local (ljid, _) when jid_tst ljid -> true
-       | _ -> false)
-       msgs)
+    (List.filter (fun m -> jid_tst (User.jid_of_direction m.User.direction)) msgs)
 
 let buddy_list users show_offline self active notifications length width =
   let buddies = show_buddy_list users show_offline self active notifications in
