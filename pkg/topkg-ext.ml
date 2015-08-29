@@ -191,16 +191,15 @@ end
 
 (** Git invocations. *)
 module Git : sig
-  val describe : ?chop_v:bool -> string -> string
+  val describe : unit -> string
   (** [describe chop_v branch] invokes [git describe branch]. If [chop_v]
       is [true] (defaults to [false]) an initial ['v'] in the result
       is chopped. *)
 end = struct
-  let describe ?(chop_v = false) branch =
+  let describe () =
     if not (Dir.exists ".git") then "not-a-git-checkout" else
-    Cmd.read (Printf.sprintf "git describe %s" branch) >>& fun d ->
+    Cmd.read "git log --abrev-commit --oneline -1" >>& fun d ->
     let len = String.length d in
-    if chop_v && len > 0 && d.[0] = 'v' then String.sub d 1 (len - 2) else
     String.sub d 0 (len - 1) (* remove \n *)
 end
 

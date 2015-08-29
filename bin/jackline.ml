@@ -48,7 +48,7 @@ let start_client cfgdir debug () =
   let myjid = config.Config.jid in
   ignore (User.session users (`Full myjid) config.Config.otr_config config.Config.dsa) ;
 
-  let n, log = S.create (`Local (`Full myjid, "welcome to jackline"), "type /help for help") in
+  let n, log = S.create (`Local (`Full myjid, "welcome to jackline " ^ Utils.version), "type /help for help") in
 
   (if debug then
      Persistency.open_append (Unix.getenv "PWD") "out.txt" >|= fun fd ->
