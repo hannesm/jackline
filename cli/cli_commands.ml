@@ -416,7 +416,7 @@ let handle_otr_start user session otr_cfg dsa =
 let handle_otr_stop user session err =
   match session with
   | None -> err "no active session"
-  | Some session when User.encrypted session.User.otr ->
+  | Some session ->
     let ctx, out = Otr.Engine.end_otr session.User.otr in
     let user = User.replace_session_1 user { session with User.otr = ctx } in
     let datas, clos = match out with
@@ -429,7 +429,6 @@ let handle_otr_stop user session err =
          ([ "finished OTR session" ], Some clos)
     in
     (datas, Some user, clos)
-  | Some _ -> err "no active encrypted session"
 
 let handle_smp_abort user session =
   let ctx, out, ret = Otr.Engine.abort_smp session.User.otr in
