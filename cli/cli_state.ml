@@ -237,6 +237,11 @@ let notify state jid =
   then
     ()
   else
+    let user = User.find_or_create state.users jid in
+    (match User.active_session user, jid with
+     | Some s, `Full (_, r) when r = s.User.resource -> ()
+     | Some _, `Full _ -> User.replace_user state.users { user with User.expand = true }
+     | _ -> ()) ;
     state.notifications <- jid :: state.notifications ;
   Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Notifications)
 
