@@ -200,7 +200,15 @@ end = struct
     if not (Dir.exists ".git") then "not-a-git-checkout" else
     Cmd.read "git log --abbrev-commit --oneline -1" >>& fun d ->
     let len = String.length d in
-    String.sub d 0 (len - 1) (* remove \n *)
+    let str = String.sub d 0 (len - 1) (* remove \n *) in
+    let rec repl idx =
+      try
+        let c = String.index_from str idx '"' in
+        String.set str c '\'' ;
+        repl (succ c)
+      with Not_found -> ()
+    in
+    repl 0 ; str
 end
 
 (** Default configuration. *)
