@@ -1,84 +1,32 @@
-# OASIS_START
-# DO NOT EDIT (digest: 7016b22508158bb93c0d4b964106eb6c)
-# Ignore VCS directories, you can use the same kind of rule outside
-# OASIS_START/STOP if you want to exclude directories that contains
-# useless stuff for the build process
-true: annot, bin_annot
-<**/.svn>: -traverse
-<**/.svn>: not_hygienic
-".bzr": -traverse
-".bzr": not_hygienic
-".hg": -traverse
-".hg": not_hygienic
-".git": -traverse
-".git": not_hygienic
-"_darcs": -traverse
-"_darcs": not_hygienic
-# Library xmpp_client
-"src/xmpp_client.cmxs": use_xmpp_client
-"src/config.cmx": for-pack(Xmpp_client)
-"src/user.cmx": for-pack(Xmpp_client)
-"src/persistency.cmx": for-pack(Xmpp_client)
-"src/xmpp_connection.cmx": for-pack(Xmpp_client)
-"src/xmpp_callbacks.cmx": for-pack(Xmpp_client)
-"src/escape.cmx": for-pack(Xmpp_client)
-"src/utils.cmx": for-pack(Xmpp_client)
-<src/xmpp_client.{cma,cmxa}>: oasis_library_xmpp_client_byte
-<src/*.ml{,i,y}>: oasis_library_xmpp_client_byte
-<src/*.ml{,i,y}>: pkg_astring
-<src/*.ml{,i,y}>: pkg_camomile
-<src/*.ml{,i,y}>: pkg_erm_xmpp
-<src/*.ml{,i,y}>: pkg_hex
-<src/*.ml{,i,y}>: pkg_lwt
-<src/*.ml{,i,y}>: pkg_lwt.syntax
-<src/*.ml{,i,y}>: pkg_nocrypto
-<src/*.ml{,i,y}>: pkg_otr
-<src/*.ml{,i,y}>: pkg_sexplib
-<src/*.ml{,i,y}>: pkg_sexplib.syntax
-<src/*.ml{,i,y}>: pkg_tls
-<src/*.ml{,i,y}>: pkg_tls.lwt
-<src/*.ml{,i,y}>: pkg_zed
-# Library xmpp_client_cli
-"cli/xmpp_client_cli.cmxs": use_xmpp_client_cli
-"cli/cli_config.cmx": for-pack(Xmpp_client_cli)
-"cli/cli_state.cmx": for-pack(Xmpp_client_cli)
-"cli/cli_commands.cmx": for-pack(Xmpp_client_cli)
-"cli/cli_client.cmx": for-pack(Xmpp_client_cli)
-<cli/xmpp_client_cli.{cma,cmxa}>: oasis_library_xmpp_client_cli_byte
-<cli/*.ml{,i,y}>: oasis_library_xmpp_client_cli_byte
-# Executable jackline
-"cli/jackline.native": pkg_astring
-"cli/jackline.native": pkg_camomile
-"cli/jackline.native": pkg_erm_xmpp
-"cli/jackline.native": pkg_hex
-"cli/jackline.native": pkg_lambda-term
-"cli/jackline.native": pkg_lwt
-"cli/jackline.native": pkg_lwt.syntax
-"cli/jackline.native": pkg_nocrypto
-"cli/jackline.native": pkg_otr
-"cli/jackline.native": pkg_react
-"cli/jackline.native": pkg_sexplib
-"cli/jackline.native": pkg_sexplib.syntax
-"cli/jackline.native": pkg_tls
-"cli/jackline.native": pkg_tls.lwt
-"cli/jackline.native": pkg_zed
-"cli/jackline.native": use_xmpp_client
-"cli/jackline.native": use_xmpp_client_cli
-<cli/*.ml{,i,y}>: pkg_astring
-<cli/*.ml{,i,y}>: pkg_camomile
-<cli/*.ml{,i,y}>: pkg_erm_xmpp
-<cli/*.ml{,i,y}>: pkg_hex
-<cli/*.ml{,i,y}>: pkg_lambda-term
-<cli/*.ml{,i,y}>: pkg_lwt
-<cli/*.ml{,i,y}>: pkg_lwt.syntax
-<cli/*.ml{,i,y}>: pkg_nocrypto
-<cli/*.ml{,i,y}>: pkg_otr
-<cli/*.ml{,i,y}>: pkg_react
-<cli/*.ml{,i,y}>: pkg_sexplib
-<cli/*.ml{,i,y}>: pkg_sexplib.syntax
-<cli/*.ml{,i,y}>: pkg_tls
-<cli/*.ml{,i,y}>: pkg_tls.lwt
-<cli/*.ml{,i,y}>: pkg_zed
-<cli/*.ml{,i,y}>: use_xmpp_client
-<cli/*.ml{,i,y}>: use_xmpp_client_cli
-# OASIS_STOP
+true : annot, bin_annot
+<src> : include
+<cli> : include
+
+<src/config.ml>: package(sexplib), package(otr), package(sexplib.syntax), \
+  syntax(camlp4o)
+<src/escape.ml>: package(astring)
+<src/persistency.ml>: package(sexplib), package(lwt), package(lwt.syntax), \
+  package(nocrypto), syntax(camlp4o)
+<src/user.ml>: package(sexplib), package(sexplib.syntax), package(otr), \
+  package(erm_xmpp), package(otr), package(hex), syntax(camlp4o)
+<src/xmpp_callbacks.ml>: package(camomile), package(erm_xmpp), \
+  package(lwt), package(lwt.syntax), package(otr), package(sexplib), \
+  package(tls), package(tls.lwt), package(zed), syntax(camlp4o)
+<src/xmpp_connection.ml>: package(erm_xmpp), package(lwt), \
+  package(tls), package(tls.lwt)
+
+<cli/cli_client.ml>: package(camomile), package(lambda-term), package(lwt), \
+  package(lwt.syntax), package(otr), package(react), package(tls), \
+  package(tls.lwt), package(zed), package(erm_xmpp), syntax(camlp4o)
+<cli/cli_commands.ml>: package(astring), package(lwt), package(lwt.syntax), \
+  package(otr), package(erm_xmpp), package(zed), syntax(camlp4o)
+<cli/cli_config.ml>: package(lambda-term), package(lwt), package(nocrypto), \
+  package(otr), package(react), package(zed), package(tls.lwt)
+<cli/cli_state.ml>: package(hex), package(lwt), package(lwt.syntax), \
+  package(nocrypto), package(erm_xmpp), package(tls.lwt), syntax(camlp4o)
+
+<bin/jackline.{ml,byte,native}>: package(astring), package(camomile), \
+  package(erm_xmpp), package(hex), package(lambda-term), package(lwt), \
+  package(lwt.syntax), package(nocrypto), package(otr), package(react), \
+  package(sexplib), package(sexplib.syntax), package(tls), package(tls.lwt), \
+  package(zed), syntax(camlp4o)

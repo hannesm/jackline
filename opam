@@ -8,14 +8,10 @@ maintainer:   ["Hannes Mehnert <hannes@mehnert.org>"]
 license:      "proprietary"
 
 build: [
-  ["ocaml" "setup.ml" "-configure" "--prefix" prefix]
-  ["ocaml" "setup.ml" "-build"]
-]
-install: ["ocaml" "setup.ml" "-install"]
-remove: [
-  ["ocamlfind" "remove" "xmpp_client"]
-  ["ocamlfind" "remove" "xmpp_client_cli"]
-  ["rm" "-f" "%{bin}%/jackline"]
+  [ "ocaml" "pkg/git.ml" ]
+  [ "ocaml" "pkg/build.ml" "native=%{ocaml-native}%"
+                           "native-dynlink=%{ocaml-native-dynlink}%"
+                           "cmdliner=%{cmdliner:installed}%" ]
 ]
 depends: [
   "ocamlfind"
