@@ -156,7 +156,7 @@ let handle_connect state log redraw failure =
     let bare = User.Jid.t_to_bare jid in
     User.Users.remove state.users bare ;
     if User.Jid.jid_matches (`Bare bare) state.active_contact then
-      state.active_contact <- `Full state.config.Config.jid ;
+      activate_user state (`Full state.config.Config.jid) ;
     if User.Jid.jid_matches (`Bare bare) state.last_active_contact then
       state.last_active_contact <- `Full state.config.Config.jid ;
     redraw ()

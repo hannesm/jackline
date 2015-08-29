@@ -535,15 +535,6 @@ let redraw, force_redraw =
 
 type direction = Up | Down
 
-let activate_user state active =
-  if state.active_contact <> active then
-    (state.last_active_contact <- state.active_contact ;
-     state.active_contact      <- active ;
-     state.scrollback          <- 0 ;
-     state.window_mode         <- BuddyList ;
-     notified state active ;
-     force_redraw ())
-
 let navigate_message_buffer state direction =
   match
     direction,
@@ -561,7 +552,8 @@ let navigate_buddy_list state direction =
   let userlist = show_buddies state.users state.show_offline state.config.Config.jid state.active_contact state.notifications in
   let set_active idx =
     let user = List.nth userlist idx in
-    activate_user state user
+    activate_user state user ;
+    force_redraw ()
   and active_idx = find_index state.active_contact 0 userlist
   in
   match
@@ -618,10 +610,12 @@ class read_line ~term ~network ~history ~state = object(self)
       force_redraw ()
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrlq ->
       if List.length state.notifications > 0 then
-        activate_user state (List.hd (List.rev state.notifications))
+        (activate_user state (List.hd (List.rev state.notifications)) ;
+         force_redraw ())
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrlx ->
       let user = state.last_active_contact in
-      activate_user state user
+      activate_user state user ;
+      force_redraw ()
     | action ->
       super#send_action action
 

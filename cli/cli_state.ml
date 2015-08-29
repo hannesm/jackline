@@ -260,3 +260,11 @@ let session state =
   match state.active_contact with
   | `Bare _ -> User.active_session user
   | `Full (_, r) -> User.find_session user r
+
+let activate_user state active =
+  if state.active_contact <> active then
+    (state.last_active_contact <- state.active_contact ;
+     state.active_contact      <- active ;
+     state.scrollback          <- 0 ;
+     state.window_mode         <- BuddyList ;
+     notified state active)
