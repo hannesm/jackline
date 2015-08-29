@@ -177,10 +177,24 @@ let handle_connect state log redraw failure =
   and user jid =
     User.find_or_create state.users jid
   and session jid =
-    let otr_config = otr_config (User.find_or_create state.users jid) state in
-    let sess = User.session state.users jid otr_config state.config.Config.dsa in
-    if User.Jid.(jid_matches (`Bare (t_to_bare state.active_contact)) jid) then
-      User.replace_user state.users { (User.find_or_create state.users jid) with User.expand = true } ;
+    let user, sess =
+      let user = User.find_or_create state.users jid
+      and otr_config = otr_config (User.find_or_create state.users jid) state
+      and r = match User.Jid.resource jid with Some x -> x | None -> assert false
+      in
+      User.find_or_create_session user r otr_config state.config.Config.dsa
+    in
+    let user =
+      if User.Jid.(jid_matches (`Bare (t_to_bare state.active_contact)) jid) then
+        if List.length user.User.active_sessions > 1 then
+          { user with User.expand = true }
+        else
+          (state.active_contact <- jid ;
+           user)
+      else
+        user
+    in
+    User.replace_user state.users user ;
     sess
   and update_session jid session =
     let user = User.find_or_create state.users jid in
