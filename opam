@@ -22,6 +22,8 @@ depends: [
   "lwt"
   "otr" {>= "0.2.1"}
   "astring"
+  "ptime"
+  "rresult"
   "zed"
   "lambda-term"
   "react"

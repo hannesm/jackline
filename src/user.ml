@@ -331,12 +331,12 @@ let new_user ~jid ?(name=None) ?(groups=[]) ?(subscription=`None) ?(otr_fingerpr
   in
   { bare_jid = jid ; name ; groups ; subscription ; properties ; otr_fingerprints ; preserve_messages ; active_sessions ; message_history ; otr_custom_config ; expand }
 
-let message direction encrypted received message =
+let message ?(timestamp = Unix.time ()) direction encrypted received message =
   { direction ; encrypted ; received ;
-    timestamp = Unix.time () ; message ; persistent = false }
+    timestamp ; message ; persistent = false }
 
-let insert_message u dir enc rcvd msg =
-  { u with message_history = (message dir enc rcvd msg) :: u.message_history }
+let insert_message ?timestamp u dir enc rcvd msg =
+  { u with message_history = (message ?timestamp dir enc rcvd msg) :: u.message_history }
 
 let received_message u id =
   let tst msg = match msg.direction with
@@ -435,10 +435,10 @@ let find_or_create users jid =
       Users.replace users bare user ;
       user
 
-let add_message users jid dir enc rcvd msg =
+let add_message users jid ?timestamp dir enc rcvd msg =
   let bare = Jid.t_to_bare jid in
   let user = find_or_create users jid in
-  let user = insert_message user dir enc rcvd msg in
+  let user = insert_message ?timestamp user dir enc rcvd msg in
   Users.replace users bare user
 
 let replace_user users user =

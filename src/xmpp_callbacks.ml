@@ -32,7 +32,7 @@ type user_data = {
   log            : User.direction -> string -> unit ;
   locallog       : string -> string -> unit ;
   remove         : User.Jid.t -> unit ;
-  message        : User.Jid.t -> User.direction -> bool -> string -> unit ;
+  message        : User.Jid.t -> ?timestamp:float -> User.direction -> bool -> string -> unit ;
   user           : User.Jid.t -> User.user ;
   session        : User.Jid.t -> User.session ;
   update_user    : User.user -> bool -> unit ;
@@ -178,13 +178,13 @@ let message_callback (t : user_data session_data) stanza =
   | None -> t.user_data.locallog "error" "no from in stanza" ; return_unit
   | Some jidt ->
     let jid = User.Jid.xmpp_jid_to_jid jidt in
-    let msg dir enc txt =
+    let msg ?timestamp dir enc txt =
       let data =
         let txt = validate_utf8 txt in
         let txt = Escape.strip_tags txt in
         Escape.unescape txt
       in
-      t.user_data.message jid dir enc data ;
+      t.user_data.message jid ?timestamp dir enc data ;
     in
     List.iter (function
         | Xml.Xmlelement ((ns_rec, "received"), attrs, _) when ns_rec = ns_receipts ->
@@ -192,9 +192,25 @@ let message_callback (t : user_data session_data) stanza =
            | "" -> ()
            | id -> t.user_data.receipt jid id)
         | _ -> ()) stanza.x ;
-    match stanza.content.body with
-    | None -> return_unit
-    | Some v ->
+    match stanza.content.body, stanza.content.message_delay with
+    | None, _ -> return_unit
+    | Some v, Some d ->
+       (match Ptime.of_rfc3339 d.delay_stamp with
+        | Rresult.Ok (time, tz) ->
+           let timestamp = float_of_int tz +. Ptime.to_float_s time in
+           let session = t.user_data.session jid in
+           let ctx, _, ret = Otr.Engine.handle session.User.otr v in
+           t.user_data.update_session jid { session with User.otr = ctx } ;
+           let from = `From jid in
+           List.iter (function
+                       | `Received m -> msg ~timestamp from false m
+                       | `Received_encrypted e -> msg ~timestamp from true e
+                       | _ -> ()
+             )
+             ret ;
+           return_unit
+        | Rresult.Error _ -> return_unit)
+    | Some v, None ->
       let session = t.user_data.session jid in
       let ctx, out, ret = Otr.Engine.handle session.User.otr v in
       t.user_data.update_session jid { session with User.otr = ctx } ;

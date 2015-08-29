@@ -11,7 +11,8 @@ true : annot, bin_annot
   package(erm_xmpp), package(otr), package(hex), syntax(camlp4o)
 <src/xmpp_callbacks.ml>: package(camomile), package(erm_xmpp), \
   package(lwt), package(lwt.syntax), package(otr), package(sexplib), \
-  package(tls), package(tls.lwt), package(zed), syntax(camlp4o)
+  package(tls), package(tls.lwt), package(zed), package(ptime), \
+  package(rresult), syntax(camlp4o)
 <src/xmpp_connection.ml>: package(erm_xmpp), package(lwt), \
   package(tls), package(tls.lwt)
 
@@ -29,4 +30,4 @@ true : annot, bin_annot
   package(erm_xmpp), package(hex), package(lambda-term), package(lwt), \
   package(lwt.syntax), package(nocrypto), package(otr), package(react), \
   package(sexplib), package(sexplib.syntax), package(tls), package(tls.lwt), \
-  package(zed), syntax(camlp4o)
+  package(zed), package(ptime), package(rresult), syntax(camlp4o)
