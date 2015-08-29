@@ -294,6 +294,11 @@ type direction = [
   | `Local of Jid.t * string
 ] with sexp
 
+let jid_of_direction = function
+  | `From j -> j
+  | `To (j, _) -> j
+  | `Local (j, _) -> j
+
 (* TODO: should likely life within each session *)
 type message = {
   direction  : direction ;
