@@ -199,12 +199,8 @@ end = struct
   let describe () =
     if not (Dir.exists ".git") then "not-a-git-checkout" else
     Cmd.read "git log --abbrev-commit --oneline -1" >>& fun d ->
-    Cmd.read "git status -bs --porcelain | head -1" >>& fun b ->
-    let nonl s =
-      let len = String.length s in
-      String.sub s 0 (len - 1) (* remove \n *)
-    in
-    "r" ^ nonl d ^ " " ^ nonl b
+    let len = String.length d in
+    String.sub d 0 (len - 1) (* remove \n *)
 end
 
 (** Default configuration. *)
