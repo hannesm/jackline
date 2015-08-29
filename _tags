@@ -14,7 +14,6 @@ true : annot, bin_annot
   package(tls), package(tls.lwt), package(zed), syntax(camlp4o)
 <src/xmpp_connection.ml>: package(erm_xmpp), package(lwt), \
   package(tls), package(tls.lwt)
-<src/*.cmx>: for-pack(xmpp_client)
 
 <cli/cli_client.ml>: package(camomile), package(lambda-term), package(lwt), \
   package(lwt.syntax), package(otr), package(react), package(tls), \
@@ -25,7 +24,6 @@ true : annot, bin_annot
   package(otr), package(react), package(zed), package(tls.lwt)
 <cli/cli_state.ml>: package(hex), package(lwt), package(lwt.syntax), \
   package(nocrypto), package(erm_xmpp), package(tls.lwt), syntax(camlp4o)
-<cli/*.cmx>: for-pack(xmpp_client_cli)
 
 <bin/jackline.{ml,byte,native}>: package(astring), package(camomile), \
   package(erm_xmpp), package(hex), package(lambda-term), package(lwt), \
