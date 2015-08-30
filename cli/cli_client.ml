@@ -397,8 +397,18 @@ let make_prompt size network state redraw =
      let err_prefix = try String.sub err 0 11 with Invalid_argument _ -> "" in
      (match err_prefix, !xmpp_session with
       | (x, None) when x = "async error" || x = "session err" ->
-         User.reset_status state.users ;
-         User.reset_receipt_requests state.users ;
+         let reset s =
+           let receipt = match s.User.receipt with
+             | `Requested -> `Unknown
+             | x -> x
+           and presence = `Offline
+           in
+           { s with User.receipt ; presence }
+         in
+         User.iter (fun _ v ->
+                    let active_sessions = List.map reset v.User.active_sessions in
+                    User.replace_user state.users { v with User.active_sessions })
+                   state.users ;
          Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Disconnected)
       | _ -> ())
    | _ -> ()) ;

@@ -392,6 +392,7 @@ module Users = Hashtbl.Make(StringHash)
 type users = user Users.t
 
 let fold = Users.fold
+let iter = Users.iter
 let create () = Users.create 100
 let find_user = Users.find
 let remove = Users.remove
@@ -400,25 +401,6 @@ let length = Users.length
 let keys users =
   let us = Users.fold (fun k _ acc -> k :: acc) users [] in
   List.sort compare us
-
-let reset_x users f =
-  List.iter (fun id ->
-      let u = Users.find users id in
-      let active_sessions = List.map f u.active_sessions
-      in
-      Users.replace users id { u with active_sessions })
-    (keys users)
-
-let reset_receipt_requests users =
-  reset_x users (fun s ->
-     let receipt = match s.receipt with
-       | `Requested -> `Unknown
-       | x -> x
-     in
-     { s with receipt })
-
-let reset_status users =
-  reset_x users (fun s -> { s with presence = `Offline })
 
 let find users jid =
   if Users.mem users jid then

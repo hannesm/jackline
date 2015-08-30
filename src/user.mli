@@ -144,6 +144,7 @@ type users
 
 (* actions on users *)
 val fold : (Jid.bare_jid -> user -> 'a -> 'a) -> users -> 'a -> 'a
+val iter : (Jid.bare_jid -> user -> unit) -> users -> unit
 val create : unit -> users
 val length : users -> int
 
@@ -160,9 +161,6 @@ val add_message : users -> Jid.t -> ?timestamp:float -> direction -> bool -> boo
 (* messing around with sessions *)
 val replace_session_1 : user -> session -> user
 val replace_session : users -> user -> session -> unit
-
-val reset_receipt_requests : users -> unit
-val reset_status : users -> unit
 
 val sorted_sessions : user -> session list
 
