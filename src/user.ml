@@ -454,6 +454,11 @@ let find_similar_session user resource =
   let r_similar s = Jid.resource_similar s.resource resource in
   get_session user r_similar
 
+let create_session user resource config dsa =
+  assert (not (List.exists (fun s -> s.resource = resource) user.active_sessions)) ;
+  let session = empty_session ~resource ~config dsa () in
+  ({ user with active_sessions = session :: user.active_sessions }, session)
+
 let find_or_create_session user resource config dsa =
   match find_session user resource with
   | Some x -> (user, x)
@@ -483,17 +488,6 @@ let compare_session a b =
 
 let sorted_sessions user =
   List.sort compare_session user.active_sessions
-
-let session users jid otr dsa =
-  let user = find_or_create users jid
-  and resource = Jid.resource jid
-  in
-  match resource with
-  | Some x ->
-     let user, session = find_or_create_session user x otr dsa in
-     replace_user users user ;
-     session
-  | None -> assert false
 
 let active_session user =
   if List.length user.active_sessions = 0 then

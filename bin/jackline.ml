@@ -46,7 +46,11 @@ let start_client cfgdir debug () =
 
   (* setup self contact *)
   let myjid = config.Config.jid in
-  ignore (User.session users (`Full myjid) config.Config.otr_config config.Config.dsa) ;
+  let _ =
+    let u = User.find_or_create users (`Full myjid) in
+    let u, session = User.create_session u (snd myjid) config.Config.otr_config config.Config.dsa in
+    User.replace_user users u
+  in
 
   let n, log = S.create (`Local (`Full myjid, "welcome to jackline " ^ Utils.version), "type /help for help") in
 
