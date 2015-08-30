@@ -459,28 +459,6 @@ let create_session user resource config dsa =
   let session = empty_session ~resource ~config dsa () in
   ({ user with active_sessions = session :: user.active_sessions }, session)
 
-let find_or_create_session user resource config dsa =
-  match find_session user resource with
-  | Some x -> (user, x)
-  | None   ->
-    let session = empty_session ~resource ~config dsa () in
-    let session, similar = match find_similar_session user resource with
-      | None         -> (session, None)
-      | Some similar -> ({ session with otr = similar.otr }, Some similar)
-    in
-    let others = match similar with
-      | None   -> user.active_sessions
-      | Some x ->
-        (* XXX: need to revise notifications! *)
-        let others = List.filter (fun s -> x.resource <> s.resource) user.active_sessions in
-        if x.presence = `Offline then
-          others
-        else
-          { x with dispose = true } :: others
-    in
-    ({ user with active_sessions = session :: others },
-     session)
-
 let compare_session a b =
   match compare b.priority a.priority with
   | 0 -> compare_presence b.presence a.presence

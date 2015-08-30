@@ -166,8 +166,10 @@ val sorted_sessions : user -> session list
 
 (* locating a session, creating, ... *)
 val create_session : user -> string -> Otr.State.config -> Nocrypto.Dsa.priv -> user * session
+
 val find_session : user -> string -> session option
-val find_or_create_session : user -> string -> Otr.State.config -> Nocrypto.Dsa.priv -> user * session
+val find_similar_session : user -> string -> session option
+
 val active_session : user -> session option
 
 (* persistency operations *)
