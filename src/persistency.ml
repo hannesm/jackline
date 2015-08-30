@@ -146,7 +146,7 @@ let load_user_dir cfgdir users =
                x.User.preserve_messages
            in
            let user = { x with User.message_history } in
-           User.add_or_replace users user) ;
+           User.replace_user users user) ;
        loadone ())
     with End_of_file -> Lwt_unix.closedir dh
   in

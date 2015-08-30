@@ -149,7 +149,6 @@ val length : users -> int
 
 (* locating and creating a user *)
 val find_user : users -> Jid.bare_jid -> user
-val add_or_replace : users -> user -> unit
 val replace_user : users -> user -> unit
 val find_or_create : users -> Jid.t -> user
 

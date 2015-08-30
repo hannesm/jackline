@@ -401,12 +401,6 @@ let keys users =
   let us = Users.fold (fun k _ acc -> k :: acc) users [] in
   List.sort compare us
 
-let add_or_replace users user =
-  if Users.mem users user.bare_jid then
-    Users.replace users user.bare_jid user
-  else
-    Users.add users user.bare_jid user
-
 let reset_x users f =
   List.iter (fun id ->
       let u = Users.find users id in
@@ -674,7 +668,7 @@ let load_user bytes =
     with _ -> None
 
 let load_users hist_dir bytes =
-  let table = Users.create 100 in
+  let table = create () in
   ( try (match Sexp.of_string bytes with
        | Sexp.List [ ver ; Sexp.List users ] ->
          let version = int_of_sexp ver in
@@ -688,7 +682,7 @@ let load_users hist_dir bytes =
                       (Filename.concat hist_dir (jid u)) u.preserve_messages
                   in
                   let u = { u with message_history } in
-                  add_or_replace table u)
+                  replace_user table u)
            users
        | _ -> Printf.printf "parse failed while parsing db\n")
     with _ -> () ) ;
