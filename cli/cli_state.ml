@@ -221,7 +221,9 @@ let empty_state config_directory config users connect_mvar state_mvar =
 
 
 let add_status state dir msg =
-  User.add_message state.users (`Full state.config.Config.jid) dir false true msg
+  let self = User.find_user state.users (fst state.config.Config.jid) in
+  let self = User.insert_message self dir false true msg in
+  User.replace_user state.users self
 
 let send s jid id body fail =
   Xmpp_callbacks.send_msg s jid id body fail

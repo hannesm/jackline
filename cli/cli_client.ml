@@ -726,7 +726,9 @@ let rec loop term hist state network log =
           let jid = state.active_contact in
           let handle_otr_out user_out =
             let add_msg direction enc data =
-              User.add_message state.users jid direction enc false data
+              let u = User.find_user state.users (User.Jid.t_to_bare jid) in
+              let u = User.insert_message u direction enc false data in
+              User.replace_user state.users u
             in
             match user_out with
             | `Warning msg      ->

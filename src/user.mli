@@ -154,8 +154,6 @@ val find_or_create : users -> Jid.t -> user
 (* removal *)
 val remove : users -> Jid.bare_jid -> unit
 
-val add_message : users -> Jid.t -> ?timestamp:float -> direction -> bool -> bool -> string -> unit
-
 (* messing around with sessions *)
 val replace_session : user -> session -> user
 

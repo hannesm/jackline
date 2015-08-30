@@ -166,7 +166,9 @@ let handle_connect state log redraw failure =
     let d = `Local (state.active_contact, str) in
     log (d, txt)
   and message jid ?timestamp dir enc txt =
-    User.add_message state.users jid ?timestamp dir enc true txt ;
+    let user = User.find_or_create state.users jid in
+    let user = User.insert_message ?timestamp user dir enc true txt in
+    User.replace_user state.users user ;
     notify state jid ;
     redraw ()
   and receipt jid id =

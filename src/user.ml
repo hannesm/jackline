@@ -343,13 +343,11 @@ let received_message u id =
     | `To (_, x) when x = id -> true
     | _ -> false
   in
-  try
-    { u with message_history = List.map (fun m ->
-          if tst m then { m with received = true } else m)
-          u.message_history
-    }
-  with
-    Not_found -> u
+  { u with message_history =
+             List.map (fun m ->
+               if tst m then { m with received = true } else m)
+               u.message_history
+  }
 
 let encrypted = Otr.State.is_encrypted
 
@@ -416,12 +414,6 @@ let find_or_create users jid =
       let user = new_user ~jid:bare () in
       Users.replace users bare user ;
       user
-
-let add_message users jid ?timestamp dir enc rcvd msg =
-  let bare = Jid.t_to_bare jid in
-  let user = find_or_create users jid in
-  let user = insert_message ?timestamp user dir enc rcvd msg in
-  Users.replace users bare user
 
 let replace_user users user =
   Users.replace users user.bare_jid user
