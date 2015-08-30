@@ -760,7 +760,8 @@ let rec loop term hist state network log =
                       message
                   in
                   let ctx, out, user_out = Otr.Engine.send_otr ctx msg in
-                  User.replace_session state.users active { session with User.otr = ctx } ;
+                  let user = User.replace_session_1 active { session with User.otr = ctx } in
+                  User.replace_user state.users user ;
                   maybe_send t out user_out
                | None ->
                   let ctx = Otr.State.new_session (otr_config active state) state.config.Config.dsa () in

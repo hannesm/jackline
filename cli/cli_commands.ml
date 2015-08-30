@@ -208,7 +208,8 @@ let handle_connect state log redraw failure =
        s
   and update_session jid session =
     let user = User.find_or_create state.users jid in
-    User.replace_session state.users user session
+    let u = User.replace_session_1 user session in
+    User.replace_user state.users u
   and update_user user alert =
     User.replace_user state.users user ;
     if alert then notify state (`Bare user.User.bare_jid) ;

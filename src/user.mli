@@ -160,7 +160,6 @@ val add_message : users -> Jid.t -> ?timestamp:float -> direction -> bool -> boo
 
 (* messing around with sessions *)
 val replace_session_1 : user -> session -> user
-val replace_session : users -> user -> session -> unit
 
 val sorted_sessions : user -> session list
 

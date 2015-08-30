@@ -436,10 +436,6 @@ let replace_session_1 user session =
   in
   { user with active_sessions }
 
-let replace_session users user session =
-  let user = replace_session_1 user session in
-  Users.replace users user.bare_jid user
-
 let get_session user tst =
   if List.exists tst user.active_sessions then
     Some (List.find tst user.active_sessions)
