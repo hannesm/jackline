@@ -119,8 +119,6 @@ type user = {
   expand            : bool ; (* not persistent *)
 }
 
-val new_user : jid:Jid.bare_jid -> ?name:string option -> ?groups:string list -> ?subscription:subscription -> ?otr_fingerprints:fingerprint list -> ?preserve_messages:bool -> ?properties:property list -> ?active_sessions:session list -> ?otr_custom_config:Otr.State.config option -> unit -> user
-
 (* messages *)
 val insert_message : ?timestamp:float -> user -> direction -> bool -> bool -> string -> user
 val received_message : user -> string -> user
