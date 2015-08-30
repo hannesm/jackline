@@ -159,7 +159,7 @@ val remove : users -> Jid.bare_jid -> unit
 val add_message : users -> Jid.t -> ?timestamp:float -> direction -> bool -> bool -> string -> unit
 
 (* messing around with sessions *)
-val replace_session_1 : user -> session -> user
+val replace_session : user -> session -> user
 
 val sorted_sessions : user -> session list
 

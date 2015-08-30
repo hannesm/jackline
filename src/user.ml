@@ -426,7 +426,7 @@ let add_message users jid ?timestamp dir enc rcvd msg =
 let replace_user users user =
   Users.replace users user.bare_jid user
 
-let replace_session_1 user session =
+let replace_session user session =
   let others = List.filter (fun s -> s.resource <> session.resource) user.active_sessions in
   let active_sessions =
     if session.dispose && session.presence = `Offline then
