@@ -291,8 +291,8 @@ let handle_fingerprint user session err fp =
     (fun s ->
      if User.encrypted s.User.otr then
        let manual_fp = string_normalize_fingerprint fp in
-       (match Otr.Utils.their_fingerprint s.User.otr with
-        | Some key when User.hex_fingerprint key = manual_fp ->
+       (match User.otr_fingerprint s.User.otr with
+        | Some key when key = manual_fp ->
            let otr_fp = User.find_raw_fp user manual_fp in
            let user = User.replace_fp user { otr_fp with User.verified = true } in
            (["fingerprint " ^ fp ^ " is now marked verified"], Some user, None)
@@ -322,7 +322,7 @@ let dump_otr_fps fps =
     let ver = if fp.User.verified then "verified" else "unverified" in
     let used = string_of_int fp.User.session_count in
     let resources = String.concat ", " fp.User.resources in
-    "  " ^ ver ^ " " ^ User.format_fp fp.User.data ^ " (used in " ^ used ^ " sessions, resources: " ^ resources ^ ")"
+    "  " ^ ver ^ " " ^ User.pp_fingerprint fp.User.data ^ " (used in " ^ used ^ " sessions, resources: " ^ resources ^ ")"
   in
   "otr fingerprints:" :: List.map marshal_otr fps
 
@@ -331,7 +331,7 @@ let current_otr_fp session =
     []
     (fun s -> Utils.option
                 ["no active OTR session"]
-                (fun fp -> ["their otr fingerprint: " ^ (User.format_fp fp)])
+                (fun fp -> ["their otr fingerprint: " ^ (User.pp_fingerprint fp)])
                 (User.otr_fingerprint s.User.otr))
     session
 
@@ -349,7 +349,7 @@ let handle_otr_info user session =
 
 let handle_own_otr_info dsa =
   let otr_fp = Otr.Utils.own_fingerprint dsa in
-  ["your otr fingerprint:  " ^ (User.format_fp (User.hex_fingerprint otr_fp))]
+  ["your otr fingerprint:  " ^ (User.pp_binary_fingerprint otr_fp)]
 
 let common_info user cfgdir =
   let name = match user.User.name with
@@ -404,10 +404,7 @@ let handle_info user session cfgdir =
 
 let handle_own_info user session cfgdir dsa =
   let ci = common_info user cfgdir
-  and otr_fp =
-    let fp = Otr.Utils.own_fingerprint dsa in
-    let formatted = User.format_fp (User.hex_fingerprint fp) in
-    [ "own otr fingerprint: " ^ formatted ]
+  and otr_fp = handle_own_otr_info dsa
   and sessions =
     let active = User.active_session user in
     List.map (fun s ->

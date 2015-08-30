@@ -129,8 +129,8 @@ val userid : user -> session -> string
 
 (* OTR things *)
 val encrypted : Otr.State.session -> bool
-val format_fp : string -> string
-val hex_fingerprint : string -> string
+val pp_fingerprint : string -> string
+val pp_binary_fingerprint : string -> string
 val otr_fingerprint : Otr.State.session -> string option
 
 (* fingerprint *)

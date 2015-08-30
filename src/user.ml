@@ -353,16 +353,19 @@ let encrypted = Otr.State.is_encrypted
 
 let userid u s = Jid.jid_to_string (`Full (u.bare_jid, s.resource))
 
-let format_fp e =
+let pp_fingerprint e =
   String.((sub e 0 8) ^ " " ^ (sub e 8 8) ^ " " ^ (sub e 16 8) ^ " " ^ (sub e 24 8) ^ " " ^ (sub e 32 8))
 
-let hex_fingerprint fp =
+let hex_fp fp =
   match Hex.of_string fp with `Hex e -> e
+
+let pp_binary_fingerprint fp =
+  pp_fingerprint (hex_fp fp)
 
 let otr_fingerprint otr =
   match Otr.Utils.their_fingerprint otr with
   | None   -> None
-  | Some x -> Some (hex_fingerprint x)
+  | Some x -> Some (hex_fp x)
 
 let replace_fp u fp =
   let otr_fingerprints =
