@@ -391,6 +391,12 @@ module StringHash =
 module Users = Hashtbl.Make(StringHash)
 type users = user Users.t
 
+let fold = Users.fold
+let create () = Users.create 100
+let find_user = Users.find
+let remove = Users.remove
+let length = Users.length
+
 let keys users =
   let us = Users.fold (fun k _ acc -> k :: acc) users [] in
   List.sort compare us
@@ -703,7 +709,7 @@ let marshal_history user =
     if List.length new_msgs > 0 then
       let sexps = List.map sexp_of_message new_msgs in
       let sexp = Sexp.(List [ hist_version ; List sexps ]) in
-      Some (jid user, Sexp.to_string_mach sexp)
+      Some (Sexp.to_string_mach sexp)
     else
       None
   else

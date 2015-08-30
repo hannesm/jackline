@@ -70,7 +70,7 @@ let show_buddy_list users show_offline self active notifications =
   in
   List.sort
     (fun (x, _) (y, _) -> User.Jid.compare_bare_jid x.User.bare_jid y.User.bare_jid)
-    (User.Users.fold (fun id u acc -> show id u @ acc) users [])
+    (User.fold (fun id u acc -> show id u @ acc) users [])
 
 let flatten_buddies us =
   List.fold_right (fun (user, xs) acc ->
@@ -421,7 +421,7 @@ let make_prompt size network state redraw =
     eval ([S "need more space"])
   else
     begin
-      let self = User.Users.find state.users (fst state.config.Config.jid) in
+      let self = User.find_user state.users (fst state.config.Config.jid) in
       let statusses = self.User.message_history in
       let logs =
         let entries =
@@ -442,7 +442,7 @@ let make_prompt size network state redraw =
       let session = session state in
       let notifications =
         List.map
-          (fun id -> User.Users.find state.users (User.Jid.t_to_bare id))
+          (fun id -> User.find_user state.users (User.Jid.t_to_bare id))
           state.notifications
       in
 
@@ -641,7 +641,7 @@ let quit state =
   | None -> return_unit
   | Some x ->
      let otr_sessions =
-       User.Users.fold (fun _ u acc ->
+       User.fold (fun _ u acc ->
         List.fold_left (fun acc s ->
           if User.(encrypted s.otr) then
             (u, s) :: acc

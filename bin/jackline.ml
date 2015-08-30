@@ -38,7 +38,7 @@ let start_client cfgdir debug () =
   let config = { config with Config.password = password } in
 
   Persistency.load_users cfgdir >>= fun users ->
-  let users_sexp_existed = User.Users.length users > 0 in
+  let users_sexp_existed = User.length users > 0 in
 
   Persistency.load_user_dir cfgdir users >>= fun () ->
 
@@ -63,7 +63,7 @@ let start_client cfgdir debug () =
   let connect_mvar = Cli_state.Connect.connect_me config (log ?step:None) out state_mvar in
   let state = Cli_state.empty_state cfgdir config users connect_mvar state_mvar in
 
-  let us = User.Users.fold (fun _ v acc -> v :: acc) users [] in
+  let us = User.fold (fun _ v acc -> v :: acc) users [] in
 
   (if users_sexp_existed then
      (* write out all the users to users/ *)

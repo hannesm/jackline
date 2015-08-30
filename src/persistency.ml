@@ -155,20 +155,20 @@ let load_user_dir cfgdir users =
 let dump_history cfgdir user =
   match User.marshal_history user with
   | None -> Lwt.return_unit (* should remove if user.User.preserve_messages is not set *)
-  | Some (_, sexp) ->
+  | Some sexp ->
      message_history_dir cfgdir >>= fun history_dir ->
      append history_dir (User.jid user) sexp
 
 let dump_histories cfgdir users =
-  let users = User.Users.fold (fun _ v acc -> v :: acc) users [] in
+  let users = User.fold (fun _ v acc -> v :: acc) users [] in
   Lwt_list.iter_p (dump_history cfgdir) users
 
 let load_users cfg =
   message_history_dir cfg >>= fun histo ->
   read cfg users >|= function
   | Some x ->  (try User.load_users histo x
-                with _ -> User.Users.create 100)
-  | None -> User.Users.create 100
+                with _ -> User.create ())
+  | None -> User.create ()
 
 let pass_file = "password"
 

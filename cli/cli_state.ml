@@ -258,7 +258,7 @@ let otr_config user state =
   | Some x -> x
 
 let active state =
-  User.Users.find state.users (User.Jid.t_to_bare state.active_contact)
+  User.find_user state.users (User.Jid.t_to_bare state.active_contact)
 
 let session state =
   let user = active state in
