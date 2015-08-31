@@ -70,6 +70,9 @@ let _ =
     "fingerprint" "/fingerprint [fp]"
     "verifies the current contact's OTR fingerprint (fp must match the one used in the currently established session)" [] ;
   new_command
+    "revoke" "/revoke [fp]"
+    "revokes the given OTR fingerprint" [] ;
+  new_command
     "info" "/info" "displays information about the current session" [] ;
   new_command
     "otr" "/otr [argument]" "manages OTR session by argument -- one of 'start' 'stop' or 'info'"
@@ -232,7 +235,7 @@ let handle_connect state log redraw failure =
        let u = User.replace_fp user fp in
        User.replace_user state.users u ;
        Lwt.async (fun () -> Lwt_mvar.put state.user_mvar u) ;
-       (fp.User.verified, pred fp.User.session_count, List.exists (fun x -> x.User.verified) user.User.otr_fingerprints)
+       (fp.User.verified, pred fp.User.session_count, List.exists (fun x -> x.User.verified = `Verified) user.User.otr_fingerprints)
   in
   let (user_data : Xmpp_callbacks.user_data) = {
       Xmpp_callbacks.log ;
@@ -294,12 +297,21 @@ let handle_fingerprint user session err fp =
        (match User.otr_fingerprint s.User.otr with
         | Some key when key = manual_fp ->
            let otr_fp = User.find_raw_fp user manual_fp in
-           let user = User.replace_fp user { otr_fp with User.verified = true } in
+           let user = User.replace_fp user { otr_fp with User.verified = `Verified } in
            (["fingerprint " ^ fp ^ " is now marked verified"], Some user, None)
         | _ -> err "provided fingerprint does not match the one of this active session")
      else
        err "no active OTR session")
     session
+
+let handle_revoke user err fp =
+  let manual_fp = string_normalize_fingerprint fp in
+  if String.length manual_fp = 40 then
+    let fp = User.find_raw_fp user manual_fp in
+    let user = User.replace_fp user { fp with User.verified = `Revoked } in
+    (["revoked " ^ manual_fp], Some user, None)
+  else
+    err "not a hex-encoded OTR fingerprint"
 
 let handle_log user v a =
   if user.User.preserve_messages <> v then
@@ -319,7 +331,11 @@ let handle_authorization arg =
 
 let dump_otr_fps fps =
   let marshal_otr fp =
-    let ver = if fp.User.verified then "verified" else "unverified" in
+    let ver = match fp.User.verified with
+      | `Verified -> "verified"
+      | `Unverified -> "unverified"
+      | `Revoked -> "revoked"
+    in
     let used = string_of_int fp.User.session_count in
     let resources = String.concat ", " fp.User.resources in
     "  " ^ ver ^ " " ^ User.pp_fingerprint fp.User.data ^ " (used in " ^ used ^ " sessions, resources: " ^ resources ^ ")"
@@ -721,6 +737,9 @@ let exec input state term contact session self failure log redraw =
               err "won't talk to myself"
             else
               handle_fingerprint contact (session state) err fp
+
+         | ("revoke", None), _ -> handle_help (msg ~prefix:"argument required") (Some "revoke")
+         | ("revoke", Some fp), _ -> handle_revoke contact err fp
 
          | ("authorization", _), None -> err "not connected"
          | ("authorization", None), _ -> handle_help (msg ~prefix:"argument required") (Some "authorization")

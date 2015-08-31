@@ -38,7 +38,7 @@ type user_data = {
   update_user    : User.user -> bool -> unit ;
   update_session : User.Jid.t -> User.session -> unit ;
   receipt        : User.Jid.t -> string -> unit ;
-  inc_fp         : User.Jid.t -> string -> (bool * int * bool) ;
+  inc_fp         : User.Jid.t -> string -> (User.verification_status * int * bool) ;
   failure        : exn -> unit Lwt.t ;
 }
 
@@ -219,14 +219,20 @@ let message_callback (t : user_data session_data) stanza =
           | `Established_encrypted_session ssid ->
             msg (`Local (jid, "OTR")) false ("encrypted connection established (ssid " ^ ssid ^ ")") ;
             let raw_fp = match User.otr_fingerprint ctx with Some fp -> fp | _ -> assert false in
-            let verify = "verify /fingerprint [fp] over second channel" in
+            let verify = "verify /fingerprint [fp] over second channel"
+            and used n = "(used " ^ (string_of_int n) ^ " times)"
+            in
             let otrmsg =
               match t.user_data.inc_fp jid raw_fp with
-              | true, _, _ -> "verified OTR key"
-              | false, 0, true -> "POSSIBLE BREAKIN ATTEMPT! new unverified key with a different verified key on disk! " ^ verify
-              | false, n, true -> "unverified key (used " ^ (string_of_int n) ^ " times) with a different verified key on disk! please " ^ verify
-              | false, 0, false -> "new unverified key! please " ^ verify
-              | false, n, false -> "unverified key (used " ^ (string_of_int n) ^ " times). please " ^ verify
+              | `Verified, _, _ -> "verified OTR key"
+              | `Unverified, 0, true -> "POSSIBLE BREAKIN ATTEMPT! new unverified key with a different verified key on disk! " ^ verify
+              | `Unverified, n, true -> "unverified key " ^ (used n) ^ " with a different verified key on disk! please " ^ verify
+              | `Unverified, 0, false -> "new unverified key! please " ^ verify
+              | `Unverified, n, false -> "unverified key " ^ (used n) ^ ". please " ^ verify
+              | `Revoked, 0, false -> "REVOKED key (never used before)"
+              | `Revoked, n, false -> "REVOKED key " ^ (used n)
+              | `Revoked, 0, true -> "REVOKED key (never used before), but a verified is available"
+              | `Revoked, n, true -> "REVOKED key " ^ (used n) ^ ", but a verified is available"
             in
             msg (`Local (jid, "OTR key")) false otrmsg
           | `Warning w               -> msg (`Local (jid, "OTR warning")) false w

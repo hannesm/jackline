@@ -66,9 +66,15 @@ type session = {
   receipt  : receipt_state ;
 }
 
+type verification_status = [
+  | `Verified
+  | `Unverified
+  | `Revoked
+]
+
 type fingerprint = {
   data          : string ;
-  verified      : bool ;
+  verified      : verification_status ;
   resources     : string list ;
   session_count : int
 }
@@ -136,7 +142,7 @@ val otr_fingerprint : Otr.State.session -> string option
 (* fingerprint *)
 val replace_fp : user -> fingerprint -> user
 val find_raw_fp : user -> string -> fingerprint
-val verified_fp : user -> string -> bool
+val verified_fp : user -> string -> verification_status
 
 type users
 

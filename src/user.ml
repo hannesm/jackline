@@ -255,9 +255,15 @@ let empty_session ~resource ?(presence=`Offline) ?otr ?config ?(priority=0) ?(st
 open Sexplib
 open Sexplib.Conv
 
+type verification_status = [
+  | `Verified
+  | `Unverified
+  | `Revoked
+] with sexp
+
 type fingerprint = {
   data          : string ;
-  verified      : bool ;
+  verified      : verification_status ;
   resources     : string list ;
   session_count : int
 } with sexp
@@ -376,7 +382,7 @@ let replace_fp u fp =
 
 let find_raw_fp u raw =
   try List.find (fun x -> x.data = raw) u.otr_fingerprints with
-    Not_found -> { data = raw ; verified = false ; resources = []; session_count = 0 }
+    Not_found -> { data = raw ; verified = `Unverified ; resources = []; session_count = 0 }
 
 let verified_fp u raw =
   let fps = find_raw_fp u raw in
@@ -471,6 +477,25 @@ let active_session user =
 
 let db_version = 1
 
+let fix_fp s =
+  let tr_verified = function
+    | "true" -> "Verified"
+    | "false" -> "Unverified"
+    | x -> x
+  in
+  let open Sexp in
+  match s with
+  | List s ->
+     let r = List.fold_left (fun acc s ->
+       let s = match s with
+         | List [ Atom "verified" ; Atom value ] -> List [ Atom "verified" ; Atom (tr_verified value) ]
+         | x -> x
+       in
+       s :: acc) [] s
+     in
+     List (List.rev r)
+  | x -> x
+
 let t_of_sexp t version =
   match t with
   | Sexp.List l ->
@@ -509,9 +534,9 @@ let t_of_sexp t version =
              assert (subscription = None) ;
              let subscription = subscription_of_sexp s in
              (name, jid, groups, preserve_messages, properties, Some subscription, otr_fingerprints, otr_config)
-           | Sexp.List [ Sexp.Atom "otr_fingerprints" ; fps ] ->
+           | Sexp.List [ Sexp.Atom "otr_fingerprints" ; List fps ] ->
              assert (otr_fingerprints = None);
-             let otr_fingerprints = list_of_sexp fingerprint_of_sexp fps in
+             let otr_fingerprints = List.map fingerprint_of_sexp (List.map fix_fp fps) in
              (name, jid, groups, preserve_messages, properties, subscription, Some otr_fingerprints, otr_config)
            | Sexp.List [ Sexp.Atom "otr_custom_config" ; cfg ] ->
              assert (otr_config = None);
