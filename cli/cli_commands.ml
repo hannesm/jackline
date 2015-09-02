@@ -68,7 +68,7 @@ let _ =
     [ "allow" ; "cancel" ; "request" ; "request_unsubscribe" ] ;
   new_command
     "fingerprint" "/fingerprint [fp]"
-    "verifies the current contact's OTR fingerprint (fp must match the one used in the currently established session)" [] ;
+    "marks the given OTR fingerprint verified for the current contact ; prints own and session fingerprint if no argument is given" [] ;
   new_command
     "revoke" "/revoke [fp]"
     "revokes the given OTR fingerprint" [] ;
@@ -290,20 +290,13 @@ let handle_add s a msg failure =
   with _ -> msg "error" "parsing of jid failed (user@node)" ; Lwt.return_unit
 
 let handle_fingerprint user session err fp =
-  Utils.option
-    (err "no active OTR session")
-    (fun s ->
-     if User.encrypted s.User.otr then
-       let manual_fp = string_normalize_fingerprint fp in
-       (match User.otr_fingerprint s.User.otr with
-        | Some key when key = manual_fp ->
-           let otr_fp = User.find_raw_fp user manual_fp in
-           let user = User.replace_fp user { otr_fp with User.verified = `Verified } in
-           (["fingerprint " ^ fp ^ " is now marked verified"], Some user, None)
-        | _ -> err "provided fingerprint does not match the one of this active session")
-     else
-       err "no active OTR session")
-    session
+  let manual_fp = string_normalize_fingerprint fp in
+  if String.length manual_fp = 40 then
+    let fp = User.find_raw_fp user manual_fp in
+    let user = User.replace_fp user { fp with User.verified = `Verified } in
+    (["verified " ^ manual_fp], Some user, None)
+  else
+    err "not a hex-encoded OTR fingerprint"
 
 let handle_revoke user err fp =
   let manual_fp = string_normalize_fingerprint fp in
