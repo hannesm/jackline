@@ -130,24 +130,25 @@ let load_user_dir cfgdir users =
   message_history_dir cfgdir >>= fun hist_dir ->
   user_dir cfgdir >>= fun dir ->
   Lwt_unix.opendir dir >>= fun dh ->
-  Lwt_unix.readdir dh >>= fun _ -> (* skip . *)
-  Lwt_unix.readdir dh >>= fun _ -> (* skip .. *)
   let rec loadone () =
     try_lwt
       (Lwt_unix.readdir dh >>= fun f ->
-       load_user dir f >>= fun x ->
-       (match x with
-        | None -> Printf.printf "something went wrong while loading %s/%s\n" dir f
-        | Some x ->
-           let message_history =
-             User.load_history
-               (`Bare x.User.bare_jid)
-               (Filename.concat hist_dir (User.jid x))
-               x.User.preserve_messages
-           in
-           let user = { x with User.message_history } in
-           User.replace_user users user) ;
-       loadone ())
+       if f = "." || f = ".." then
+         loadone ()
+       else
+         load_user dir f >>= fun x ->
+         (match x with
+          | None -> Printf.printf "something went wrong while loading %s/%s\n" dir f
+          | Some x ->
+             let message_history =
+               User.load_history
+                 (`Bare x.User.bare_jid)
+                 (Filename.concat hist_dir (User.jid x))
+                 x.User.preserve_messages
+             in
+             let user = { x with User.message_history } in
+             User.replace_user users user) ;
+         loadone ())
     with End_of_file -> Lwt_unix.closedir dh
   in
   loadone ()
