@@ -240,12 +240,15 @@ let notify state jid =
     ()
   else
     let user = User.find_or_create state.users jid in
-    (match User.active_session user, jid with
-     | Some s, `Full (_, r) when r = s.User.resource -> ()
-     | Some _, `Full _ -> User.replace_user state.users { user with User.expand = true }
-     | _ -> ()) ;
-    state.notifications <- jid :: state.notifications ;
-  Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Notifications)
+    if User.Jid.jid_matches jid state.active_contact && state.scrollback = 0 && List.length user.User.active_sessions = 1 then
+      ()
+    else
+      ((match User.active_session user, jid with
+        | Some s, `Full (_, r) when r = s.User.resource -> ()
+        | Some _, `Full _ -> User.replace_user state.users { user with User.expand = true }
+        | _ -> ()) ;
+       state.notifications <- jid :: state.notifications ;
+       Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Notifications))
 
 let notified state jid =
   state.notifications <- List.filter
