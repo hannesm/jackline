@@ -182,35 +182,36 @@ let handle_connect state log redraw failure =
   and user jid =
     User.find_or_create state.users jid
   and session jid =
-    let user = User.find_or_create state.users jid
-    and r = match User.Jid.resource jid with Some x -> x | None -> assert false
-    and maybe_expand u =
-      match
-        User.Jid.jid_matches (`Bare (User.Jid.t_to_bare state.active_contact)) jid,
-        List.length u.User.active_sessions > 1
-      with
-      | true, true -> User.replace_user state.users { u with User.expand = true }
-      | true, false -> state.active_contact <- jid
-      | _ -> ()
+    let user, session =
+      let user = User.find_or_create state.users jid
+      and r = match User.Jid.resource jid with Some x -> x | None -> assert false
+      in
+      match User.find_session user r, User.find_similar_session user r with
+      | Some session, _ ->
+         (user, session)
+      | None, Some similar ->
+         let new_session = { similar with User.resource = r ; presence = `Offline ; priority = 0 ; status = None }
+         and similar = { similar with User.dispose = true }
+         in
+         let u =
+           User.replace_session (User.replace_session user similar) new_session
+         in
+         User.replace_user state.users u ;
+         (u, new_session)
+      | None, None ->
+         let otr_config = otr_config user state in
+         let u, s = User.create_session user r otr_config state.config.Config.dsa in
+         User.replace_user state.users u ;
+         (u, s)
     in
-    match User.find_session user r, User.find_similar_session user r with
-    | Some session, _ -> session
-    | None, Some similar ->
-       let new_session = { similar with User.resource = r ; presence = `Offline ; priority = 0 ; status = None }
-       and similar = { similar with User.dispose = true }
-       in
-       let u =
-         User.replace_session (User.replace_session user similar) new_session
-       in
-       User.replace_user state.users u ;
-       maybe_expand u ;
-       new_session
-    | None, None ->
-       let otr_config = otr_config user state in
-       let u, s = User.create_session user r otr_config state.config.Config.dsa in
-       User.replace_user state.users u ;
-       maybe_expand u ;
-       s
+    (match
+        User.Jid.jid_matches (`Bare (User.Jid.t_to_bare state.active_contact)) jid,
+        List.length user.User.active_sessions > 1
+      with
+      | true, true -> User.replace_user state.users { user with User.expand = true }
+      | true, false -> state.active_contact <- jid
+      | _ -> ()) ;
+    session
   and update_session jid session =
     let user = User.find_or_create state.users jid in
     let u = User.replace_session user session in
