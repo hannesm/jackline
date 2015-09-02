@@ -534,7 +534,7 @@ let t_of_sexp t version =
              assert (subscription = None) ;
              let subscription = subscription_of_sexp s in
              (name, jid, groups, preserve_messages, properties, Some subscription, otr_fingerprints, otr_config)
-           | Sexp.List [ Sexp.Atom "otr_fingerprints" ; List fps ] ->
+           | Sexp.List [ Sexp.Atom "otr_fingerprints" ; Sexp.List fps ] ->
              assert (otr_fingerprints = None);
              let otr_fingerprints = List.map fingerprint_of_sexp (List.map fix_fp fps) in
              (name, jid, groups, preserve_messages, properties, subscription, Some otr_fingerprints, otr_config)
