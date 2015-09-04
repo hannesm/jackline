@@ -2,6 +2,7 @@ open Lwt
 open React
 
 let start_client cfgdir debug () =
+  Sys.(set_signal sigpipe Signal_ignore) ;
   ignore (LTerm_inputrc.load ());
 
   Printexc.register_printer (function
