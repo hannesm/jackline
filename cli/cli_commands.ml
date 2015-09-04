@@ -564,7 +564,7 @@ let handle_remove user =
         | Some x -> match User.Jid.string_to_jid x with
                     | None -> fail XMPPClient.BadRequest
                     | Some jid ->
-                       s.XMPPClient.user_data.log (`From jid) ("Removal of " ^ User.Jid.jid_to_string jid ^ " successful") ;
+                       s.XMPPClient.user_data.log (`From jid) ("Removal of " ^ User.jid user ^ " successful") ;
                        return_unit))
    with e -> failure e)
 
