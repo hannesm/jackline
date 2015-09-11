@@ -19,8 +19,8 @@ action ()
                 cat src/utils.ml | sed -e "s/%%VERSION%%/$GIT (dirty)/g" > src/utils.ml.tmp
             fi
             mv src/utils.ml.tmp src/utils.ml ;
-            action lib ;;
-            #git checkout src/utils.ml ;;
+            action lib ;
+            git checkout src/utils.ml ;;
         lib) $OCAMLBUILD src/xmpp_client.cmx cli/xmpp_client_cli.cmx bin/jackline.native ;;
         clean)   $OCAMLBUILD -clean ;;
         *)       $OCAMLBUILD $* ;;
