@@ -525,10 +525,6 @@ let resolve (hostname : string option) (port : int option) (jid_idn : string) =
 let connect ?out sockaddr myjid certname password presence authenticator user_data mvar =
   debug_out := out ;
 
-  let err_log msg = user_data.locallog "error" msg
-  and info info data = user_data.locallog info data
-  in
-
   PlainSocket.open_connection sockaddr >>= fun socket_data ->
   let module Socket_module =
     struct type t = PlainSocket.socket
@@ -539,7 +535,7 @@ let connect ?out sockaddr myjid certname password presence authenticator user_da
 
   let make_tls () =
     TLSSocket.switch (PlainSocket.get_fd socket_data) certname authenticator >>= fun socket_data ->
-    info "TLS session info" (tls_epoch_to_line socket_data) ;
+    user_data.locallog "TLS session info" (tls_epoch_to_line socket_data) ;
     let module TLS_module =
       struct type t = Tls_lwt.Unix.t
              let socket = socket_data
