@@ -10,7 +10,17 @@ OCAMLBUILD=${OCAMLBUILD:="ocamlbuild -tag debug -classic-display \
 action ()
 {
     case $1 in
-        default) ocaml pkg/git.ml ; action lib;;
+        default)
+            GIT=$(git log --abbrev-commit --oneline -1)
+            DIRTY=$(git status -bs --porcelain | wc -l)
+            if [ $DIRTY -eq 1 ]; then
+                cat src/utils.ml | sed -e "s/%%VERSION%%/$GIT/g" > src/utils.ml.tmp
+            else
+                cat src/utils.ml | sed -e "s/%%VERSION%%/$GIT (dirty)/g" > src/utils.ml.tmp
+            fi
+            mv src/utils.ml.tmp src/utils.ml ;
+            action lib ;;
+            #git checkout src/utils.ml ;;
         lib) $OCAMLBUILD src/xmpp_client.cmx cli/xmpp_client_cli.cmx bin/jackline.native ;;
         clean)   $OCAMLBUILD -clean ;;
         *)       $OCAMLBUILD $* ;;
