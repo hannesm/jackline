@@ -160,11 +160,9 @@ module Connect = struct
               ?out sockaddr
               config.Config.jid certname password
               (kind, show, s, prio) authenticator user_data
-              (fun () -> Lwt_mvar.put mvar (Success user_data)) ) >|= function
-              | None -> ()
-              | Some session ->
-                 xmpp_session := Some session ;
-                 Lwt.async (fun () -> Xmpp_callbacks.parse_loop session)
+              (fun () -> Lwt_mvar.put mvar (Success user_data))) >|= fun session ->
+               xmpp_session := Some session ;
+               Lwt.async (fun () -> Xmpp_callbacks.parse_loop session)
       with exn -> failure exn
     in
     let rec reconnect_loop user_data presence =

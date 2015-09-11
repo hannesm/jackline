@@ -529,35 +529,33 @@ let connect ?out sockaddr myjid certname password presence authenticator user_da
   and info info data = user_data.locallog info data
   in
 
-  (try_lwt PlainSocket.open_connection sockaddr >>= fun s -> return (Some s)
-   with _ -> return None) >>= function
-   | None -> err_log "failed to connect" ; return None
-   | Some socket_data ->
-     let module Socket_module = struct type t = PlainSocket.socket
-       let socket = socket_data
-       include PlainSocket
-     end
-     in
+  PlainSocket.open_connection sockaddr >>= fun socket_data ->
+  let module Socket_module =
+    struct type t = PlainSocket.socket
+           let socket = socket_data
+           include PlainSocket
+    end
+  in
 
-     let make_tls () =
-       TLSSocket.switch (PlainSocket.get_fd socket_data) certname authenticator >>= fun socket_data ->
-       info "TLS session info" (tls_epoch_to_line socket_data) ;
-       let module TLS_module = struct type t = Tls_lwt.Unix.t
-         let socket = socket_data
-         include TLSSocket
-       end in
-       return (module TLS_module : XMPPClient.Socket)
-     in
+  let make_tls () =
+    TLSSocket.switch (PlainSocket.get_fd socket_data) certname authenticator >>= fun socket_data ->
+    info "TLS session info" (tls_epoch_to_line socket_data) ;
+    let module TLS_module =
+      struct type t = Tls_lwt.Unix.t
+             let socket = socket_data
+             include TLSSocket
+      end in
+    return (module TLS_module : XMPPClient.Socket)
+  in
 
-     let myjid = User.Jid.jid_to_xmpp_jid (`Full myjid) in
-     XMPPClient.setup_session
-       ~user_data
-       ~myjid
-       ~plain_socket:(module Socket_module : XMPPClient.Socket)
-       ~tls_socket:make_tls
-       ~password
-       (session_callback presence mvar) >|= fun session ->
-     Some session
+  let myjid = User.Jid.jid_to_xmpp_jid (`Full myjid) in
+  XMPPClient.setup_session
+    ~user_data
+    ~myjid
+    ~plain_socket:(module Socket_module : XMPPClient.Socket)
+    ~tls_socket:make_tls
+    ~password
+    (session_callback presence mvar)
 
 let close session_data =
   let module S = (val session_data.socket : Socket) in
