@@ -10,7 +10,7 @@ OCAMLBUILD=${OCAMLBUILD:="ocamlbuild -tag debug -classic-display \
 action ()
 {
     case $1 in
-        default) action lib;;
+        default) ocaml pkg/git.ml ; action lib;;
         lib) $OCAMLBUILD src/xmpp_client.cmx cli/xmpp_client_cli.cmx bin/jackline.native ;;
         clean)   $OCAMLBUILD -clean ;;
         *)       $OCAMLBUILD $* ;;
