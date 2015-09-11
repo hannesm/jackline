@@ -10,8 +10,7 @@ license:      "proprietary"
 build: [
   [ "ocaml" "pkg/git.ml" ]
   [ "ocaml" "pkg/build.ml" "native=%{ocaml-native}%"
-                           "native-dynlink=%{ocaml-native-dynlink}%"
-                           "cmdliner=%{cmdliner:installed}%" ]
+                           "native-dynlink=%{ocaml-native-dynlink}%" ]
 ]
 depends: [
   "ocamlfind"
