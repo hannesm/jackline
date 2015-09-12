@@ -45,8 +45,6 @@ let start_client cfgdir debug () =
 
   Persistency.load_user_dir cfgdir users >>= fun () ->
 
-  let history = LTerm_history.create [] in
-
   (* setup self contact *)
   let myjid = config.Config.jid in
   let _ =
@@ -94,7 +92,7 @@ let start_client cfgdir debug () =
   ignore (LTerm.save_state term);  (* save the terminal state *)
 
   (* main loop *)
-  Cli_client.loop term history state n (log ?step:None) >>= fun state ->
+  Cli_client.loop term state n (log ?step:None) >>= fun state ->
 
   (match out with
    | None -> return_unit
