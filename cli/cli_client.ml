@@ -623,9 +623,8 @@ class read_line ~term ~network ~history ~state ~input_buffer = object(self)
     Zed_edit.insert_no_erase self#context s
 
   method save_input_buffer =
-    let current_user = User.find_user state.users (User.Jid.t_to_bare state.active_contact) in
-    User.{current_user with saved_input_buffer = self#eval }
-      |> User.replace_user state.users ;
+    User.{active state with saved_input_buffer = self#eval }
+    |> User.replace_user state.users
 
   method! send_action = function
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = down ->
