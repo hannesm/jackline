@@ -444,7 +444,7 @@ let handle_otr_start user session otr_cfg dsa =
     ([ "session is already encrypted, please finish first (/otr stop)!" ], None, None)
   | Some session ->
     let ctx, out = Otr.Engine.start_otr session.User.otr in
-    let user = User.replace_session user { session with User.otr = ctx } in
+    let user = User.update_otr user session ctx in
     let clos = fun s failure ->
       send s (`Full (user.User.bare_jid, session.User.resource)) None out failure
     in
@@ -455,7 +455,7 @@ let handle_otr_stop user session err =
   | None -> err "no active session"
   | Some session ->
     let ctx, out = Otr.Engine.end_otr session.User.otr in
-    let user = User.replace_session user { session with User.otr = ctx } in
+    let user = User.update_otr user session ctx in
     let datas, clos = match out with
       | None   -> ([], None)
       | Some body ->
@@ -469,7 +469,7 @@ let handle_otr_stop user session err =
 
 let handle_smp_abort user session =
   let ctx, out, ret = Otr.Engine.abort_smp session.User.otr in
-  let user = User.replace_session user { session with User.otr = ctx } in
+  let user = User.update_otr user session ctx in
   let datas = List.fold_left (fun ds -> function
       | `Warning x -> ("SMP abort warning: " ^ x) :: ds
       | _ -> ds)
@@ -488,7 +488,7 @@ let handle_smp_abort user session =
 let handle_smp_shared user session secret =
   let sec = Astring.String.trim secret in
   let ctx, out, ret = Otr.Engine.start_smp session.User.otr sec in
-  let user = User.replace_session user { session with User.otr = ctx } in
+  let user = User.update_otr user session ctx in
   let datas = List.fold_left (fun ds -> function
       | `Warning x -> ("SMP start warning: " ^ x) :: ds
       | _ -> ds )
@@ -512,7 +512,7 @@ let handle_smp_question term users user session question =
     (new Cli_config.read_inputline ~term ~prompt:"shared secret: " ())#run >>= fun secret ->
     let sec = Astring.String.trim secret in
     let ctx, out, ret = Otr.Engine.start_smp session.User.otr ~question sec in
-    let user = User.replace_session user { session with User.otr = ctx } in
+    let user = User.update_otr user session ctx in
     let add_msg u m = User.insert_message u (`Local (jid, "")) false false m in
     let user = if sec <> secret then
                  add_msg user "trimmed secret"
@@ -535,7 +535,7 @@ let handle_smp_question term users user session question =
 let handle_smp_answer user session secret =
   let sec = Astring.String.trim secret in
   let ctx, out, ret = Otr.Engine.answer_smp session.User.otr sec in
-  let user = User.replace_session user { session with User.otr = ctx } in
+  let user = User.update_otr user session ctx in
   let datas = List.fold_left (fun ds -> function
       | `Warning x -> ("SMP answer warning: " ^ x) :: ds
       | _ -> ds)

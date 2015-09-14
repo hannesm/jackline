@@ -437,6 +437,12 @@ let replace_session user session =
   in
   { user with active_sessions }
 
+let update_otr user session otr =
+  let others = List.filter (fun s -> s.resource <> session.resource) user.active_sessions
+  and session = { session with otr }
+  in
+  { user with active_sessions = session :: others }
+
 let get_session user tst =
   if List.exists tst user.active_sessions then
     Some (List.find tst user.active_sessions)

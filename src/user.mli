@@ -163,6 +163,8 @@ val remove : users -> Jid.bare_jid -> unit
 (* messing around with sessions *)
 val replace_session : user -> session -> user
 
+val update_otr : user -> session -> Otr.State.session -> user
+
 val sorted_sessions : user -> session list
 
 (* locating a session, creating, ... *)
