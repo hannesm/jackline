@@ -231,21 +231,23 @@ let random_string () =
   let rnd = Rng.generate 12 in
   Cstruct.to_string (Base64.encode rnd)
 
+let maybe_expand state jid =
+  let user = User.find_or_create state.users jid in
+  match user.User.expand, User.active_session user, jid with
+    | _, Some s, `Full (_, r) when r = s.User.resource -> ()
+    | false, Some _, `Full _ ->
+       User.replace_user state.users { user with User.expand = true }
+    | _ -> ()
+
 let notify state jid =
   Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Notifications) ;
   if
-    List.exists (fun x -> User.Jid.jid_matches x jid) state.notifications ||
-      (User.Jid.jid_matches state.active_contact jid &&
+    List.exists (User.Jid.jid_matches jid) state.notifications ||
+      (User.Jid.jid_matches jid state.active_contact &&
          state.scrollback = 0)
   then
     ()
   else
-    let user = User.find_or_create state.users jid in
-    (match User.active_session user, jid with
-     | Some s, `Full (_, r) when r = s.User.resource -> ()
-     | Some _, `Full _ ->
-        User.replace_user state.users { user with User.expand = true }
-     | _ -> ()) ;
     state.notifications <- jid :: state.notifications
 
 let notified state jid =
@@ -271,7 +273,8 @@ let session state =
 
 let activate_user state active =
   if state.active_contact <> active then
-    (state.last_active_contact <- state.active_contact ;
+    (maybe_expand state active ;
+     state.last_active_contact <- state.active_contact ;
      state.active_contact      <- active ;
      state.scrollback          <- 0 ;
      state.window_mode         <- BuddyList ;

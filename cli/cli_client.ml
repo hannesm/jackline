@@ -272,10 +272,13 @@ let format_messages user jid msgs =
                        | Some x when x = r -> None
                        | Some x -> Some x)
     in
-    msg_color , time ^ r ^ pre ^ message
+    (msg_color, time ^ r ^ pre ^ message)
   in
   let jid_tst o =
-    if List.length user.User.active_sessions < 2 then
+    if
+      List.length user.User.active_sessions < 2 ||
+        not user.User.expand
+    then
       true
     else
       match jid with
@@ -283,7 +286,9 @@ let format_messages user jid msgs =
         | `Full _ -> User.Jid.jid_matches o jid
   in
   List.map printmsg
-    (List.filter (fun m -> jid_tst (User.jid_of_direction m.User.direction)) msgs)
+    (List.filter
+       (fun m -> jid_tst (User.jid_of_direction m.User.direction))
+       msgs)
 
 let buddy_list users show_offline self active notifications length width =
   let buddies = show_buddy_list users show_offline self active notifications in

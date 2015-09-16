@@ -29,17 +29,19 @@ module Roster = Roster.Make (XMPPClient)
 open Lwt
 
 type user_data = {
-  log            : User.direction -> string -> unit ;
-  locallog       : string -> string -> unit ;
-  remove         : User.Jid.t -> unit ;
-  message        : User.Jid.t -> ?timestamp:float -> User.direction -> bool -> string -> unit ;
-  user           : User.Jid.t -> User.user ;
-  session        : User.Jid.t -> User.session ;
-  update_user    : User.user -> bool -> unit ;
-  update_session : User.Jid.t -> User.session -> unit ;
-  receipt        : User.Jid.t -> string -> unit ;
-  inc_fp         : User.Jid.t -> string -> (User.verification_status * int * bool) ;
-  failure        : exn -> unit Lwt.t ;
+  log                  : User.direction -> string -> unit ;
+  locallog             : string -> string -> unit ;
+  remove               : User.Jid.t -> unit ;
+  message              : User.Jid.t -> ?timestamp:float -> User.direction -> bool -> string -> unit ;
+  user                 : User.Jid.t -> User.user ;
+  session              : User.Jid.t -> User.session ;
+  update_user          : User.user -> bool -> unit ;
+  update_otr           : User.Jid.t -> User.session -> Otr.State.session -> unit ;
+  update_presence      : User.Jid.t -> User.session -> User.presence -> string option -> int -> unit ;
+  update_receipt_state : User.Jid.t -> User.receipt_state -> unit ;
+  receipt              : User.Jid.t -> string -> unit ;
+  inc_fp               : User.Jid.t -> string -> (User.verification_status * int * bool) ;
+  failure              : exn -> unit Lwt.t ;
 }
 
 (*
@@ -90,12 +92,10 @@ let request_disco t jid =
     | Some x -> match User.Jid.string_to_jid x with
                 | None -> fail BadRequest
                 | Some jid ->
-                   let session = t.user_data.session jid in
-                   t.user_data.update_session jid { session with User.receipt = receipt } ;
+                   t.user_data.update_receipt_state jid receipt ;
                    return_unit
   in
-  let session = t.user_data.session jid in
-  t.user_data.update_session jid { session with User.receipt = `Requested } ;
+  t.user_data.update_receipt_state jid `Requested ;
   let jid_to = User.Jid.jid_to_xmpp_jid jid in
   (try_lwt
      make_iq_request t ~jid_to (IQGet (Disco.make_disco_query [])) callback
@@ -203,7 +203,7 @@ let message_callback (t : user_data session_data) stanza =
            let timestamp = float_of_int tz +. Ptime.to_float_s time in
            let session = t.user_data.session jid in
            let ctx, _, ret = Otr.Engine.handle session.User.otr v in
-           t.user_data.update_session jid { session with User.otr = ctx } ;
+           t.user_data.update_otr jid session ctx ;
            let from = `From jid in
            List.iter (function
                        | `Received m -> msg ~timestamp from false m
@@ -216,7 +216,7 @@ let message_callback (t : user_data session_data) stanza =
     | Some v, None ->
       let session = t.user_data.session jid in
       let ctx, out, ret = Otr.Engine.handle session.User.otr v in
-      t.user_data.update_session jid { session with User.otr = ctx } ;
+      t.user_data.update_otr jid session ctx ;
       let from = `From jid in
       List.iter (function
           | `Established_encrypted_session ssid ->
@@ -326,8 +326,7 @@ let presence_callback t stanza =
           | true, true, true -> ()
           | _ ->
              let old = User.presence_to_char session.User.presence in
-             let session = { session with User.presence ; status ; priority } in
-             t.user_data.update_session jid session ;
+             t.user_data.update_presence jid session presence status priority ;
 
              let info =
                "presence changed: [" ^ old ^ ">" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring

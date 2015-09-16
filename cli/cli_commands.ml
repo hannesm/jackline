@@ -182,40 +182,46 @@ let handle_connect state log redraw failure =
   and user jid =
     User.find_or_create state.users jid
   and session jid =
-    let user, session =
-      let user = User.find_or_create state.users jid
-      and r = match User.Jid.resource jid with Some x -> x | None -> assert false
-      in
-      match User.find_session user r, User.find_similar_session user r with
-      | Some session, _ ->
-         (user, session)
-      | None, Some similar ->
-         let new_session = { similar with User.resource = r ; presence = `Offline ; priority = 0 ; status = None }
-         and similar = { similar with User.dispose = true }
-         in
-         let u =
-           User.replace_session (User.replace_session user similar) new_session
-         in
-         User.replace_user state.users u ;
-         (u, new_session)
-      | None, None ->
-         let otr_config = otr_config user state in
-         let u, s = User.create_session user r otr_config state.config.Config.dsa in
-         User.replace_user state.users u ;
-         (u, s)
+    let user = User.find_or_create state.users jid
+    and r = match User.Jid.resource jid with Some x -> x | None -> assert false
     in
-    (match
-        User.Jid.jid_matches (`Bare (User.Jid.t_to_bare state.active_contact)) jid,
-        List.length user.User.active_sessions > 1
-      with
-      | true, true -> User.replace_user state.users { user with User.expand = true }
-      | true, false -> state.active_contact <- jid
-      | _ -> ()) ;
-    session
-  and update_session jid session =
+    match User.find_session user r, User.find_similar_session user r with
+    | Some session, _ -> session
+    | None, Some similar ->
+       let new_session = { similar with User.resource = r ; presence = `Offline ; priority = 0 ; status = None }
+       and similar = { similar with User.dispose = true }
+       in
+       let u =
+         User.replace_session (User.replace_session user similar) new_session
+       in
+       User.replace_user state.users u ;
+       new_session
+    | None, None ->
+       let otr_config = otr_config user state in
+       let u, s = User.create_session user r otr_config state.config.Config.dsa in
+       User.replace_user state.users u ;
+       s
+  and update_otr jid session otr =
     let user = User.find_or_create state.users jid in
-    let u = User.replace_session user session in
-    User.replace_user state.users u
+    let user = User.update_otr user session otr in
+    User.replace_user state.users user
+  and update_presence jid session presence status priority =
+    let user = User.find_or_create state.users jid in
+    let session = { session with User.presence ; status ; priority } in
+    let user = User.replace_session user session in
+    User.replace_user state.users user ;
+    maybe_expand state state.active_contact
+  and update_receipt_state jid receipt =
+    let user = User.find_or_create state.users jid
+    and r = match User.Jid.resource jid with
+      | Some x -> x
+      | None -> assert false
+    in
+    match User.find_session user r with
+    | Some s ->
+       let u = User.replace_session user { s with User.receipt } in
+       User.replace_user state.users u
+    | None -> assert false
   and update_user user alert =
     User.replace_user state.users user ;
     if alert then notify state (`Bare user.User.bare_jid) ;
@@ -245,7 +251,9 @@ let handle_connect state log redraw failure =
       message ;
       user ;
       session ;
-      update_session ;
+      update_otr ;
+      update_presence ;
+      update_receipt_state ;
       update_user ;
       receipt ;
       inc_fp ;
