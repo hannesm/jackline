@@ -756,6 +756,32 @@ let rec loop term hist state network log =
               let u = User.insert_message u direction enc false data in
               User.replace_user state.users u
             in
+            let warn () =
+              let u =
+                User.find_user state.users (User.Jid.t_to_bare jid) in
+              let last =
+                try
+                  Some
+                    (List.find
+                       (fun m -> match m.User.direction with
+                                 | `From (`Full _) -> true
+                                 | `Local ((`Bare _), s) when s = "resource warning" -> true
+                                 | _ -> false)
+                       u.User.message_history)
+                with Not_found -> None
+              in
+              match last, jid with
+              | Some m, `Full (_, r) ->
+                 (match m.User.direction with
+                  | `From (`Full (_, r'))  when not (User.Jid.resource_similar r r') ->
+                     add_msg (`Local (`Bare (User.Jid.t_to_bare jid),
+                                      "resource warning"))
+                             false
+                             "received last message from different resource"
+                  | _ -> ())
+              | _ -> ()
+            in
+            warn () ;
             match user_out with
             | `Warning msg      ->
                add_msg (`Local (jid, "OTR Warning")) false msg ;
