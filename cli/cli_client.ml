@@ -278,7 +278,9 @@ let format_messages user jid msgs =
     if List.length user.User.active_sessions < 2 then
       true
     else
-      User.Jid.jid_matches jid o
+      match jid with
+        | `Bare _ -> User.Jid.jid_matches jid o
+        | `Full _ -> User.Jid.jid_matches o jid
   in
   List.map printmsg
     (List.filter (fun m -> jid_tst (User.jid_of_direction m.User.direction)) msgs)
@@ -470,12 +472,14 @@ let make_prompt size network state redraw =
       let fg_color = color_session (self = active) session in
 
       let main_window =
-        let msg_colors, data = List.split (
-          if active = self then
-            List.map (fun s -> `Default, s) (format_log statusses)
-          else
-            format_messages active state.active_contact active.User.message_history
-          )
+        let msg_colors, data =
+          let msgs =
+            if active = self then
+              List.map (fun s -> `Default, s) (format_log statusses)
+            else
+              format_messages active state.active_contact active.User.message_history
+          in
+          List.split msgs
         in
         let scroll default lines =
           (* data is already in right order -- but we need to strip scrollback *)
