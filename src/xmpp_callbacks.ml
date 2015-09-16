@@ -180,9 +180,12 @@ let message_callback (t : user_data session_data) stanza =
     let jid = User.Jid.xmpp_jid_to_jid jidt in
     let msg ?timestamp dir enc txt =
       let data =
-        let txt = validate_utf8 txt in
-        let txt = Escape.strip_tags txt in
-        Escape.unescape txt
+        if enc then
+          let txt = validate_utf8 txt in
+          let txt = Escape.strip_tags txt in
+          Escape.unescape txt
+        else
+          txt
       in
       t.user_data.message jid ?timestamp dir enc data ;
     in
