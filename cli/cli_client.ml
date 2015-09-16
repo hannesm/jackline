@@ -777,7 +777,7 @@ let rec loop term hist state network log =
                      add_msg (`Local (`Bare (User.Jid.t_to_bare jid),
                                       "resource warning"))
                              false
-                             "received last message from different resource"
+                             ("last message was received from a different resource, " ^ r' ^ "; you might want to expand the contact and send messages directly to that resource (instead of " ^ r ^ ")")
                   | _ -> ())
               | _ -> ()
             in
