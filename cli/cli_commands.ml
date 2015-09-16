@@ -192,7 +192,11 @@ let handle_connect state log redraw failure =
        and similar = { similar with User.dispose = true }
        in
        let u =
-         User.replace_session (User.replace_session user similar) new_session
+         let u, removed = User.replace_session user similar in
+         let u, removed' = User.replace_session u new_session in
+         (if removed || removed' then
+            update_notifications state u similar.User.resource new_session.User.resource) ;
+         u
        in
        User.replace_user state.users u ;
        new_session
@@ -208,7 +212,12 @@ let handle_connect state log redraw failure =
   and update_presence jid session presence status priority =
     let user = User.find_or_create state.users jid in
     let session = { session with User.presence ; status ; priority } in
-    let user = User.replace_session user session in
+    let user, removed = User.replace_session user session in
+    (if removed then
+       let r = session.User.resource in
+       match User.find_similar_session user r with
+       | None -> ()
+       | Some x -> update_notifications state user x.User.resource r) ;
     User.replace_user state.users user ;
     maybe_expand state state.active_contact
   and update_receipt_state jid receipt =
@@ -219,7 +228,7 @@ let handle_connect state log redraw failure =
     in
     match User.find_session user r with
     | Some s ->
-       let u = User.replace_session user { s with User.receipt } in
+       let u, _ = User.replace_session user { s with User.receipt } in
        User.replace_user state.users u
     | None -> assert false
   and update_user user alert =

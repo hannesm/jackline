@@ -429,13 +429,13 @@ let replace_user users user =
 
 let replace_session user session =
   let others = List.filter (fun s -> s.resource <> session.resource) user.active_sessions in
-  let active_sessions =
+  let active_sessions, removed =
     if session.dispose && session.presence = `Offline then
-      others
+      others, true
     else
-      session :: others
+      session :: others, false
   in
-  { user with active_sessions }
+  ({ user with active_sessions }, removed)
 
 let update_otr user session otr =
   let others = List.filter (fun s -> s.resource <> session.resource) user.active_sessions

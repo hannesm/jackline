@@ -279,3 +279,14 @@ let activate_user state active =
      state.scrollback          <- 0 ;
      state.window_mode         <- BuddyList ;
      notified state active)
+
+
+let update_notifications state user oldr newr =
+  let bare = user.User.bare_jid in
+  let update = function
+    | `Bare _ as x -> x
+    | `Full (jid, r) when bare = jid && r = oldr -> `Full (jid, newr)
+    | `Full _ as x -> x
+  in
+  let nots = List.map update state.notifications in
+  state.notifications <- nots

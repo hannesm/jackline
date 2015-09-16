@@ -161,7 +161,7 @@ val find_or_create : users -> Jid.t -> user
 val remove : users -> Jid.bare_jid -> unit
 
 (* messing around with sessions *)
-val replace_session : user -> session -> user
+val replace_session : user -> session -> user * bool
 
 val update_otr : user -> session -> Otr.State.session -> user
 
