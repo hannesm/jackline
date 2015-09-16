@@ -466,11 +466,6 @@ let make_prompt size network state redraw =
 
       let active = active state in
       let session = session state in
-      let notifications =
-        List.map
-          (fun id -> User.find_user state.users (User.Jid.t_to_bare id))
-          state.notifications
-      in
 
       let fg_color = color_session (self = active) session in
 
@@ -529,7 +524,7 @@ let make_prompt size network state redraw =
       in
       let hline = horizontal_line active session fg_color buddy_width state.scrollback showing_buddies size.cols in
 
-      let notify = List.length notifications > 0 in
+      let notify = List.length state.notifications > 0 in
       let log = active.User.preserve_messages in
       let mysession =
         let r = snd state.config.Config.jid in
