@@ -172,7 +172,10 @@ let handle_connect state log redraw failure =
     let user = User.find_or_create state.users jid in
     let user = User.insert_message ?timestamp user dir enc true txt in
     User.replace_user state.users user ;
-    notify state jid ;
+    let nonot = [ "OTR key" ; "OTR SMP done" ; "OTR warning" ; "OTR" ] in
+    (match dir with
+     | `Local (_, s) when List.exists (fun affix -> Astring.String.is_prefix ~affix s) nonot -> ()
+     | _ -> notify state jid) ;
     redraw ()
   and receipt jid id =
     let user = User.find_or_create state.users jid in

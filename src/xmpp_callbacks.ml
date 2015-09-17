@@ -244,8 +244,8 @@ let message_callback (t : user_data session_data) stanza =
           | `Received_encrypted e    -> msg from true e
           | `SMP_awaiting_secret     -> msg (`Local (jid, "OTR SMP")) false "awaiting SMP secret, answer with /smp answer [secret]"
           | `SMP_received_question q -> msg (`Local (jid, "OTR SMP")) false ("received SMP question (answer with /smp answer [secret]) " ^ q)
-          | `SMP_success             -> msg (`Local (jid, "OTR SMP")) false "successfully verified!"
-          | `SMP_failure             -> msg (`Local (jid, "OTR SMP")) false "failure" )
+          | `SMP_success             -> msg (`Local (jid, "OTR SMP done")) false "successfully verified!"
+          | `SMP_failure             -> msg (`Local (jid, "OTR SMP done")) false "failure" )
         ret ;
       (Lwt_list.iter_s (function
           | Xml.Xmlelement ((ns_rec, "request"), _, _) when
