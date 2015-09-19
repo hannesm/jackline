@@ -38,6 +38,7 @@ let exactly_one char s =
   try String.index_from s (succ (String.index s char)) char = 0 with Not_found -> true
 
 let configure term () =
+  LTerm.fprintl term "Welcome to Jackline configuration. You will be guided through the setup, question marked with \"[optional]\" are for advanced users and can be ignored." >>= fun () ->
   (new read_inputline ~term ~prompt:"enter jabber id (user@host/resource): " ())#run >>= fun jid ->
   (if not (exactly_one '@' jid) then
      fail (Invalid_argument "invalid jabber ID (needs exactly one @ character)")
@@ -49,7 +50,7 @@ let configure term () =
    | None | Some (`Bare _) -> fail (Invalid_argument "invalid jabber ID")
    | Some (`Full f) -> return f) >>= fun jid ->
 
-  (new read_inputline ~term ~prompt:"enter priority (default: 0): " ())#run >>= fun prio ->
+  (new read_inputline ~term ~prompt:"[optional] enter priority (defaults to 0): " ())#run >>= fun prio ->
   (if prio = "" then
      return None
    else
@@ -58,7 +59,7 @@ let configure term () =
        fail (Invalid_argument "invalid priority (range allowed is from 0 to 127)")
      else return (Some prio)) >>= fun priority ->
 
-  read_yes_no term "Configure hostname manually (no need for this)?" >>= fun hostname ->
+  read_yes_no term "[optional] configure hostname manually?" >>= fun hostname ->
   ( if hostname then
       begin
         (new read_inputline ~term ~prompt:"enter hostname or IP: " ())#run >>= fun hostname ->
@@ -80,11 +81,11 @@ let configure term () =
     else
       return (None, None) ) >>= fun (hostname, port) ->
 
-  (new read_password term ~prompt:"password (if empty, you are asked at every startup): ")#run >>= fun password ->
+  (new read_password term ~prompt:"[optional] password (otherwise will be asked at startup): ")#run >>= fun password ->
   let password = if password = "" then None else Some password in
 
   (* trust anchor *)
-  read_yes_no term "Provide trust anchor (alternative: tls server fingerprint)?" >>= fun ta ->
+  read_yes_no term "Provide a pem-encoded trust anchor (alternative: SHA256 digest of the server certificate)?" >>= fun ta ->
   ( if ta then
       begin
         (new read_inputline ~term ~prompt:"enter path to trust anchor file: " ())#run >>= fun trust_anchor ->
@@ -125,7 +126,7 @@ let configure term () =
         `Fingerprint fp
       end ) >>= fun authenticator ->
 
-  (new read_inputline ~term ~prompt:("enter name in certificate (optional): ") ())#run >>= fun certname ->
+  (new read_inputline ~term ~prompt:("[optional] enter name in certificate (by default, domain of JID will be used): ") ())#run >>= fun certname ->
   let certificate_hostname = if certname = "" then None else Some certname in
 
   (* otr config *)
@@ -155,7 +156,7 @@ let configure term () =
   let dsa = Nocrypto.Dsa.generate `Fips1024 in
   let otr_config = Otr.State.config versions policies in
 
-  (new read_inputline ~term ~prompt:"path to program which is called on notification: " ())#run >|= fun cb ->
+  (new read_inputline ~term ~prompt:"[optional] full path to program called on notifications: " ())#run >|= fun cb ->
   let notification_callback = if String.length cb = 0 then None else Some cb in
 
   let config = Config.({
