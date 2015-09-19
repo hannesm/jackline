@@ -166,9 +166,8 @@ let print_time ?now timestamp =
       display.Unix.tm_min
 
 let format_log log =
-  let open User in
   let now = Unix.time () in
-  let print_log { direction ; timestamp ; message ; _ } =
+  let print_log { User.direction ; timestamp ; message ; _ } =
     let time = print_time ~now timestamp in
     let from = match direction with
       | `From jid -> User.Jid.jid_to_string jid ^ ":"
@@ -623,8 +622,10 @@ class read_line ~term ~network ~history ~state ~input_buffer = object(self)
     Zed_edit.insert_no_erase self#context s
 
   method save_input_buffer =
-    User.{active state with saved_input_buffer = self#eval }
-    |> User.replace_user state.users
+    let saved_input_buffer = self#eval
+    and u = active state
+    in
+    User.replace_user state.users { u with User.saved_input_buffer }
 
   method! send_action = function
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = down ->
@@ -659,9 +660,8 @@ class read_line ~term ~network ~history ~state ~input_buffer = object(self)
       force_redraw ()
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrlq ->
       if List.length state.notifications > 0 then
-        (let jid = (List.hd (List.rev state.notifications)) in
-         self#save_input_buffer ;
-         activate_user state jid ;
+        (self#save_input_buffer ;
+         activate_user state (List.hd (List.rev state.notifications)) ;
          force_redraw () ;
          super#send_action LTerm_read_line.Break )
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrlx ->
@@ -688,7 +688,7 @@ class read_line ~term ~network ~history ~state ~input_buffer = object(self)
     LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = true; code = F10 })] [Edit (LTerm_edit.Zed (Zed_edit.Insert shift_f10))]);
     LTerm_read_line.(bind [LTerm_key.({ control = true; meta = false; shift = false; code = Char (UChar.of_int 0x71) })] [Edit (LTerm_edit.Zed (Zed_edit.Insert ctrlq))]);
     LTerm_read_line.(bind [LTerm_key.({ control = true; meta = false; shift = false; code = Char (UChar.of_int 0x78) })] [Edit (LTerm_edit.Zed (Zed_edit.Insert ctrlx))]);
-    self#set_input_buffer @@ Zed_rope.of_string input_buffer ;
+    self#set_input_buffer (Zed_rope.of_string input_buffer) ;
     self#set_prompt (S.l3 (fun size network redraw -> make_prompt size network state redraw)
                        self#size network redraw)
 end
@@ -718,20 +718,19 @@ let quit state =
 
 let rec loop term state network log =
   let add_history_entry entry =
-    let open User in
     let u = active state in
-    replace_user state.users
-      {u with
-       readline_history = entry ::
-         (take (min 50 @@ List.length u.readline_history)
-          u.readline_history []) }
+    let history =
+      let num = min 50 (List.length u.readline_history) in
+      take num u.readline_history []
+    in
+    let readline_history = entry :: history in
+    User.replace_user state.users { u with User.readline_history }
   in
   let history = (active state).User.readline_history in
   match_lwt
     try_lwt
-      lwt message = (new read_line ~term ~history ~state ~network
-                     ~input_buffer:((active state).User.saved_input_buffer)
-                    )#run in
+      let input_buffer = (active state).User.saved_input_buffer in
+      (new read_line ~term ~history ~state ~network ~input_buffer)#run >>= fun message ->
       if List.length state.notifications = 0 then
         Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) ;
       return (Some message)
