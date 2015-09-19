@@ -717,15 +717,6 @@ let quit state =
      Lwt_list.iter_s send_out otr_sessions
 
 let rec loop term state network log =
-  let add_history_entry entry =
-    let u = active state in
-    let history =
-      let num = min 50 (List.length u.readline_history) in
-      take num u.readline_history []
-    in
-    let readline_history = entry :: history in
-    User.replace_user state.users { u with User.readline_history }
-  in
   let history = (active state).User.readline_history in
   match_lwt
     try_lwt
@@ -740,7 +731,17 @@ let rec loop term state network log =
   with
     | None -> loop term state network log
     | Some message ->
-       let active = active state in
+       let active =
+         let u = active state in
+         let history =
+           let num = min 50 (List.length u.User.readline_history) in
+           take num u.User.readline_history []
+         in
+         let readline_history = message :: history in
+         let u = { u with User.readline_history } in
+         User.replace_user state.users u ;
+         u
+       in
        let failure reason =
          Connect.disconnect () >>= fun () ->
          log (`Local (state.active_contact, "session error"), Printexc.to_string reason) ;
@@ -768,7 +769,6 @@ let rec loop term state network log =
              state.active_contact <- jid) ;
           loop term state network log
        | _, Some '/' ->
-          add_history_entry message ;
           if String.trim message = "/quit" then
             quit state >|= fun () -> state
           else
@@ -778,7 +778,6 @@ let rec loop term state network log =
           err "try `M-x doctor` in emacs instead" >>= fun () ->
           loop term state network log
        | _, _ ->
-          add_history_entry message ;
           let jid = state.active_contact in
           let handle_otr_out user_out =
             let add_msg direction enc data =
