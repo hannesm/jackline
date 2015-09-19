@@ -10,6 +10,8 @@ let start_client cfgdir debug () =
       | Tls_lwt.Tls_failure f -> Some ("TLS failure: " ^ Tls.Engine.string_of_failure f)
       | _ -> None) ;
 
+  Nocrypto_entropy_lwt.initialize () >>= fun () ->
+
   Lazy.force LTerm.stdout >>= fun term ->
 
   Persistency.load_dsa cfgdir >>= fun dsa ->
