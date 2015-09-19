@@ -669,9 +669,6 @@ class read_line ~term ~network ~history ~state ~input_buffer = object(self)
       activate_user state state.last_active_contact ;
       force_redraw () ;
       super#send_action LTerm_read_line.Break
-    | LTerm_read_line.Accept ->
-      self#set_input_buffer Zed_rope.empty ;
-      super#send_action LTerm_read_line.Accept
     | action ->
       super#send_action action
 
