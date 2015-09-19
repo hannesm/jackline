@@ -602,7 +602,7 @@ let navigate_buddy_list state direction =
   | Up  , _    , true  -> set_active (pred active_idx)
   | Up  , _    , false -> set_active (pred (List.length userlist))
 
-class read_line ~term ~network ~history ~state = object(self)
+class read_line ~term ~network ~history ~state ~input_buffer = object(self)
   inherit LTerm_read_line.read_line ~history () as super
   inherit [Zed_utf8.t] LTerm_read_line.term term
 
@@ -617,11 +617,24 @@ class read_line ~term ~network ~history ~state = object(self)
 
   method! show_box = false
 
+  method set_input_buffer s =
+    Zed_edit.goto_bot self#context ;
+    Zed_edit.delete_next_line self#context ;
+    Zed_edit.insert_no_erase self#context s
+
+  method save_input_buffer =
+    User.{active state with saved_input_buffer = self#eval }
+    |> User.replace_user state.users
+
   method! send_action = function
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = down ->
-      navigate_buddy_list state Down
+      self#save_input_buffer ;
+      navigate_buddy_list state Down ;
+      super#send_action LTerm_read_line.Break
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = up ->
-      navigate_buddy_list state Up
+      self#save_input_buffer ;
+      navigate_buddy_list state Up ;
+      super#send_action LTerm_read_line.Break
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrldown ->
       navigate_message_buffer state Down
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrlup ->
@@ -646,12 +659,19 @@ class read_line ~term ~network ~history ~state = object(self)
       force_redraw ()
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrlq ->
       if List.length state.notifications > 0 then
-        (activate_user state (List.hd (List.rev state.notifications)) ;
-         force_redraw ())
+        (let jid = (List.hd (List.rev state.notifications)) in
+         self#save_input_buffer ;
+         activate_user state jid ;
+         force_redraw () ;
+         super#send_action LTerm_read_line.Break )
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrlx ->
-      let user = state.last_active_contact in
-      activate_user state user ;
-      force_redraw ()
+      self#save_input_buffer ;
+      activate_user state state.last_active_contact ;
+      force_redraw () ;
+      super#send_action LTerm_read_line.Break
+    | LTerm_read_line.Accept ->
+      self#set_input_buffer Zed_rope.empty ;
+      super#send_action LTerm_read_line.Accept
     | action ->
       super#send_action action
 
@@ -668,6 +688,7 @@ class read_line ~term ~network ~history ~state = object(self)
     LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = true; code = F10 })] [Edit (LTerm_edit.Zed (Zed_edit.Insert shift_f10))]);
     LTerm_read_line.(bind [LTerm_key.({ control = true; meta = false; shift = false; code = Char (UChar.of_int 0x71) })] [Edit (LTerm_edit.Zed (Zed_edit.Insert ctrlq))]);
     LTerm_read_line.(bind [LTerm_key.({ control = true; meta = false; shift = false; code = Char (UChar.of_int 0x78) })] [Edit (LTerm_edit.Zed (Zed_edit.Insert ctrlx))]);
+    self#set_input_buffer @@ Zed_rope.of_string input_buffer ;
     self#set_prompt (S.l3 (fun size network redraw -> make_prompt size network state redraw)
                        self#size network redraw)
 end
@@ -695,12 +716,22 @@ let quit state =
      in
      Lwt_list.iter_s send_out otr_sessions
 
-
-let rec loop term hist state network log =
-  let history = LTerm_history.contents hist in
+let rec loop term state network log =
+  let add_history_entry entry =
+    let open User in
+    let u = active state in
+    replace_user state.users
+      {u with
+       readline_history = entry ::
+         (take (min 50 @@ List.length u.readline_history)
+          u.readline_history []) }
+  in
+  let history = (active state).User.readline_history in
   match_lwt
     try_lwt
-      lwt message = (new read_line ~term ~history ~state ~network)#run in
+      lwt message = (new read_line ~term ~history ~state ~network
+                     ~input_buffer:((active state).User.saved_input_buffer)
+                    )#run in
       if List.length state.notifications = 0 then
         Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) ;
       return (Some message)
@@ -708,7 +739,7 @@ let rec loop term hist state network log =
       | Sys.Break -> return None
       | LTerm_read_line.Interrupt -> return (Some "/quit")
   with
-    | None -> loop term hist state network log
+    | None -> loop term state network log
     | Some message ->
        let active = active state in
        let failure reason =
@@ -736,19 +767,19 @@ let rec loop term hist state network log =
                | Some s -> `Full (active.User.bare_jid, s.User.resource)
              in
              state.active_contact <- jid) ;
-          loop term hist state network log
+          loop term state network log
        | _, Some '/' ->
-          LTerm_history.add hist message ;
+          add_history_entry message ;
           if String.trim message = "/quit" then
             quit state >|= fun () -> state
           else
             Cli_commands.exec message state term active session self failure log force_redraw >>= fun () ->
-            loop term hist state network log
+            loop term state network log
        | _, _ when self ->
           err "try `M-x doctor` in emacs instead" >>= fun () ->
-          loop term hist state network log
+          loop term state network log
        | _, _ ->
-          LTerm_history.add hist message ;
+          add_history_entry message ;
           let jid = state.active_contact in
           let handle_otr_out user_out =
             let add_msg direction enc data =
@@ -827,7 +858,7 @@ let rec loop term hist state network log =
               maybe_send t out user_out
            | _           , None ->
               err "no active session, try to connect first") >>= fun () ->
-          loop term hist state network log
+          loop term state network log
 
 let init_system log myjid connect_mvar =
   let domain = snd (fst myjid) in
