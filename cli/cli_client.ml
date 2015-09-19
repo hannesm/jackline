@@ -738,7 +738,7 @@ let rec loop term state network log =
            take num u.User.readline_history []
          in
          let readline_history = message :: history in
-         let u = { u with User.readline_history } in
+         let u = { u with User.readline_history ; saved_input_buffer = "" } in
          User.replace_user state.users u ;
          u
        in
