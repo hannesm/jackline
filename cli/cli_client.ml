@@ -96,22 +96,22 @@ let line_wrap_with_tags ?raw ~(tags : 'a list) ~max_length entries : ('a * Zed_u
     | Some _ -> ""
   in
   let rec worker (acc : ('a * Zed_utf8.t) list) = function
-    | (tag, entry)::remaining when String.contains entry '\n' ->
-      let part1     = String.(sub entry 0 (index entry '\n')) in
-      let part1_len = succ (String.length part1) in
-      let part2     = pre ^ String.sub entry part1_len ((String.length entry) - part1_len) in
-      let remaining =
-        match raw with
-        | Some _ -> (tag,part2)::(tag,part1)::remaining
-        | None   ->
-          match String.trim part1 = "", String.trim part2 = "" with
-          | true , true  -> remaining
-          | false, true  -> (tag,part1)::remaining
-          | true , false -> (tag,part2)::remaining
-          | false, false -> (tag,part2)::(tag,part1)::remaining
-      in
-      worker acc remaining
-    | (tag, entry)::remaining when (Zed_utf8.length entry) > max_length ->
+    | (tag, entry) :: remaining when String.contains entry '\n' ->
+       let remaining = match Astring.String.cut ~sep:"\n" entry with
+         | None -> assert false (* this can never happen *)
+         | Some (part1, part2) ->
+            let part2 = pre ^ part2 in
+            match raw with
+            | Some _ -> (tag, part2) :: (tag, part1) :: remaining
+            | None   ->
+               match String.trim part1 = "", String.trim part2 = "" with
+               | true , true  -> remaining
+               | false, true  -> (tag, part1) :: remaining
+               | true , false -> (tag, part2) :: remaining
+               | false, false -> (tag, part2) :: (tag, part1) :: remaining
+       in
+       worker acc remaining
+    | (tag, entry) :: remaining when (Zed_utf8.length entry) > max_length ->
       let part1, part2 =
         let p1, p2 = Zed_utf8.break entry max_length in
         match raw with
@@ -124,16 +124,16 @@ let line_wrap_with_tags ?raw ~(tags : 'a list) ~max_length entries : ('a * Zed_u
             | _ when idx = 0               -> None
             | _                            -> find_space (pred idx)
           in
-          ( match find_space 10 with
-            | None   -> (p1, pre ^ String.trim p2)
-            | Some x ->
+          (match find_space 10 with
+           | None   -> (p1, pre ^ String.trim p2)
+           | Some x ->
               let p1, p2 = Zed_utf8.break entry (x + (max_length - n)) in
-              (p1, pre ^ String.trim p2) )
+              (p1, pre ^ String.trim p2))
         | Some _ -> (p1, p2)
       in
-      worker acc ((tag,part2)::(tag,part1)::remaining)
-    | (tag, entry)::remaining ->
-      worker ((tag,entry)::acc) remaining
+      worker acc ((tag, part2) :: (tag, part1) :: remaining)
+    | (tag, entry) :: remaining ->
+      worker ((tag, entry) :: acc) remaining
     | [] -> acc
   in
   worker [] (List.combine tags entries)
@@ -147,12 +147,11 @@ let line_wrap ?raw ~max_length entries : Zed_utf8.t list =
 
 
 let print_time ?now timestamp =
-  let open Unix in
   let now = match now with
-      | Some x -> x
-      | None -> time ()
+    | Some x -> x
+    | None -> Unix.time ()
   in
-  let display = localtime timestamp in
+  let display = Unix.localtime timestamp in
   if now -. timestamp < 86400. then (* less than a day ago *)
     Printf.sprintf "%02d:%02d:%02d "
       display.Unix.tm_hour
@@ -449,7 +448,7 @@ let make_prompt size network state redraw =
     | FullScreen | Raw -> size.cols
   in
 
-  if main_size <= 6 || chat_width <= 10 then
+  if main_size <= 6 || chat_width <= 20 then
     eval ([S "need more space"])
   else
     begin
