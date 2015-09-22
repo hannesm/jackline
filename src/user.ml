@@ -237,6 +237,11 @@ type session = {
   receipt  : receipt_state ;
 }
 
+let presence_unmodified session presence status priority =
+  session.presence = presence &&
+    session.status = status &&
+      session.priority = priority
+
 let empty_session ~resource ?(presence=`Offline) ?otr ?config ?(priority=0) ?(status=None) ?(dispose=false) dsa () =
   let otr = match otr, config with
     | Some otr, _         -> otr

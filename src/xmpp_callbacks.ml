@@ -13,14 +13,21 @@ module XMPPClient = XMPP.Make (Lwt) (Xmlstream.XmlStream) (IDCallback)
 
 open XMPPClient
 
-let presence_to_xmpp =
-  function
+let presence_to_xmpp = function
   | `Offline      -> (Some Unavailable, None)
-  | `Online       -> (None , None)
-  | `Free         -> (None , Some ShowChat)
-  | `Away         -> (None , Some ShowAway)
-  | `DoNotDisturb -> (None , Some ShowDND)
-  | `ExtendedAway -> (None , Some ShowXA)
+  | `Online       -> (None, None)
+  | `Free         -> (None, Some ShowChat)
+  | `Away         -> (None, Some ShowAway)
+  | `DoNotDisturb -> (None, Some ShowDND)
+  | `ExtendedAway -> (None, Some ShowXA)
+
+let xmpp_to_presence = function
+  | None          -> `Online
+  | Some ShowChat -> `Free
+  | Some ShowAway -> `Away
+  | Some ShowDND  -> `DoNotDisturb
+  | Some ShowXA   -> `ExtendedAway
+
 
 module Version = XEP_version.Make (XMPPClient)
 module Disco = XEP_disco.Make (XMPPClient)
@@ -303,12 +310,15 @@ let presence_callback t stanza =
        | Some x -> let data = validate_utf8 x in (Some data, " - " ^ data)
      in
      let handle_presence presence =
-       let n = User.presence_to_char presence
-       and nl = User.presence_to_string presence
+       let ppart old =
+         let presence_char = User.presence_to_char presence
+         and presence_string = User.presence_to_string presence
+         in
+         "[" ^ old ^ ">" ^ presence_char ^ "] (now " ^ presence_string ^ ")" ^ statstring
        in
        match jid with
        | `Bare _ ->
-          let info = "presence [_>" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring in
+          let info = "presence " ^ ppart "_" in
           t.user_data.log (`From jid) info
        | `Full _ ->
           let session = t.user_data.session jid in
@@ -316,40 +326,25 @@ let presence_callback t stanza =
             | None -> 0
             | Some x -> x
           in
-          match
-            session.User.presence = presence,
-            session.User.status = status,
-            session.User.priority = priority
-          with
-          | true, true, true -> ()
-          | _ ->
-             let old = User.presence_to_char session.User.presence in
-             t.user_data.update_presence jid session presence status priority ;
-
-             let info =
-               "presence changed: [" ^ old ^ ">" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring
-             in
-             t.user_data.log (`From jid) info
+          if User.presence_unmodified session presence status priority then
+            ()
+          else
+            let old = User.presence_to_char session.User.presence in
+            t.user_data.update_presence jid session presence status priority ;
+            let info = "presence changed: " ^ ppart old in
+            t.user_data.log (`From jid) info
      in
      let handle_subscription txt hlp =
        t.user_data.message jid (`Local (jid, txt)) false hlp
      in
      match stanza.content.presence_type with
-     | None ->
-       begin
-         match stanza.content.show with
-         | None          -> handle_presence `Online
-         | Some ShowChat -> handle_presence `Free
-         | Some ShowAway -> handle_presence `Away
-         | Some ShowDND  -> handle_presence `DoNotDisturb
-         | Some ShowXA   -> handle_presence `ExtendedAway
-       end
+     | None              -> handle_presence (xmpp_to_presence stanza.content.show)
+     | Some Unavailable  -> handle_presence `Offline
      | Some Probe        -> handle_subscription "probed" statstring
      | Some Subscribe    -> handle_subscription "subscription request" ("(use /authorization allow cancel) to accept/deny" ^ statstring)
      | Some Subscribed   -> handle_subscription "you are now subscribed to their presence" statstring
      | Some Unsubscribe  -> handle_subscription "wants to unsubscribe from your presence" ("(use /authorization cancel allow) to accept/deny" ^ statstring)
      | Some Unsubscribed -> handle_subscription "you have been unsubscribed from their presence" statstring
-     | Some Unavailable  -> handle_presence `Offline
   ) ;
   return_unit
 
