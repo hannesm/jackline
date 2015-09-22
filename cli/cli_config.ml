@@ -159,7 +159,7 @@ let configure term () =
   (new read_inputline ~term ~prompt:"[optional] full path to program called on notifications: " ())#run >|= fun cb ->
   let notification_callback = if String.length cb = 0 then None else Some cb in
 
-  let config = Config.({
+  let config = Xconfig.({
       version = current_version ;
       jid ;
       priority ;

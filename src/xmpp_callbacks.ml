@@ -13,14 +13,21 @@ module XMPPClient = XMPP.Make (Lwt) (Xmlstream.XmlStream) (IDCallback)
 
 open XMPPClient
 
-let presence_to_xmpp =
-  function
+let presence_to_xmpp = function
   | `Offline      -> (Some Unavailable, None)
-  | `Online       -> (None , None)
-  | `Free         -> (None , Some ShowChat)
-  | `Away         -> (None , Some ShowAway)
-  | `DoNotDisturb -> (None , Some ShowDND)
-  | `ExtendedAway -> (None , Some ShowXA)
+  | `Online       -> (None, None)
+  | `Free         -> (None, Some ShowChat)
+  | `Away         -> (None, Some ShowAway)
+  | `DoNotDisturb -> (None, Some ShowDND)
+  | `ExtendedAway -> (None, Some ShowXA)
+
+let xmpp_to_presence = function
+  | None          -> `Online
+  | Some ShowChat -> `Free
+  | Some ShowAway -> `Away
+  | Some ShowDND  -> `DoNotDisturb
+  | Some ShowXA   -> `ExtendedAway
+
 
 module Version = XEP_version.Make (XMPPClient)
 module Disco = XEP_disco.Make (XMPPClient)
@@ -172,6 +179,64 @@ let validate_utf8 txt =
   with
   | Zed_utf8.Invalid (err, esc) -> err ^ ": " ^ esc
 
+let delayed_timestamp = function
+  | None -> None
+  | Some delay ->
+     match Ptime.of_rfc3339 delay.delay_stamp with
+     | Rresult.Ok (time, tz) -> Some (float_of_int tz +. Ptime.to_float_s time)
+     | Rresult.Error _ -> None
+
+let process_receipt cb = function
+  | Xml.Xmlelement ((ns_rec, "received"), attrs, _) when ns_rec = ns_receipts ->
+     (match Xml.safe_get_attr_value "id" attrs with
+      | "" -> ()
+      | id -> cb id)
+  | _ -> ()
+
+let answer_receipt jid_to t stanza_id = function
+  | Xml.Xmlelement ((ns_rec, "request"), _, _) when ns_rec = ns_receipts ->
+     Utils.option
+       return_unit
+       (fun id ->
+        let x =
+          let qname = (ns_receipts, "received") in
+          [Xml.Xmlelement (qname, [Xml.make_attr "id" id], [])]
+        in
+        (try_lwt
+           send_message t ?jid_to ~kind:Chat ~x ()
+         with _ -> return_unit))
+       stanza_id
+  | _ -> return_unit
+
+let notify_user msg jid ctx inc_fp = function
+  | `Established_encrypted_session ssid ->
+     msg (`Local (jid, "OTR")) false ("encrypted connection established (ssid " ^ ssid ^ ")") ;
+     let raw_fp = match User.otr_fingerprint ctx with Some fp -> fp | _ -> assert false in
+     let verify = "verify /fingerprint [fp] over second channel"
+     and used n = "(used " ^ (string_of_int n) ^ " times)"
+     in
+     let otrmsg =
+       match inc_fp jid raw_fp with
+       | `Verified, _, _ -> "verified OTR key"
+       | `Unverified, 0, true -> "POSSIBLE BREAKIN ATTEMPT! new unverified key with a different verified key on disk! " ^ verify
+       | `Unverified, n, true -> "unverified key " ^ (used n) ^ " with a different verified key on disk! please " ^ verify
+       | `Unverified, 0, false -> "new unverified key! please " ^ verify
+       | `Unverified, n, false -> "unverified key " ^ (used n) ^ ". please " ^ verify
+       | `Revoked, 0, false -> "REVOKED key (never used before)"
+       | `Revoked, n, false -> "REVOKED key " ^ (used n)
+       | `Revoked, 0, true -> "REVOKED key (never used before), but a verified is available"
+       | `Revoked, n, true -> "REVOKED key " ^ (used n) ^ ", but a verified is available"
+     in
+     msg (`Local (jid, "OTR key")) false otrmsg
+  | `Warning w               -> msg (`Local (jid, "OTR warning")) false w
+  | `Received_error e        -> msg (`From jid) false e
+  | `Received m              -> msg (`From jid) false m
+  | `Received_encrypted e    -> msg (`From jid) true e
+  | `SMP_awaiting_secret     -> msg (`Local (jid, "SMP")) false "awaiting SMP secret, answer with /smp answer [secret]"
+  | `SMP_received_question q -> msg (`Local (jid, "SMP")) false ("received SMP question (answer with /smp answer [secret]) " ^ q)
+  | `SMP_success             -> msg (`Local (jid, "OTR SMP")) false "successfully verified!"
+  | `SMP_failure             -> msg (`Local (jid, "OTR SMP")) false "failure"
+
 let message_callback (t : user_data session_data) stanza =
   restart_keepalive t ;
   match stanza.jid_from with
@@ -189,87 +254,27 @@ let message_callback (t : user_data session_data) stanza =
       in
       t.user_data.message jid ?timestamp dir enc data ;
     in
-    List.iter (function
-        | Xml.Xmlelement ((ns_rec, "received"), attrs, _) when ns_rec = ns_receipts ->
-          (match Xml.safe_get_attr_value "id" attrs with
-           | "" -> ()
-           | id -> t.user_data.receipt jid id)
-        | _ -> ()) stanza.x ;
-    match stanza.content.body, stanza.content.message_delay with
+    List.iter (process_receipt (t.user_data.receipt jid)) stanza.x ;
+    match stanza.content.body, delayed_timestamp stanza.content.message_delay with
     | None, _ -> return_unit
-    | Some v, Some d ->
-       (match Ptime.of_rfc3339 d.delay_stamp with
-        | Rresult.Ok (time, tz) ->
-           let timestamp = float_of_int tz +. Ptime.to_float_s time in
-           let session = t.user_data.session jid in
-           let ctx, _, ret = Otr.Engine.handle session.User.otr v in
-           t.user_data.update_otr jid session ctx ;
-           let from = `From jid in
-           List.iter (function
-                       | `Received m -> msg ~timestamp from false m
-                       | `Received_encrypted e -> msg ~timestamp from true e
-                       | _ -> ()
-             )
-             ret ;
-           return_unit
-        | Rresult.Error _ -> return_unit)
+    | Some v, Some timestamp ->
+       let session = t.user_data.session jid in
+       let ctx, _, ret = Otr.Engine.handle session.User.otr v in
+       t.user_data.update_otr jid session ctx ;
+       List.iter (notify_user (msg ~timestamp) jid ctx t.user_data.inc_fp) ret ;
+       return_unit
     | Some v, None ->
       let session = t.user_data.session jid in
       let ctx, out, ret = Otr.Engine.handle session.User.otr v in
       t.user_data.update_otr jid session ctx ;
-      let from = `From jid in
-      List.iter (function
-          | `Established_encrypted_session ssid ->
-            msg (`Local (jid, "OTR")) false ("encrypted connection established (ssid " ^ ssid ^ ")") ;
-            let raw_fp = match User.otr_fingerprint ctx with Some fp -> fp | _ -> assert false in
-            let verify = "verify /fingerprint [fp] over second channel"
-            and used n = "(used " ^ (string_of_int n) ^ " times)"
-            in
-            let otrmsg =
-              match t.user_data.inc_fp jid raw_fp with
-              | `Verified, _, _ -> "verified OTR key"
-              | `Unverified, 0, true -> "POSSIBLE BREAKIN ATTEMPT! new unverified key with a different verified key on disk! " ^ verify
-              | `Unverified, n, true -> "unverified key " ^ (used n) ^ " with a different verified key on disk! please " ^ verify
-              | `Unverified, 0, false -> "new unverified key! please " ^ verify
-              | `Unverified, n, false -> "unverified key " ^ (used n) ^ ". please " ^ verify
-              | `Revoked, 0, false -> "REVOKED key (never used before)"
-              | `Revoked, n, false -> "REVOKED key " ^ (used n)
-              | `Revoked, 0, true -> "REVOKED key (never used before), but a verified is available"
-              | `Revoked, n, true -> "REVOKED key " ^ (used n) ^ ", but a verified is available"
-            in
-            msg (`Local (jid, "OTR key")) false otrmsg
-          | `Warning w               -> msg (`Local (jid, "OTR warning")) false w
-          | `Received_error e        -> msg from false e
-          | `Received m              -> msg from false m
-          | `Received_encrypted e    -> msg from true e
-          | `SMP_awaiting_secret     -> msg (`Local (jid, "OTR SMP")) false "awaiting SMP secret, answer with /smp answer [secret]"
-          | `SMP_received_question q -> msg (`Local (jid, "OTR SMP")) false ("received SMP question (answer with /smp answer [secret]) " ^ q)
-          | `SMP_success             -> msg (`Local (jid, "OTR SMP done")) false "successfully verified!"
-          | `SMP_failure             -> msg (`Local (jid, "OTR SMP done")) false "failure" )
-        ret ;
-      (Lwt_list.iter_s (function
-          | Xml.Xmlelement ((ns_rec, "request"), _, _) when
-              ns_rec = ns_receipts ->
-            (match stanza.id with
-              | None -> return_unit
-              | Some id ->
-                let x = [Xml.Xmlelement ((ns_receipts, "received"), [Xml.make_attr "id" id], [])] in
-                (try_lwt
-                   send_message t
-                   ?jid_to:stanza.jid_from
-                   ~kind:Chat
-                   ~x
-                    ()
-                 with _ -> return_unit))
-          | _ -> return_unit) stanza.x) >>= fun () ->
+      List.iter (notify_user msg jid ctx t.user_data.inc_fp) ret ;
+      let jid_to = stanza.jid_from in
+      Lwt_list.iter_s (answer_receipt jid_to t stanza.id) stanza.x >>= fun () ->
       match out with
       | None -> return_unit
       | Some body ->
         (try_lwt
-           send_message t
-             ?jid_to:stanza.jid_from
-             ~kind:Chat
-             ~body ()
+           send_message t ?jid_to ~kind:Chat ~body ()
          with e -> t.user_data.failure e) >>= fun () ->
         if (t.user_data.session jid).User.receipt = `Unknown then
           try_lwt request_disco t jid
@@ -305,12 +310,15 @@ let presence_callback t stanza =
        | Some x -> let data = validate_utf8 x in (Some data, " - " ^ data)
      in
      let handle_presence presence =
-       let n = User.presence_to_char presence
-       and nl = User.presence_to_string presence
+       let ppart old =
+         let presence_char = User.presence_to_char presence
+         and presence_string = User.presence_to_string presence
+         in
+         "[" ^ old ^ ">" ^ presence_char ^ "] (now " ^ presence_string ^ ")" ^ statstring
        in
        match jid with
        | `Bare _ ->
-          let info = "presence [_>" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring in
+          let info = "presence " ^ ppart "_" in
           t.user_data.log (`From jid) info
        | `Full _ ->
           let session = t.user_data.session jid in
@@ -318,40 +326,25 @@ let presence_callback t stanza =
             | None -> 0
             | Some x -> x
           in
-          match
-            session.User.presence = presence,
-            session.User.status = status,
-            session.User.priority = priority
-          with
-          | true, true, true -> ()
-          | _ ->
-             let old = User.presence_to_char session.User.presence in
-             t.user_data.update_presence jid session presence status priority ;
-
-             let info =
-               "presence changed: [" ^ old ^ ">" ^ n ^ "] (now " ^ nl ^ ")" ^ statstring
-             in
-             t.user_data.log (`From jid) info
+          if User.presence_unmodified session presence status priority then
+            ()
+          else
+            let old = User.presence_to_char session.User.presence in
+            t.user_data.update_presence jid session presence status priority ;
+            let info = "presence changed: " ^ ppart old in
+            t.user_data.log (`From jid) info
      in
      let handle_subscription txt hlp =
        t.user_data.message jid (`Local (jid, txt)) false hlp
      in
      match stanza.content.presence_type with
-     | None ->
-       begin
-         match stanza.content.show with
-         | None          -> handle_presence `Online
-         | Some ShowChat -> handle_presence `Free
-         | Some ShowAway -> handle_presence `Away
-         | Some ShowDND  -> handle_presence `DoNotDisturb
-         | Some ShowXA   -> handle_presence `ExtendedAway
-       end
+     | None              -> handle_presence (xmpp_to_presence stanza.content.show)
+     | Some Unavailable  -> handle_presence `Offline
      | Some Probe        -> handle_subscription "probed" statstring
      | Some Subscribe    -> handle_subscription "subscription request" ("(use /authorization allow cancel) to accept/deny" ^ statstring)
      | Some Subscribed   -> handle_subscription "you are now subscribed to their presence" statstring
      | Some Unsubscribe  -> handle_subscription "wants to unsubscribe from your presence" ("(use /authorization cancel allow) to accept/deny" ^ statstring)
      | Some Unsubscribed -> handle_subscription "you have been unsubscribed from their presence" statstring
-     | Some Unavailable  -> handle_presence `Offline
   ) ;
   return_unit
 

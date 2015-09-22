@@ -66,6 +66,8 @@ type session = {
   receipt  : receipt_state ;
 }
 
+val presence_unmodified : session -> presence -> string option -> int -> bool
+
 type verification_status = [
   | `Verified
   | `Unverified
