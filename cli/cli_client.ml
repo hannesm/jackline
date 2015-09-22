@@ -704,6 +704,78 @@ let quit state =
      in
      Lwt_list.iter_s send_out otr_sessions
 
+let warn jid user add_msg =
+  let last_msg =
+    try Some (List.find
+                (fun m -> match m.User.direction with
+                          | `From (`Full _) -> true
+                          | `Local ((`Bare _), s) when s = "resource warning" -> true
+                          | _ -> false)
+                user.User.message_history)
+    with Not_found -> None
+  in
+  match last_msg, jid with
+  | Some m, `Full (_, r) ->
+     (match m.User.direction with
+      | `From (`Full (_, r'))  when not (User.Jid.resource_similar r r') ->
+         let msg =
+           "the last message was received from a different resource (" ^
+             r' ^ "); you might want to expand the contact and send messages\
+                   directly to that resource (instead of " ^ r ^ ")"
+         in
+         add_msg (`Local (`Bare (User.Jid.t_to_bare jid), "resource warning")) false msg
+      | _ -> ())
+  | _ -> ()
+
+let send_msg t state active_user failure message =
+  let jid = state.active_contact in
+  let handle_otr_out user_out =
+    let add_msg direction enc data =
+      let u = active state in
+      let u = User.insert_message u direction enc false data in
+      User.replace_user state.users u
+    in
+    warn jid (active state) add_msg ;
+    match user_out with
+    | `Warning msg      ->
+       add_msg (`Local (jid, "OTR Warning")) false msg ;
+       ""
+    | `Sent m           ->
+       let id = random_string () in
+       add_msg (`To (jid, id)) false m ;
+       id
+    | `Sent_encrypted m ->
+       let id = random_string () in
+       add_msg (`To (jid, id)) true (Escape.unescape m) ;
+       id
+  in
+  let maybe_send out user_out =
+    Utils.option
+      Lwt.return_unit
+      (fun body -> send t jid (Some (handle_otr_out user_out)) body failure)
+      out
+  in
+  let out, user_out =
+    match Utils.option None (User.find_session active_user) (User.Jid.resource jid) with
+    | None ->
+       let ctx = Otr.State.new_session (otr_config active_user state) state.config.Config.dsa () in
+       let _, out, user_out = Otr.Engine.send_otr ctx message in
+       (out, user_out)
+    | Some session ->
+       let ctx = session.User.otr in
+       let msg =
+         if Otr.State.is_encrypted ctx then
+           Escape.escape message
+         else
+           message
+       in
+       let ctx, out, user_out = Otr.Engine.send_otr ctx msg in
+       let user = User.update_otr active_user session ctx in
+       User.replace_user state.users user ;
+       (out, user_out)
+  in
+  maybe_send out user_out
+
 let rec loop term state network log =
   let history = (active state).User.readline_history in
   match_lwt
@@ -766,84 +838,9 @@ let rec loop term state network log =
           err "try `M-x doctor` in emacs instead" >>= fun () ->
           loop term state network log
        | _, _ ->
-          let jid = state.active_contact in
-          let handle_otr_out user_out =
-            let add_msg direction enc data =
-              let u = User.find_user state.users (User.Jid.t_to_bare jid) in
-              let u = User.insert_message u direction enc false data in
-              User.replace_user state.users u
-            in
-            let warn () =
-              let u =
-                User.find_user state.users (User.Jid.t_to_bare jid) in
-              let last =
-                try
-                  Some
-                    (List.find
-                       (fun m -> match m.User.direction with
-                                 | `From (`Full _) -> true
-                                 | `Local ((`Bare _), s) when s = "resource warning" -> true
-                                 | _ -> false)
-                       u.User.message_history)
-                with Not_found -> None
-              in
-              match last, jid with
-              | Some m, `Full (_, r) ->
-                 (match m.User.direction with
-                  | `From (`Full (_, r'))  when not (User.Jid.resource_similar r r') ->
-                     add_msg (`Local (`Bare (User.Jid.t_to_bare jid),
-                                      "resource warning"))
-                             false
-                             ("last message was received from a different resource, " ^ r' ^ "; you might want to expand the contact and send messages directly to that resource (instead of " ^ r ^ ")")
-                  | _ -> ())
-              | _ -> ()
-            in
-            warn () ;
-            match user_out with
-            | `Warning msg      ->
-               add_msg (`Local (jid, "OTR Warning")) false msg ;
-               ""
-            | `Sent m           ->
-               let id = random_string () in
-               add_msg (`To (jid, id)) false m ;
-               id
-            | `Sent_encrypted m ->
-               let id = random_string () in
-               add_msg (`To (jid, id)) true (Escape.unescape m) ;
-               id
-          in
-          let maybe_send t out user_out =
-            Utils.option
-              Lwt.return_unit
-              (fun body ->
-                 send t jid (Some (handle_otr_out user_out)) body failure)
-              out
-          in
-          (match jid, !xmpp_session with
-           | `Full (_, r), Some t ->
-              (match User.find_session active r with
-               | Some session ->
-                  let ctx = session.User.otr in
-                  let msg =
-                    if Otr.State.is_encrypted ctx then
-                      Escape.escape message
-                    else
-                      message
-                  in
-                  let ctx, out, user_out = Otr.Engine.send_otr ctx msg in
-                  let user = User.update_otr active session ctx in
-                  User.replace_user state.users user ;
-                  maybe_send t out user_out
-               | None ->
-                  let ctx = Otr.State.new_session (otr_config active state) state.config.Config.dsa () in
-                  let _, out, user_out = Otr.Engine.send_otr ctx message in
-                  maybe_send t out user_out)
-           | `Bare _     , Some t ->
-              let ctx = Otr.State.new_session (otr_config active state) state.config.Config.dsa () in
-              let _, out, user_out = Otr.Engine.send_otr ctx message in
-              maybe_send t out user_out
-           | _           , None ->
-              err "no active session, try to connect first") >>= fun () ->
+          (match !xmpp_session with
+           | None -> err "no active session, try to connect first"
+           | Some t -> send_msg t state active failure message) >>= fun () ->
           loop term state network log
 
 let init_system log myjid connect_mvar =
