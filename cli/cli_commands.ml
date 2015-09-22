@@ -78,7 +78,7 @@ let _ =
     "otr" "/otr [argument]" "manages OTR session by argument -- one of 'start' 'stop' or 'info'"
     [ "start" ; "stop" ; "info" ] ;
   new_command
-    "smp" "/smp [argument]" "manages SMP session by argument -- one of 'shared [secret]', 'question [question]', 'answer' or 'abort' - question is optional and may _NOT_ include a whitespace!"
+    "smp" "/smp [argument]" "manages SMP session by argument -- one of 'shared [secret]', 'question [question]', 'answer' or 'abort'"
     [ "shared" ; "question" ; "answer" ; "abort" ] ;
   new_command
     "remove" "/remove" "remove current user from roster" [] ;
@@ -172,9 +172,8 @@ let handle_connect state log redraw failure =
     let user = User.find_or_create state.users jid in
     let user = User.insert_message ?timestamp user dir enc true txt in
     User.replace_user state.users user ;
-    let nonot = [ "OTR key" ; "OTR SMP done" ; "OTR warning" ; "OTR" ] in
     (match dir with
-     | `Local (_, s) when List.exists (fun affix -> Astring.String.is_prefix ~affix s) nonot -> ()
+     | `Local (_, s) when Astring.String.is_prefix ~affix:"OTR" s -> ()
      | _ -> notify state jid) ;
     redraw ()
   and receipt jid id =
