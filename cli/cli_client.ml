@@ -145,7 +145,6 @@ let line_wrap ?raw ~max_length entries : Zed_utf8.t list =
   in
   snd data
 
-
 let print_time ?now timestamp =
   let now = match now with
     | Some x -> x
@@ -184,13 +183,12 @@ let format_buddies buddies self active notifications width =
       | None -> `Bare user.User.bare_jid
       | Some s -> `Full (user.User.bare_jid, s.User.resource)
     in
-    let jid_m o = User.Jid.jid_matches o jid in
     let notify =
       if expanded then
-        List.exists jid_m notifications
+        List.exists (fun n -> User.Jid.jid_matches n jid) notifications
       else
         List.exists (User.Jid.jid_matches (`Bare user.User.bare_jid)) notifications
-    and self = jid_m (`Bare (fst self))
+    and self = User.Jid.jid_matches (`Bare (fst self)) jid
     in
     let item =
       let f, t = if self then
@@ -213,7 +211,7 @@ let format_buddies buddies self active notifications width =
       let data = print st f presence t (User.Jid.bare_jid_to_string bare) (User.Jid.resource jid) in
       pad width data
     and highlight, e_highlight =
-      if jid = active || (not user.User.expand && jid_m active) then
+      if jid = active || (not user.User.expand && (User.Jid.jid_matches active jid)) then
         ([ B_reverse true ], [ E_reverse ])
       else
         ([], [])
@@ -249,9 +247,8 @@ let format_messages user jid msgs =
     let en = if encrypted then "O" else "-" in
     let msg_color, pre = match direction with
       | `From _ -> (`Highlight, "<" ^ en ^ "- ")
-      | `To _   ->
-         let f = if received then "-" else "?" in
-         (`Default, f ^ en ^ "> ")
+      | `To _   -> let f = if received then "-" else "?" in
+                   (`Default, f ^ en ^ "> ")
       | `Local (_, x) when x = "" -> (`Default, "*** ")
       | `Local (_, x) -> (`Default, "***" ^ x ^ "*** ")
     in
@@ -259,10 +256,7 @@ let format_messages user jid msgs =
       let other = User.jid_of_direction direction in
       match jid with
       | `Bare _ ->
-         Utils.option
-           ""
-           (fun x -> "(" ^ x ^ ") ")
-           (User.Jid.resource other)
+         Utils.option "" (fun x -> "(" ^ x ^ ") ") (User.Jid.resource other)
       | `Full (_, r) ->
          Utils.option "" (fun x -> "(" ^ x ^ ") ")
                       (match User.Jid.resource other with
@@ -273,10 +267,7 @@ let format_messages user jid msgs =
     (msg_color, time ^ r ^ pre ^ message)
   in
   let jid_tst o =
-    if
-      List.length user.User.active_sessions < 2 ||
-        not user.User.expand
-    then
+    if List.length user.User.active_sessions < 2 || not user.User.expand then
       true
     else
       match jid with
@@ -499,12 +490,11 @@ let make_prompt size network state redraw =
         | BuddyList ->
           let chat = line_wrap_with_tags ~max_length:chat_width ~tags:msg_colors data in
           let chat = scroll (`Default, "") chat in
-
           let buddies = buddy_list state.users state.show_offline state.config.Config.jid state.active_contact state.notifications main_size buddy_width in
           let comb = List.combine buddies chat in
           let pipe = S (Zed_utf8.singleton (UChar.of_int 0x2502)) in
           List.map (fun (buddy, chat) ->
-              buddy @ [ B_fg fg_color ; pipe ; E_fg; ] @ (render_msg chat))
+              buddy @ [ B_fg fg_color ; pipe ; E_fg ] @ (render_msg chat))
             comb
 
         | FullScreen ->
@@ -534,8 +524,10 @@ let make_prompt size network state redraw =
       let notify = List.length state.notifications > 0 in
       let log = active.User.preserve_messages in
       let mysession =
-        let r = snd state.config.Config.jid in
-        List.find (fun s -> s.User.resource = r) self.User.active_sessions in
+        match User.find_session self (snd state.config.Config.jid) with
+        | None -> assert false
+        | Some s -> s
+      in
       let status = status_line self mysession notify log redraw fg_color size.cols in
       let main = List.flatten main_window in
 
