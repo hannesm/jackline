@@ -20,25 +20,25 @@ let start_client cfgdir debug () =
       | None ->
         Cli_config.configure term () >>= fun config ->
         Persistency.dump_config cfgdir config >>= fun () ->
-        ( match config.Config.password with
-          | None -> return_unit
-          | Some x -> Persistency.dump_password cfgdir x ) >>= fun () ->
-        Persistency.dump_dsa cfgdir config.Config.dsa >|= fun () ->
+        (match config.Xconfig.password with
+         | None -> return_unit
+         | Some x -> Persistency.dump_password cfgdir x) >>= fun () ->
+        Persistency.dump_dsa cfgdir config.Xconfig.dsa >|= fun () ->
         config
       | Some cfg -> return cfg ) >>= fun config ->
 
-  ( match config.Config.password with
+  ( match config.Xconfig.password with
     | None -> Persistency.load_password cfgdir
     | Some x -> return (Some x)) >>= fun password ->
-  let config = { config with Config.password = password } in
+  let config = { config with Xconfig.password = password } in
 
-  ( match config.Config.password with
+  ( match config.Xconfig.password with
     | None ->
-       let jid = User.Jid.full_jid_to_string config.Config.jid in
+       let jid = User.Jid.full_jid_to_string config.Xconfig.jid in
        (new Cli_config.read_password term ~prompt:("password for " ^ jid ^ ": "))#run >|= fun password ->
        Some password
     | Some x -> return (Some x)) >>= fun password ->
-  let config = { config with Config.password = password } in
+  let config = { config with Xconfig.password = password } in
 
   Persistency.load_users cfgdir >>= fun users ->
   let users_sexp_existed = User.length users > 0 in
@@ -46,10 +46,10 @@ let start_client cfgdir debug () =
   Persistency.load_user_dir cfgdir users >>= fun () ->
 
   (* setup self contact *)
-  let myjid = config.Config.jid in
+  let myjid = config.Xconfig.jid in
   let _ =
     let u = User.find_or_create users (`Full myjid) in
-    let u, session = User.create_session u (snd myjid) config.Config.otr_config config.Config.dsa in
+    let u, session = User.create_session u (snd myjid) config.Xconfig.otr_config config.Xconfig.dsa in
     User.replace_user users u
   in
 
@@ -63,7 +63,7 @@ let start_client cfgdir debug () =
 
   let state_mvar =
     let file = Filename.concat cfgdir "notification.state" in
-    Cli_state.Notify.notify_writer myjid config.Config.notification_callback file
+    Cli_state.Notify.notify_writer myjid config.Xconfig.notification_callback file
   in
   let connect_mvar = Cli_state.Connect.connect_me config (log ?step:None) out state_mvar in
   let state = Cli_state.empty_state cfgdir config users connect_mvar state_mvar in

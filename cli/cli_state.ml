@@ -25,7 +25,7 @@ type connect_v =
 
 type state = {
   config_directory            : string                    ; (* set initially *)
-  config                      : Config.t                  ; (* set initially *)
+  config                      : Xconfig.t                  ; (* set initially *)
 
   state_mvar                  : notify_v Lwt_mvar.t       ; (* set initially *)
   user_mvar                   : User.user Lwt_mvar.t      ; (* set initially *)
@@ -116,9 +116,9 @@ module Connect = struct
        Lwt.return_unit
 
   let resolve config log =
-    let domain = JID.to_idn (User.Jid.jid_to_xmpp_jid (`Full config.Config.jid))
-    and hostname = config.Config.hostname
-    and port = config.Config.port
+    let domain = JID.to_idn (User.Jid.jid_to_xmpp_jid (`Full config.Xconfig.jid))
+    and hostname = config.Xconfig.hostname
+    and port = config.Xconfig.port
     in
     let report sockaddr =
       let addr = match sockaddr with
@@ -126,7 +126,7 @@ module Connect = struct
            Unix.string_of_inet_addr inet_addr ^ " on port " ^ string_of_int port
         | Unix.ADDR_UNIX str -> str
       in
-      log (`Local (`Full config.Config.jid, "connecting"), "to " ^ domain ^ " (" ^ addr ^ ")") ;
+      log (`Local (`Full config.Xconfig.jid, "connecting"), "to " ^ domain ^ " (" ^ addr ^ ")") ;
     in
     Xmpp_callbacks.resolve hostname port domain >|= fun sa ->
     report sa ;
@@ -136,29 +136,29 @@ module Connect = struct
     let mvar = Lwt_mvar.create Cancel in
     let failure reason =
       disconnect () >>= fun () ->
-      log (`Local (`Full config.Config.jid, "session error"), Printexc.to_string reason) ;
+      log (`Local (`Full config.Xconfig.jid, "session error"), Printexc.to_string reason) ;
       let conn = fun () -> Lwt_mvar.put mvar Reconnect in
       ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async conn)) ;
       Lwt.return_unit
     in
     let connect user_data (p, s, prio) =
-      match config.Config.password with
+      match config.Xconfig.password with
       | None -> failure (Invalid_argument "no password provided, please restart")
       | Some password ->
          try_lwt
            (resolve config log >>= fun sockaddr ->
-            let certname = match config.Config.certificate_hostname with
-              | None -> JID.to_idn (User.Jid.jid_to_xmpp_jid (`Full config.Config.jid))
+            let certname = match config.Xconfig.certificate_hostname with
+              | None -> JID.to_idn (User.Jid.jid_to_xmpp_jid (`Full config.Xconfig.jid))
               | Some x -> x
             in
             (X509_lwt.authenticator
-               (match config.Config.authenticator with
+               (match config.Xconfig.authenticator with
                 | `Trust_anchor x -> `Ca_file x
                 | `Fingerprint fp -> `Hex_fingerprints (`SHA256, [(certname, fp)]))) >>= fun authenticator ->
             let kind, show = Xmpp_callbacks.presence_to_xmpp p in
             Xmpp_callbacks.connect
               ?out sockaddr
-              config.Config.jid certname password
+              config.Xconfig.jid certname password
               (kind, show, s, prio) authenticator user_data
               (fun () -> Lwt_mvar.put mvar (Success user_data))) >|= fun session ->
                xmpp_session := Some session ;
@@ -183,14 +183,14 @@ module Connect = struct
               reconnect_loop (Some u) presence
            | _, u -> reconnect_loop u presence
     in
-    Lwt.async (fun () -> reconnect_loop None (`Online, None, config.Config.priority)) ;
+    Lwt.async (fun () -> reconnect_loop None (`Online, None, config.Xconfig.priority)) ;
     mvar
 end
 
 let empty_state config_directory config users connect_mvar state_mvar =
   let user_mvar = Persistency.notify_user config_directory
-  and last_status = (`Local (`Full config.Config.jid, ""), "")
-  and active = `Full config.Config.jid
+  and last_status = (`Local (`Full config.Xconfig.jid, ""), "")
+  and active = `Full config.Xconfig.jid
   in
   {
     config_directory                ;
@@ -219,7 +219,7 @@ let empty_state config_directory config users connect_mvar state_mvar =
 
 
 let add_status state dir msg =
-  let self = User.find_user state.users (fst state.config.Config.jid) in
+  let self = User.find_user state.users (fst state.config.Xconfig.jid) in
   let self = User.insert_message self dir false true msg in
   User.replace_user state.users self
 
@@ -259,7 +259,7 @@ let notified state jid =
 
 let otr_config user state =
   match user.User.otr_custom_config with
-  | None -> state.config.Config.otr_config
+  | None -> state.config.Xconfig.otr_config
   | Some x -> x
 
 let active state =

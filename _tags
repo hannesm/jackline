@@ -2,7 +2,7 @@ true : annot, bin_annot
 <src> : include
 <cli> : include
 
-<src/config.ml>: package(sexplib), package(otr), package(sexplib.syntax), \
+<src/xconfig.ml>: package(sexplib), package(otr), package(sexplib.syntax), \
   syntax(camlp4o)
 <src/escape.ml>: package(astring)
 <src/persistency.ml>: package(sexplib), package(lwt), package(lwt.syntax), \

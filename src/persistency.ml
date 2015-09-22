@@ -95,11 +95,11 @@ let user_dir dir =
   name
 
 let dump_config cfgdir cfg =
-  write cfgdir config (Config.store_config cfg)
+  write cfgdir config (Xconfig.store_config cfg)
 
 let load_config dsa cfg =
   read cfg config >|= function
-  | Some x ->  Some (Config.load_config dsa x)
+  | Some x ->  Some (Xconfig.load_config dsa x)
   | None   -> None
 
 let dump_user cfgdir user =

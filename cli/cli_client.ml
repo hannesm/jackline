@@ -443,7 +443,7 @@ let make_prompt size network state redraw =
     eval ([S "need more space"])
   else
     begin
-      let self = User.find_user state.users (fst state.config.Config.jid) in
+      let self = User.find_user state.users (fst state.config.Xconfig.jid) in
       let statusses = self.User.message_history in
       let logs =
         let entries =
@@ -490,7 +490,7 @@ let make_prompt size network state redraw =
         | BuddyList ->
           let chat = line_wrap_with_tags ~max_length:chat_width ~tags:msg_colors data in
           let chat = scroll (`Default, "") chat in
-          let buddies = buddy_list state.users state.show_offline state.config.Config.jid state.active_contact state.notifications main_size buddy_width in
+          let buddies = buddy_list state.users state.show_offline state.config.Xconfig.jid state.active_contact state.notifications main_size buddy_width in
           let comb = List.combine buddies chat in
           let pipe = S (Zed_utf8.singleton (UChar.of_int 0x2502)) in
           List.map (fun (buddy, chat) ->
@@ -524,7 +524,7 @@ let make_prompt size network state redraw =
       let notify = List.length state.notifications > 0 in
       let log = active.User.preserve_messages in
       let mysession =
-        match User.find_session self (snd state.config.Config.jid) with
+        match User.find_session self (snd state.config.Xconfig.jid) with
         | None -> assert false
         | Some s -> s
       in
@@ -575,7 +575,7 @@ let navigate_message_buffer state direction =
   | Up, n -> state.scrollback <- n + 1; force_redraw ()
 
 let navigate_buddy_list state direction =
-  let userlist = show_buddies state.users state.show_offline state.config.Config.jid state.active_contact state.notifications in
+  let userlist = show_buddies state.users state.show_offline state.config.Xconfig.jid state.active_contact state.notifications in
   let set_active idx =
     let user = List.nth userlist idx in
     activate_user state user ;
@@ -758,7 +758,7 @@ let send_msg t state active_user failure message =
   let out, user_out =
     match Utils.option None (User.find_session active_user) (User.Jid.resource jid) with
     | None ->
-       let ctx = Otr.State.new_session (otr_config active_user state) state.config.Config.dsa () in
+       let ctx = Otr.State.new_session (otr_config active_user state) state.config.Xconfig.dsa () in
        let _, out, user_out = Otr.Engine.send_otr ctx message in
        (out, user_out)
     | Some session ->
@@ -808,7 +808,7 @@ let rec loop term state network log =
          ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async (fun () ->
                    Lwt_mvar.put state.connect_mvar Reconnect))) ;
          Lwt.return_unit
-       and self = User.Jid.jid_matches (`Bare active.User.bare_jid) (`Full state.config.Config.jid)
+       and self = User.Jid.jid_matches (`Bare active.User.bare_jid) (`Full state.config.Xconfig.jid)
        and err data = log (`Local (state.active_contact, "error"), data) ; return_unit
        in
        let fst =

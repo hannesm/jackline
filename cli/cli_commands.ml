@@ -159,9 +159,9 @@ let handle_connect state log redraw failure =
     let bare = User.Jid.t_to_bare jid in
     User.remove state.users bare ;
     if User.Jid.jid_matches (`Bare bare) state.active_contact then
-      activate_user state (`Full state.config.Config.jid) ;
+      activate_user state (`Full state.config.Xconfig.jid) ;
     if User.Jid.jid_matches (`Bare bare) state.last_active_contact then
-      state.last_active_contact <- `Full state.config.Config.jid ;
+      state.last_active_contact <- `Full state.config.Xconfig.jid ;
     redraw ()
   and log dir txt =
     log (dir, txt)
@@ -204,7 +204,7 @@ let handle_connect state log redraw failure =
        new_session
     | None, None ->
        let otr_config = otr_config user state in
-       let u, s = User.create_session user r otr_config state.config.Config.dsa in
+       let u, s = User.create_session user r otr_config state.config.Xconfig.dsa in
        User.replace_user state.users u ;
        s
   and update_otr jid session otr =
@@ -662,7 +662,7 @@ let exec input state term contact session self failure log redraw =
   let msg = tell_user log state.active_contact in
   let err = msg "error" in
   let own_session =
-    let id, resource = state.config.Config.jid in
+    let id, resource = state.config.Xconfig.jid in
     match User.find_session (User.find_or_create state.users (`Bare id)) resource with
     | None -> assert false
     | Some x -> x
@@ -729,7 +729,7 @@ let exec input state term contact session self failure log redraw =
           | ("info", _), _ ->
              let datas =
                if self then
-                 handle_own_info contact own_session state.config_directory state.config.Config.dsa
+                 handle_own_info contact own_session state.config_directory state.config.Xconfig.dsa
                else
                  handle_info contact (session state) state.config_directory
              in
@@ -741,7 +741,7 @@ let exec input state term contact session self failure log redraw =
 
          | ("fingerprint", None), _ ->
             let datas =
-              handle_own_otr_info state.config.Config.dsa @
+              handle_own_otr_info state.config.Xconfig.dsa @
                 current_otr_fp (session state)
             in
             (datas, None, None)
@@ -777,13 +777,13 @@ let exec input state term contact session self failure log redraw =
          | ("otrpolicy", Some _), _ when self -> err "cannot adjust own otr policy"
          | ("otrpolicy", Some z), _ ->
             let cfg = otr_config contact state in
-            adjust_otr_policy state.config.Config.otr_config cfg contact z
+            adjust_otr_policy state.config.Xconfig.otr_config cfg contact z
 
          | ("otr", None), _ ->
             handle_help (msg ~prefix:"argument required") (Some "otr")
          | ("otr", Some "info"), _  ->
             if self then
-              (handle_own_otr_info state.config.Config.dsa, None, None)
+              (handle_own_otr_info state.config.Xconfig.dsa, None, None)
             else
               (handle_otr_info contact (session state), None, None)
 
@@ -793,7 +793,7 @@ let exec input state term contact session self failure log redraw =
               err "do not like to talk to myself"
             else
               let cfg = otr_config contact state in
-              handle_otr_start contact (session state) cfg state.config.Config.dsa
+              handle_otr_start contact (session state) cfg state.config.Xconfig.dsa
 
          | ("otr", Some "stop"), Some _ ->
             if self then
