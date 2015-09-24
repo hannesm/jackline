@@ -156,11 +156,11 @@ let handle_help msg = function
 
 let handle_connect state log redraw failure =
   let remove jid =
-    let bare = User.Jid.t_to_bare jid in
+    let bare = Xjid.t_to_bare jid in
     User.remove state.users bare ;
-    if User.Jid.jid_matches (`Bare bare) state.active_contact then
+    if Xjid.jid_matches (`Bare bare) state.active_contact then
       activate_user state (`Full state.config.Xconfig.jid) ;
-    if User.Jid.jid_matches (`Bare bare) state.last_active_contact then
+    if Xjid.jid_matches (`Bare bare) state.last_active_contact then
       state.last_active_contact <- `Full state.config.Xconfig.jid ;
     redraw ()
   and log dir txt =
@@ -185,7 +185,7 @@ let handle_connect state log redraw failure =
     User.find_or_create state.users jid
   and session jid =
     let user = User.find_or_create state.users jid
-    and r = match User.Jid.resource jid with Some x -> x | None -> assert false
+    and r = match Xjid.resource jid with Some x -> x | None -> assert false
     in
     match User.find_session user r, User.find_similar_session user r with
     | Some session, _ -> session
@@ -224,7 +224,7 @@ let handle_connect state log redraw failure =
     maybe_expand state state.active_contact
   and update_receipt_state jid receipt =
     let user = User.find_or_create state.users jid
-    and r = match User.Jid.resource jid with
+    and r = match Xjid.resource jid with
       | Some x -> x
       | None -> assert false
     in
@@ -238,7 +238,7 @@ let handle_connect state log redraw failure =
     if alert then notify state (`Bare user.User.bare_jid) ;
     redraw ()
   and inc_fp jid raw_fp =
-    match User.Jid.resource jid with
+    match Xjid.resource jid with
     | None -> assert false
     | Some resource ->
        let user = User.find_or_create state.users jid in
@@ -580,7 +580,7 @@ let handle_remove user =
         ignore jid_to ; ignore lang ; ignore el ;
         match jid_from with
         | None -> fail XMPPClient.BadRequest
-        | Some x -> match User.Jid.string_to_jid x with
+        | Some x -> match Xjid.string_to_jid x with
                     | None -> fail XMPPClient.BadRequest
                     | Some jid ->
                        s.XMPPClient.user_data.log (`From jid) ("Removal of " ^ User.jid user ^ " successful") ;
@@ -765,7 +765,7 @@ let exec input state term contact session self failure log redraw =
                | Some (kind, m) ->
                   let clos = fun s failure ->
                     (try_lwt
-                       let jid_to = User.Jid.jid_to_xmpp_jid (`Bare contact.User.bare_jid) in
+                       let jid_to = Xjid.jid_to_xmpp_jid (`Bare contact.User.bare_jid) in
                        Xmpp_callbacks.XMPPClient.send_presence s ~jid_to ~kind ()
                      with e -> failure e)
                   in

@@ -7,6 +7,8 @@ true : annot, bin_annot
 <src/escape.ml>: package(astring)
 <src/persistency.ml>: package(sexplib), package(lwt), package(lwt.syntax), \
   package(nocrypto), syntax(camlp4o)
+<src/xjid.{ml,mli}>: package(sexplib), package(sexplib.syntax), package(astring), \
+  package(erm_xmpp), syntax(camlp4o)
 <src/user.{ml,mli}>: package(sexplib), package(sexplib.syntax), package(otr), \
   package(erm_xmpp), package(otr), package(hex), syntax(camlp4o)
 <src/xmpp_callbacks.ml>: package(camomile), package(erm_xmpp), \

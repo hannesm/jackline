@@ -46,7 +46,7 @@ let configure term () =
   (if not (exactly_one '/' jid) then
      fail (Invalid_argument "invalid jabber ID (needs exactly one / character)")
    else return_unit ) >>= fun () ->
-  (match User.Jid.string_to_jid jid with
+  (match Xjid.string_to_jid jid with
    | None | Some (`Bare _) -> fail (Invalid_argument "invalid jabber ID")
    | Some (`Full f) -> return f) >>= fun jid ->
 

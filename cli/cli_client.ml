@@ -40,9 +40,9 @@ let pad x s =
   | _ (* when d < 0 *) -> Zed_utf8.sub s 0 x
 
 let rec find_index id i = function
-  | []                                  -> 0
-  | x::_ when User.Jid.jid_matches id x -> i
-  | _::xs                               -> find_index id (succ i) xs
+  | []                              -> 0
+  | x::_ when Xjid.jid_matches id x -> i
+  | _::xs                           -> find_index id (succ i) xs
 
 let color_session self = function
   | Some x when User.(encrypted x.otr) -> green
@@ -52,7 +52,7 @@ let color_session self = function
 
 let show_buddy_list users show_offline self active notifications =
   let really_show jid =
-    let jid_m = User.Jid.jid_matches jid in
+    let jid_m = Xjid.jid_matches jid in
     show_offline || jid_m (`Bare (fst self)) || List.exists jid_m notifications || jid_m active
   in
   let show id user =
@@ -69,7 +69,7 @@ let show_buddy_list users show_offline self active notifications =
     | xs -> [(user, xs)]
   in
   List.sort
-    (fun (x, _) (y, _) -> User.Jid.compare_bare_jid x.User.bare_jid y.User.bare_jid)
+    (fun (x, _) (y, _) -> Xjid.compare_bare_jid x.User.bare_jid y.User.bare_jid)
     (User.fold (fun id u acc -> show id u @ acc) users [])
 
 let flatten_buddies us =
@@ -168,7 +168,7 @@ let format_log log =
   let print_log { User.direction ; timestamp ; message ; _ } =
     let time = print_time ~now timestamp in
     let from = match direction with
-      | `From jid -> User.Jid.jid_to_string jid ^ ":"
+      | `From jid -> Xjid.jid_to_string jid ^ ":"
       | `Local (_, x) when x = "" -> "***"
       | `Local (_, x) -> "*** " ^ x ^ " ***"
       | `To _ -> ">>>"
@@ -185,10 +185,10 @@ let format_buddies buddies self active notifications width =
     in
     let notify =
       if expanded then
-        List.exists (fun n -> User.Jid.jid_matches n jid) notifications
+        List.exists (fun n -> Xjid.jid_matches n jid) notifications
       else
-        List.exists (User.Jid.jid_matches (`Bare user.User.bare_jid)) notifications
-    and self = User.Jid.jid_matches (`Bare (fst self)) jid
+        List.exists (Xjid.jid_matches (`Bare user.User.bare_jid)) notifications
+    and self = Xjid.jid_matches (`Bare (fst self)) jid
     in
     let item =
       let f, t = if self then
@@ -206,12 +206,12 @@ let format_buddies buddies self active notifications width =
           | Some s -> s.User.presence
         in
         User.presence_to_char p
-      and bare = User.Jid.t_to_bare jid
+      and bare = Xjid.t_to_bare jid
       in
-      let data = print st f presence t (User.Jid.bare_jid_to_string bare) (User.Jid.resource jid) in
+      let data = print st f presence t (Xjid.bare_jid_to_string bare) (Xjid.resource jid) in
       pad width data
     and highlight, e_highlight =
-      if jid = active || (not user.User.expand && (User.Jid.jid_matches active jid)) then
+      if jid = active || (not user.User.expand && (Xjid.jid_matches active jid)) then
         ([ B_reverse true ], [ E_reverse ])
       else
         ([], [])
@@ -256,10 +256,10 @@ let format_messages user jid msgs =
       let other = User.jid_of_direction direction in
       match jid with
       | `Bare _ ->
-         Utils.option "" (fun x -> "(" ^ x ^ ") ") (User.Jid.resource other)
+         Utils.option "" (fun x -> "(" ^ x ^ ") ") (Xjid.resource other)
       | `Full (_, r) ->
          Utils.option "" (fun x -> "(" ^ x ^ ") ")
-                      (match User.Jid.resource other with
+                      (match Xjid.resource other with
                        | None -> None
                        | Some x when x = r -> None
                        | Some x -> Some x)
@@ -271,8 +271,8 @@ let format_messages user jid msgs =
       true
     else
       match jid with
-        | `Bare _ -> User.Jid.jid_matches jid o
-        | `Full _ -> User.Jid.jid_matches o jid
+        | `Bare _ -> Xjid.jid_matches jid o
+        | `Full _ -> Xjid.jid_matches o jid
   in
   List.map printmsg
     (List.filter
@@ -717,13 +717,13 @@ let warn jid user add_msg =
   match last_msg, jid with
   | Some m, `Full (_, r) ->
      (match m.User.direction with
-      | `From (`Full (_, r'))  when not (User.Jid.resource_similar r r') ->
+      | `From (`Full (_, r'))  when not (Xjid.resource_similar r r') ->
          let msg =
            "the last message was received from a different resource (" ^
              r' ^ "); you might want to expand the contact and send messages\
                    directly to that resource (instead of " ^ r ^ ")"
          in
-         add_msg (`Local (`Bare (User.Jid.t_to_bare jid), "resource warning")) false msg
+         add_msg (`Local (`Bare (Xjid.t_to_bare jid), "resource warning")) false msg
       | _ -> ())
   | _ -> ()
 
@@ -756,7 +756,7 @@ let send_msg t state active_user failure message =
       out
   in
   let out, user_out =
-    match Utils.option None (User.find_session active_user) (User.Jid.resource jid) with
+    match Utils.option None (User.find_session active_user) (Xjid.resource jid) with
     | None ->
        let ctx = Otr.State.new_session (otr_config active_user state) state.config.Xconfig.dsa () in
        let _, out, user_out = Otr.Engine.send_otr ctx message in
@@ -808,7 +808,7 @@ let rec loop term state network log =
          ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async (fun () ->
                    Lwt_mvar.put state.connect_mvar Reconnect))) ;
          Lwt.return_unit
-       and self = User.Jid.jid_matches (`Bare active.User.bare_jid) (`Full state.config.Xconfig.jid)
+       and self = Xjid.jid_matches (`Bare active.User.bare_jid) (`Full state.config.Xconfig.jid)
        and err data = log (`Local (state.active_contact, "error"), data) ; return_unit
        in
        let fst =

@@ -33,10 +33,10 @@ type state = {
 
   users                       : User.users                ; (* read from disk, extended by xmpp callbacks *)
 
-  mutable active_contact      : User.Jid.t                ; (* modified by scrolling *)
-  mutable last_active_contact : User.Jid.t                ; (* modified by scrolling *)
+  mutable active_contact      : Xjid.t                ; (* modified by scrolling *)
+  mutable last_active_contact : Xjid.t                ; (* modified by scrolling *)
 
-  mutable notifications       : User.Jid.t list           ; (* list to blink *)
+  mutable notifications       : Xjid.t list           ; (* list to blink *)
 
   mutable show_offline        : bool                      ; (* F5 stuff *)
   mutable window_mode         : display_mode              ; (* F12 stuff *)
@@ -72,7 +72,7 @@ module Notify = struct
       | None -> Lwt.return_unit
       | Some x ->
         Lwt.catch (fun () ->
-            system (x ^ " " ^ User.Jid.full_jid_to_string jid ^ " " ^ buf) >>= fun _ ->
+            system (x ^ " " ^ Xjid.full_jid_to_string jid ^ " " ^ buf) >>= fun _ ->
             Lwt.return_unit)
           (fun _ -> Lwt.return_unit)
     in
@@ -116,7 +116,7 @@ module Connect = struct
        Lwt.return_unit
 
   let resolve config log =
-    let domain = JID.to_idn (User.Jid.jid_to_xmpp_jid (`Full config.Xconfig.jid))
+    let domain = JID.to_idn (Xjid.jid_to_xmpp_jid (`Full config.Xconfig.jid))
     and hostname = config.Xconfig.hostname
     and port = config.Xconfig.port
     in
@@ -148,7 +148,7 @@ module Connect = struct
          try_lwt
            (resolve config log >>= fun sockaddr ->
             let certname = match config.Xconfig.certificate_hostname with
-              | None -> JID.to_idn (User.Jid.jid_to_xmpp_jid (`Full config.Xconfig.jid))
+              | None -> JID.to_idn (Xjid.jid_to_xmpp_jid (`Full config.Xconfig.jid))
               | Some x -> x
             in
             (X509_lwt.authenticator
@@ -242,8 +242,8 @@ let maybe_expand state jid =
 let notify state jid =
   Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Notifications) ;
   if
-    List.exists (User.Jid.jid_matches jid) state.notifications ||
-      (User.Jid.jid_matches jid state.active_contact &&
+    List.exists (Xjid.jid_matches jid) state.notifications ||
+      (Xjid.jid_matches jid state.active_contact &&
          state.scrollback = 0)
   then
     ()
@@ -252,7 +252,7 @@ let notify state jid =
 
 let notified state jid =
   state.notifications <- List.filter
-                           (fun x -> not (User.Jid.jid_matches jid x))
+                           (fun x -> not (Xjid.jid_matches jid x))
                            state.notifications ;
   if List.length state.notifications = 0 then
     Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear)
@@ -263,7 +263,7 @@ let otr_config user state =
   | Some x -> x
 
 let active state =
-  User.find_user state.users (User.Jid.t_to_bare state.active_contact)
+  User.find_user state.users (Xjid.t_to_bare state.active_contact)
 
 let session state =
   let user = active state in
