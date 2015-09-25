@@ -192,8 +192,12 @@ let message ?(timestamp = Unix.time ()) direction encrypted received message =
   { direction ; encrypted ; received ;
     timestamp ; message ; persistent = false }
 
+let new_message user message =
+  { user with message_history = message :: user.message_history }
+
 let insert_message ?timestamp u dir enc rcvd msg =
-  { u with message_history = (message ?timestamp dir enc rcvd msg) :: u.message_history }
+  let message = message ?timestamp dir enc rcvd msg in
+  new_message u message
 
 let received_message u id =
   let tst msg = match msg.direction with
@@ -209,6 +213,20 @@ let received_message u id =
 let encrypted = Otr.State.is_encrypted
 
 let userid u s = Xjid.jid_to_string (`Full (u.bare_jid, s.resource))
+
+let reset_user u =
+  let active_sessions =
+    List.map
+      (fun s ->
+       let receipt = match s.receipt with
+         | `Requested -> `Unknown
+         | x -> x
+       and presence = `Offline
+       in
+       { s with receipt ; presence })
+      u.active_sessions
+  in
+  { u with active_sessions }
 
 let pp_fingerprint e =
   String.((sub e 0 8) ^ " " ^ (sub e 8 8) ^ " " ^ (sub e 16 8) ^ " " ^ (sub e 24 8) ^ " " ^ (sub e 32 8))
@@ -238,41 +256,6 @@ let find_raw_fp u raw =
 let verified_fp u raw =
   let fps = find_raw_fp u raw in
   fps.verified
-
-module StringHash =
-  struct
-    type t = Xjid.bare_jid
-    let equal = Xjid.bare_jid_equal
-    let hash = Hashtbl.hash
-  end
-
-module Users = Hashtbl.Make(StringHash)
-type users = user Users.t
-
-let fold = Users.fold
-let iter = Users.iter
-let create () = Users.create 100
-let find_user = Users.find
-let remove = Users.remove
-let length = Users.length
-
-let find users jid =
-  if Users.mem users jid then
-    Some (Users.find users jid)
-  else
-    None
-
-let find_or_create users jid =
-  let bare = Xjid.t_to_bare jid in
-  match find users bare with
-    | Some x -> x
-    | None   ->
-      let user = new_user ~jid:bare () in
-      Users.replace users bare user ;
-      user
-
-let replace_user users user =
-  Users.replace users user.bare_jid user
 
 let replace_session user session =
   let others = List.filter (fun s -> s.resource <> session.resource) user.active_sessions in
@@ -491,13 +474,12 @@ let load_user bytes =
     with _ -> None
 
 let load_users hist_dir bytes =
-  let table = create () in
   ( try (match Sexp.of_string bytes with
        | Sexp.List [ ver ; Sexp.List users ] ->
          let version = int_of_sexp ver in
-         List.iter (fun s ->
+         List.fold_left (fun acc s ->
              match try t_of_sexp s version with _ -> None with
-               | None -> Printf.printf "parse failure %s\n%!" (Sexp.to_string_hum s)
+               | None -> Printf.printf "parse failure %s\n%!" (Sexp.to_string_hum s) ; acc
                | Some u ->
                   let message_history =
                     load_history
@@ -505,32 +487,10 @@ let load_users hist_dir bytes =
                       (Filename.concat hist_dir (jid u)) u.preserve_messages
                   in
                   let u = { u with message_history } in
-                  replace_user table u)
-           users
-       | _ -> Printf.printf "parse failed while parsing db\n")
-    with _ -> () ) ;
-  table
-
-let marshal_history user =
-  if user.preserve_messages then
-    let new_msgs =
-      List.filter (fun m ->
-          match m.direction, m.persistent with
-          | `Local _, _    -> false
-          | _       , true -> false
-          | _              -> true)
-        user.message_history
-    in
-    List.iter (fun x -> x.persistent <- true) new_msgs ;
-    let hist_version = sexp_of_int 2 in
-    if List.length new_msgs > 0 then
-      let sexps = List.map sexp_of_message new_msgs in
-      let sexp = Sexp.(List [ hist_version ; List sexps ]) in
-      Some (Sexp.to_string_mach sexp)
-    else
-      None
-  else
-    None
+                  u :: acc)
+           [] users
+       | _ -> Printf.printf "parse failed while parsing db\n" ; [])
+    with _ -> [] )
 
 let store_user user =
   match user.preserve_messages, user.otr_fingerprints, user.otr_custom_config with

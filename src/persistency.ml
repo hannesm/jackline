@@ -104,12 +104,13 @@ let load_config dsa cfg =
 
 let dump_user cfgdir user =
   user_dir cfgdir >>= fun userdir ->
+  let out = Xjid.bare_jid_to_string user.User.bare_jid in
   match User.store_user user with
   | None ->
-     let file = Filename.concat userdir (User.jid user) in
+     let file = Filename.concat userdir out in
      delete file
   | Some sexp ->
-     write userdir (User.jid user) sexp
+     write userdir out sexp
 
 let notify_user cfgdir =
   let mvar = Lwt_mvar.create_empty () in
@@ -140,36 +141,41 @@ let load_user_dir cfgdir users =
          (match x with
           | None -> Printf.printf "something went wrong while loading %s/%s\n" dir f
           | Some x ->
+             let bare = x.User.bare_jid in
              let message_history =
                User.load_history
-                 (`Bare x.User.bare_jid)
-                 (Filename.concat hist_dir (User.jid x))
+                 (`Bare bare)
+                 (Filename.concat hist_dir (Xjid.bare_jid_to_string bare))
                  x.User.preserve_messages
              in
              let user = { x with User.message_history } in
-             User.replace_user users user) ;
+             Buddy.replace_user users user) ;
          loadone ())
     with End_of_file -> Lwt_unix.closedir dh
   in
   loadone ()
 
-let dump_history cfgdir user =
-  match User.marshal_history user with
+let dump_history cfgdir buddy =
+  match Buddy.marshal_history buddy with
   | None -> Lwt.return_unit (* should remove if user.User.preserve_messages is not set *)
   | Some sexp ->
      message_history_dir cfgdir >>= fun history_dir ->
-     append history_dir (User.jid user) sexp
+     append history_dir (Xjid.bare_jid_to_string (Buddy.bare buddy)) sexp
 
 let dump_histories cfgdir users =
-  let users = User.fold (fun _ v acc -> v :: acc) users [] in
+  let users = Buddy.fold (fun _ v acc -> v :: acc) users [] in
   Lwt_list.iter_p (dump_history cfgdir) users
 
 let load_users cfg =
   message_history_dir cfg >>= fun histo ->
+  let data = Buddy.create () in
   read cfg users >|= function
-  | Some x ->  (try User.load_users histo x
-                with _ -> User.create ())
-  | None -> User.create ()
+  | Some x ->  (try
+                   let us = User.load_users histo x in
+                   List.iter (Buddy.replace_user data) us ;
+                   data
+                with _ -> data)
+  | None -> data
 
 let pass_file = "password"
 

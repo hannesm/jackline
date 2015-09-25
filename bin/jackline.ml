@@ -41,16 +41,20 @@ let start_client cfgdir debug () =
   let config = { config with Xconfig.password = password } in
 
   Persistency.load_users cfgdir >>= fun users ->
-  let users_sexp_existed = User.length users > 0 in
+  let users_sexp_existed = Buddy.length users > 0 in
 
   Persistency.load_user_dir cfgdir users >>= fun () ->
 
   (* setup self contact *)
   let myjid = config.Xconfig.jid in
   let _ =
-    let u = User.find_or_create users (`Full myjid) in
-    let u, session = User.create_session u (snd myjid) config.Xconfig.otr_config config.Xconfig.dsa in
-    User.replace_user users u
+    let bare, resource = myjid in
+    let user = match Buddy.find_user users bare with
+      | None -> User.new_user ~jid:bare ()
+      | Some u -> u
+    in
+    let u, session = User.create_session user resource config.Xconfig.otr_config config.Xconfig.dsa in
+    Buddy.replace_user users u
   in
 
   let n, log = S.create (`Local (`Full myjid, "welcome to jackline " ^ Utils.version), "type /help for help") in
@@ -68,7 +72,14 @@ let start_client cfgdir debug () =
   let connect_mvar = Cli_state.Connect.connect_me config (log ?step:None) out state_mvar in
   let state = Cli_state.empty_state cfgdir config users connect_mvar state_mvar in
 
-  let us = User.fold (fun _ v acc -> v :: acc) users [] in
+  let us =
+    Buddy.fold
+      (fun _ v acc ->
+       match v with
+       | `User u -> u :: acc
+       | `Room _ -> acc)
+      users []
+  in
 
   (if users_sexp_existed then
      (* write out all the users to users/ *)

@@ -31,7 +31,7 @@ type state = {
   user_mvar                   : User.user Lwt_mvar.t      ; (* set initially *)
   connect_mvar                : connect_v Lwt_mvar.t      ; (* set initially *)
 
-  users                       : User.users                ; (* read from disk, extended by xmpp callbacks *)
+  users                       : Buddy.buddies             ; (* read from disk, extended by xmpp callbacks *)
 
   mutable active_contact      : Xjid.t                ; (* modified by scrolling *)
   mutable last_active_contact : Xjid.t                ; (* modified by scrolling *)
@@ -219,9 +219,11 @@ let empty_state config_directory config users connect_mvar state_mvar =
 
 
 let add_status state dir msg =
-  let self = User.find_user state.users (fst state.config.Xconfig.jid) in
-  let self = User.insert_message self dir false true msg in
-  User.replace_user state.users self
+  match Buddy.find_user state.users (fst state.config.Xconfig.jid) with
+  | None -> assert false
+  | Some self ->
+     let self = User.insert_message self dir false true msg in
+     Buddy.replace_user state.users self
 
 let send s jid id body fail =
   Xmpp_callbacks.send_msg s jid id body fail
@@ -232,12 +234,14 @@ let random_string () =
   Cstruct.to_string (Base64.encode rnd)
 
 let maybe_expand state jid =
-  let user = User.find_or_create state.users jid in
-  match user.User.expand, User.active_session user, jid with
-    | _, Some s, `Full (_, r) when r = s.User.resource -> ()
-    | false, Some _, `Full _ ->
-       User.replace_user state.users { user with User.expand = true }
-    | _ -> ()
+  match Buddy.find_user state.users (Xjid.t_to_bare jid) with
+  | None -> () (* create one! *)
+  | Some user ->
+     match user.User.expand, User.active_session user, jid with
+     | _, Some s, `Full (_, r) when r = s.User.resource -> ()
+     | false, Some _, `Full _ ->
+        Buddy.replace_user state.users { user with User.expand = true }
+     | _ -> ()
 
 let notify state jid =
   Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Notifications) ;
@@ -263,13 +267,36 @@ let otr_config user state =
   | Some x -> x
 
 let active state =
-  User.find_user state.users (Xjid.t_to_bare state.active_contact)
+  match Buddy.find_buddy state.users (Xjid.t_to_bare state.active_contact) with
+  | None -> assert false
+  | Some x -> x
 
 let session state =
-  let user = active state in
-  match state.active_contact with
-  | `Bare _ -> User.active_session user
-  | `Full (_, r) -> User.find_session user r
+  match active state with
+  | `Room _ -> None
+  | `User user -> match state.active_contact with
+                  | `Bare _ -> User.active_session user
+                  | `Full (_, r) -> User.find_session user r
+
+let member state =
+  match active state with
+  | `Room r -> Muc.member r state.active_contact
+  | `User _ -> None
+
+let resource state = match active state with
+  | `Room _ -> Utils.option None (fun m -> Some (`Member m)) (member state)
+  | `User _ -> Utils.option None (fun s -> Some (`Session s))  (session state)
+
+let self state =
+  match Buddy.find_user state.users (fst state.config.Xconfig.jid) with
+  | None -> assert false
+  | Some self -> self
+
+let selfsession state =
+  match User.find_session (self state) (snd state.config.Xconfig.jid) with
+  | None -> assert false
+  | Some s -> s
+
 
 let activate_user state active =
   if state.active_contact <> active then

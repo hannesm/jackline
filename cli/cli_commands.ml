@@ -157,7 +157,7 @@ let handle_help msg = function
 let handle_connect state log redraw failure =
   let remove jid =
     let bare = Xjid.t_to_bare jid in
-    User.remove state.users bare ;
+    Buddy.remove state.users bare ;
     if Xjid.jid_matches (`Bare bare) state.active_contact then
       activate_user state (`Full state.config.Xconfig.jid) ;
     if Xjid.jid_matches (`Bare bare) state.last_active_contact then
@@ -169,91 +169,107 @@ let handle_connect state log redraw failure =
     let d = `Local (state.active_contact, str) in
     log (d, txt)
   and message jid ?timestamp dir enc txt =
-    let user = User.find_or_create state.users jid in
-    let user = User.insert_message ?timestamp user dir enc true txt in
-    User.replace_user state.users user ;
-    (match dir with
-     | `Local (_, s) when Astring.String.is_prefix ~affix:"OTR" s -> ()
-     | _ -> notify state jid) ;
-    redraw ()
+    match Buddy.find_user state.users (Xjid.t_to_bare jid) with
+    | None -> () (* create one! *)
+    | Some user ->
+       let user = User.insert_message ?timestamp user dir enc true txt in
+       Buddy.replace_user state.users user ;
+       (match dir with
+        | `Local (_, s) when Astring.String.is_prefix ~affix:"OTR" s -> ()
+        | _ -> notify state jid) ;
+       redraw ()
   and receipt jid id =
-    let user = User.find_or_create state.users jid in
-    let user = User.received_message user id in
-    User.replace_user state.users user ;
-    redraw ()
+    match Buddy.find_user state.users (Xjid.t_to_bare jid) with
+    | None -> ()
+    | Some user ->
+       let user = User.received_message user id in
+       Buddy.replace_user state.users user ;
+       redraw ()
   and user jid =
-    User.find_or_create state.users jid
+    match Buddy.find_user state.users (Xjid.t_to_bare jid) with
+    | None -> assert false (* create one *)
+    | Some user -> user
   and session jid =
-    let user = User.find_or_create state.users jid
-    and r = match Xjid.resource jid with Some x -> x | None -> assert false
-    in
-    match User.find_session user r, User.find_similar_session user r with
-    | Some session, _ -> session
-    | None, Some similar ->
-       let new_session = { similar with User.resource = r ; presence = `Offline ; priority = 0 ; status = None }
-       and similar = { similar with User.dispose = true }
+    match Buddy.find_user state.users (Xjid.t_to_bare jid) with
+    | None -> assert false (* create sth!? *)
+    | Some user ->
+       let r = match Xjid.resource jid with Some x -> x | None -> assert false
        in
-       let u =
-         let u, removed = User.replace_session user similar in
-         let u, removed' = User.replace_session u new_session in
-         (if removed || removed' then
-            update_notifications state u similar.User.resource new_session.User.resource) ;
-         u
-       in
-       User.replace_user state.users u ;
-       new_session
-    | None, None ->
-       let otr_config = otr_config user state in
-       let u, s = User.create_session user r otr_config state.config.Xconfig.dsa in
-       User.replace_user state.users u ;
-       s
+       match User.find_session user r, User.find_similar_session user r with
+       | Some session, _ -> session
+       | None, Some similar ->
+          let new_session = { similar with User.resource = r ; presence = `Offline ; priority = 0 ; status = None }
+          and similar = { similar with User.dispose = true }
+          in
+          let u =
+            let u, removed = User.replace_session user similar in
+            let u, removed' = User.replace_session u new_session in
+            (if removed || removed' then
+               update_notifications state u similar.User.resource new_session.User.resource) ;
+            u
+          in
+          Buddy.replace_user state.users u ;
+          new_session
+       | None, None ->
+          let otr_config = otr_config user state in
+          let u, s = User.create_session user r otr_config state.config.Xconfig.dsa in
+          Buddy.replace_user state.users u ;
+          s
   and update_otr jid session otr =
-    let user = User.find_or_create state.users jid in
-    let user = User.update_otr user session otr in
-    User.replace_user state.users user
+    match Buddy.find_user state.users (Xjid.t_to_bare jid) with
+    | None -> () (* should not happen! *)
+    | Some user ->
+       let user = User.update_otr user session otr in
+       Buddy.replace_user state.users user
   and update_presence jid session presence status priority =
-    let user = User.find_or_create state.users jid in
-    let session = { session with User.presence ; status ; priority } in
-    let user, removed = User.replace_session user session in
-    (if removed then
-       let r = session.User.resource in
-       match User.find_similar_session user r with
-       | None -> ()
-       | Some x -> update_notifications state user x.User.resource r) ;
-    User.replace_user state.users user ;
-    maybe_expand state state.active_contact
+    match Buddy.find_user state.users (Xjid.t_to_bare jid) with
+    | None -> (* create one!? *) assert false
+    | Some user ->
+       let session = { session with User.presence ; status ; priority } in
+       let user, removed = User.replace_session user session in
+       (if removed then
+          let r = session.User.resource in
+          match User.find_similar_session user r with
+          | None -> ()
+          | Some x -> update_notifications state user x.User.resource r) ;
+       Buddy.replace_user state.users user ;
+       maybe_expand state state.active_contact
   and update_receipt_state jid receipt =
-    let user = User.find_or_create state.users jid
-    and r = match Xjid.resource jid with
-      | Some x -> x
-      | None -> assert false
-    in
-    match User.find_session user r with
-    | Some s ->
-       let u, _ = User.replace_session user { s with User.receipt } in
-       User.replace_user state.users u
-    | None -> assert false
+    match Buddy.find_user state.users (Xjid.t_to_bare jid) with
+    | None -> (* create one? *) assert false
+    | Some user ->
+       let r = match Xjid.resource jid with
+         | Some x -> x
+         | None -> assert false
+       in
+       match User.find_session user r with
+       | Some s ->
+          let u, _ = User.replace_session user { s with User.receipt } in
+          Buddy.replace_user state.users u
+       | None -> assert false
   and update_user user alert =
-    User.replace_user state.users user ;
+    Buddy.replace_user state.users user ;
     if alert then notify state (`Bare user.User.bare_jid) ;
     redraw ()
   and inc_fp jid raw_fp =
     match Xjid.resource jid with
     | None -> assert false
     | Some resource ->
-       let user = User.find_or_create state.users jid in
-       let fp = User.find_raw_fp user raw_fp in
-       let resources =
-         if List.mem resource fp.User.resources then
-           fp.User.resources
-         else
-           resource :: fp.User.resources
-       in
-       let fp = { fp with User.session_count = succ fp.User.session_count ; User.resources = resources } in
-       let u = User.replace_fp user fp in
-       User.replace_user state.users u ;
-       Lwt.async (fun () -> Lwt_mvar.put state.user_mvar u) ;
-       (fp.User.verified, pred fp.User.session_count, List.exists (fun x -> x.User.verified = `Verified) user.User.otr_fingerprints)
+       match Buddy.find_user state.users (Xjid.t_to_bare jid) with
+       | None -> assert false
+       | Some user ->
+          let fp = User.find_raw_fp user raw_fp in
+          let resources =
+            if List.mem resource fp.User.resources then
+              fp.User.resources
+            else
+              resource :: fp.User.resources
+          in
+          let fp = { fp with User.session_count = succ fp.User.session_count ; User.resources = resources } in
+          let u = User.replace_fp user fp in
+          Buddy.replace_user state.users u ;
+          Lwt.async (fun () -> Lwt_mvar.put state.user_mvar u) ;
+          (fp.User.verified, pred fp.User.session_count, List.exists (fun x -> x.User.verified = `Verified) user.User.otr_fingerprints)
   in
   let (user_data : Xmpp_callbacks.user_data) = {
       Xmpp_callbacks.log ;
@@ -381,6 +397,7 @@ let handle_own_otr_info dsa =
   ["your otr fingerprint:  " ^ (User.pp_binary_fingerprint otr_fp)]
 
 let common_info user cfgdir =
+  let jid = Xjid.bare_jid_to_string user.User.bare_jid in
   let name = match user.User.name with
     | None -> []
     | Some x -> ["name: " ^ x]
@@ -389,12 +406,12 @@ let common_info user cfgdir =
     | true ->
        let histo =
          let dir = Persistency.history in
-         Filename.(concat (concat cfgdir dir) (User.jid user))
+         Filename.(concat (concat cfgdir dir) jid)
        in
        ["persistent history in: " ^ histo]
     | false -> []
   in
-  [ "jid: " ^ (User.jid user) ] @ name @ pres
+  [ "jid: " ^ jid ] @ name @ pres
 
 let marshal_session s =
   let prio = string_of_int s.User.priority in
@@ -543,7 +560,7 @@ let handle_smp_question term users user session question =
       | _ ->  c)
       user (List.rev ret)
     in
-    User.replace_user users user ;
+    Buddy.replace_user users user ;
     match out with
     | None      -> Lwt.return_unit
     | Some body -> send s jid None body failure
@@ -575,7 +592,8 @@ let handle_smp_answer user session secret =
 let handle_remove user =
   fun s failure ->
   (try_lwt
-     Xmpp_callbacks.(Roster.put ~remove:() s (User.jid user)
+     let bare_jid = Xjid.bare_jid_to_string user.User.bare_jid in
+     Xmpp_callbacks.(Roster.put ~remove:() s bare_jid
        (fun ?jid_from ?jid_to ?lang el ->
         ignore jid_to ; ignore lang ; ignore el ;
         match jid_from with
@@ -583,7 +601,7 @@ let handle_remove user =
         | Some x -> match Xjid.string_to_jid x with
                     | None -> fail XMPPClient.BadRequest
                     | Some jid ->
-                       s.XMPPClient.user_data.log (`From jid) ("Removal of " ^ User.jid user ^ " successful") ;
+                       s.XMPPClient.user_data.log (`From jid) ("Removal of " ^ bare_jid ^ " successful") ;
                        return_unit))
    with e -> failure e)
 
@@ -663,9 +681,11 @@ let exec input state term contact session self failure log redraw =
   let err = msg "error" in
   let own_session =
     let id, resource = state.config.Xconfig.jid in
-    match User.find_session (User.find_or_create state.users (`Bare id)) resource with
+    match Buddy.find_user state.users id with
     | None -> assert false
-    | Some x -> x
+    | Some x -> match User.find_session x resource with
+                | None -> assert false
+                | Some x -> x
   in
 
   let global_things = ["add";"status";"priority"] in
@@ -825,7 +845,7 @@ let exec input state term contact session self failure log redraw =
                     (fun c d -> User.insert_message c (`Local (state.active_contact, "")) false false d)
                     old datas
           in
-          User.replace_user state.users u ;
+          Buddy.replace_user state.users u ;
           u
         in
         (match u with

@@ -71,7 +71,9 @@ type message = {
   timestamp  : float ;
   message    : string ;
   mutable persistent : bool ; (* internal use only (mark whether this needs to be written) *)
-}
+} with sexp
+
+val message : ?timestamp:float -> direction -> bool -> bool -> string -> message
 
 type user = {
   bare_jid          : Xjid.bare_jid ;
@@ -89,13 +91,26 @@ type user = {
   expand            : bool ; (* not persistent *)
 }
 
+val new_user : jid:Xjid.bare_jid ->
+               ?name:string option ->
+               ?groups:string list ->
+               ?subscription:subscription ->
+               ?otr_fingerprints:fingerprint list ->
+               ?preserve_messages:bool ->
+               ?properties:property list ->
+               ?active_sessions:session list ->
+               ?otr_custom_config:Otr.State.config option ->
+               unit ->
+               user
+
 (* messages *)
 val insert_message : ?timestamp:float -> user -> direction -> bool -> bool -> string -> user
 val received_message : user -> string -> user
+val new_message : user -> message -> user
 
 (* convenience *)
-val jid : user -> string
 val userid : user -> session -> string
+val reset_user : user -> user
 
 (* OTR things *)
 val encrypted : Otr.State.session -> bool
@@ -107,22 +122,6 @@ val otr_fingerprint : Otr.State.session -> string option
 val replace_fp : user -> fingerprint -> user
 val find_raw_fp : user -> string -> fingerprint
 val verified_fp : user -> string -> verification_status
-
-type users
-
-(* actions on users *)
-val fold : (Xjid.bare_jid -> user -> 'a -> 'a) -> users -> 'a -> 'a
-val iter : (Xjid.bare_jid -> user -> unit) -> users -> unit
-val create : unit -> users
-val length : users -> int
-
-(* locating and creating a user *)
-val find_user : users -> Xjid.bare_jid -> user
-val replace_user : users -> user -> unit
-val find_or_create : users -> Xjid.t -> user
-
-(* removal *)
-val remove : users -> Xjid.bare_jid -> unit
 
 (* messing around with sessions *)
 val replace_session : user -> session -> user * bool
@@ -142,6 +141,5 @@ val active_session : user -> session option
 (* persistency operations *)
 val load_history : Xjid.t -> string -> bool -> message list
 val load_user : string -> user option
-val load_users : string -> string -> users (* for the users.sexp file which no longer exists *)
-val marshal_history : user -> string option
+val load_users : string -> string -> user list (* for the users.sexp file which no longer exists *)
 val store_user : user -> string option

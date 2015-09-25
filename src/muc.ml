@@ -110,9 +110,34 @@ type groupchat = {
   room_jid : Xjid.bare_jid ;
   topic : string ;
   my_nick : string ;
-  my_presence : User.presence ;
   members : member list ;
   features : features list ;
   expand : bool ;
-  messages : User.message list ;
+  preserve_messages : bool ;
+  message_history : User.message list ;
+  saved_input_buffer : string ;
+  readline_history : string list ;
 }
+
+let member r = function
+  | `Bare _ -> None
+  | `Full (_, nick) ->
+     try Some (List.find (fun x -> x.nickname = nick) r.members)
+     with Not_found -> None
+
+let reset_room r =
+  let members =
+    List.map (fun m -> { m with presence = `Offline }) r.members
+  in
+  { r with members }
+
+let sorted_members r =
+  List.sort (fun a b -> String.compare a.nickname b.nickname) r.members
+
+let self_member r =
+  match member r (`Full (r.room_jid, r.my_nick)) with
+  | Some x -> x
+  | None -> assert false
+
+let new_message room message =
+  { room with message_history = message :: room.message_history }
