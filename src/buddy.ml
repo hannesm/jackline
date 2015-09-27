@@ -18,12 +18,15 @@ let presence = function
   | `Member m -> m.Muc.presence
   | `Session s -> s.User.presence
 
+let resource = function
+  | `Member m -> m.Muc.nickname
+  | `Session s -> s.User.resource
+
 let active_presence = function
-  | `Room r -> presence (`Member (Muc.self_member r))
-  | `User x -> Utils.option
-                 `Offline
-                 (fun s -> presence (`Session s))
-                 (User.active_session x)
+  | `Room r ->
+     Utils.option `Offline (fun m ->  m.Muc.presence) (Muc.self_member r)
+  | `User x ->
+     Utils.option `Offline (fun s -> s.User.presence) (User.active_session x)
 
 let expanded = function
   | `Room r -> r.Muc.expand
@@ -45,11 +48,8 @@ let active = function
   | `Room r -> None
   | `User u -> Utils.option None (fun s -> Some (`Session s)) (User.active_session u)
 
-let full_jid buddy resource =
-  match buddy, resource with
-  | `Room r, `Member m -> (r.Muc.room_jid, m.Muc.nickname)
-  | `User u, `Session s -> (u.User.bare_jid, s.User.resource)
-  | _ -> assert false
+let full_jid buddy r =
+  (bare buddy, resource r)
 
 let jid buddy resource =
   Utils.option
@@ -71,9 +71,36 @@ let active_resources tst = function
           (fun s -> s.User.presence <> `Offline || tst (`Full (u.User.bare_jid, s.User.resource)))
           (User.sorted_sessions u))
 
+let status = function
+  | `Member m -> m.Muc.status
+  | `Session s -> s.User.status
+
+let bare_resource_info r =
+  let pre = presence r
+  and sta = status r
+  and res = resource r
+  in
+  Printf.sprintf "%s: %s %s"
+                 res
+                 (User.presence_to_string pre)
+                 (Utils.option "" (fun s -> " - " ^ s) sta)
+
 let preserve_messages = function
   | `User u -> u.User.preserve_messages
   | `Room r -> r.Muc.preserve_messages
+
+let set_preserve_messages b newval =
+  match b with
+  | `User u -> `User { u with User.preserve_messages = newval }
+  | `Room r -> `Room { r with Muc.preserve_messages = newval }
+
+let name = function
+  | `User u -> u.User.name
+  | `Room r -> Some (r.Muc.my_nick)
+
+let info = function
+  | `User u -> User.info u
+  | `Room r -> Muc.info r
 
 let messages = function
   | `User u -> u.User.message_history
@@ -82,6 +109,10 @@ let messages = function
 let reset = function
   | `User u -> `User (User.reset_user u)
   | `Room r -> `Room (Muc.reset_room r)
+
+let clear_messages = function
+  | `User u -> `User { u with User.message_history = [] }
+  | `Room r -> `Room { r with Muc.message_history = [] }
 
 let saved_input_buffer = function
   | `User u -> u.User.saved_input_buffer

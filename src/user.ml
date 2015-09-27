@@ -141,6 +141,10 @@ type property = [
   | `Pending | `PreApproved
 ] with sexp
 
+let property_to_string = function
+  | `Pending -> "pending"
+  | `PreApproved -> "preapproved"
+
 type direction = [
   | `From of Xjid.t
   | `To of Xjid.t * string (* id *)
@@ -177,6 +181,34 @@ type user = {
   active_sessions   : session list ; (* not persistent *)
   expand            : bool ; (* not persistent *)
 }
+
+let compare_session a b =
+  match compare b.priority a.priority with
+  | 0 -> compare_presence b.presence a.presence
+  | x -> x
+
+let sorted_sessions user =
+  List.sort compare_session user.active_sessions
+
+let session_info s =
+  let prio = string_of_int s.priority
+  and pres = presence_to_string s.presence
+  and status = match s.status with
+    | None -> ""
+    | Some x -> " - " ^ x
+  and receipts = receipt_state_to_string s.receipt in
+  s.resource ^ " (" ^ prio ^ ") (receipts " ^ receipts ^ "): " ^ pres ^ status
+
+let info u =
+  let groups =
+    match u.groups with
+    | [] -> []
+    | xs -> ["groups: " ^ (String.concat ", " xs)]
+  and add =
+    let add = String.concat "," (List.map property_to_string u.properties) in
+    ["subscription: " ^ subscription_to_string u.subscription ^ add]
+  in
+  groups @ add @ List.map session_info (sorted_sessions u)
 
 let jid u = Xjid.bare_jid_to_string u.bare_jid
 
@@ -291,14 +323,6 @@ let create_session user resource config dsa =
   assert (not (List.exists (fun s -> s.resource = resource) user.active_sessions)) ;
   let session = empty_session ~resource ~config dsa () in
   ({ user with active_sessions = session :: user.active_sessions }, session)
-
-let compare_session a b =
-  match compare b.priority a.priority with
-  | 0 -> compare_presence b.presence a.presence
-  | x -> x
-
-let sorted_sessions user =
-  List.sort compare_session user.active_sessions
 
 let active_session user =
   if List.length user.active_sessions = 0 then

@@ -84,6 +84,13 @@ type affiliation = [
   | `None
 ]
 
+let affiliation_to_string = function
+  | `Owner -> "owner"
+  | `Admin -> "admin"
+  | `Member -> "member"
+  | `Outcast -> "outcast"
+  | `None -> "none"
+
 type role = [
   | `Moderator
   | `Participant
@@ -97,6 +104,12 @@ let role_to_char = function
   | `Visitor -> "v"
   | `None -> "n"
 
+let role_to_string = function
+  | `Moderator -> "moderator"
+  | `Participant -> "participant"
+  | `Visitor -> "visitor"
+  | `None -> "none"
+
 type member = {
   jid : Xjid.t option ;
   nickname : string ;
@@ -106,9 +119,12 @@ type member = {
   status : string option ;
 }
 
+let new_member nickname ?(jid=None) affiliation role presence status =
+  { jid ; nickname ; affiliation ; role ; presence ; status }
+
 type groupchat = {
   room_jid : Xjid.bare_jid ;
-  topic : string ;
+  topic : string option ;
   my_nick : string ;
   members : member list ;
   features : features list ;
@@ -118,6 +134,28 @@ type groupchat = {
   saved_input_buffer : string ;
   readline_history : string list ;
 }
+
+let new_room ~jid ?(topic=None) ~my_nick ?(members=[]) ?(features=[]) ?(preserve_messages=false) () =
+  { room_jid = jid ; topic ; my_nick ; members ; features ; expand = false ; preserve_messages ; message_history = [] ; saved_input_buffer = "" ; readline_history = [] }
+
+let member_info m =
+  Printf.sprintf " %s %s (role: %s) (affiliation: %s)" (User.presence_to_char m.presence) m.nickname (role_to_string m.role) (affiliation_to_string m.affiliation)
+
+let info r =
+  let topic = match r.topic with
+    | None -> "no topic"
+    | Some x -> "topic: " ^ x
+  and features = "features: " ^ String.concat "," (List.map feature_to_string r.features)
+  and members = List.map member_info r.members
+  in
+  [ topic ; features ] @ members
+
+let member_info m =
+  let jid = Utils.option [] (fun x -> ["jid: " ^ Xjid.jid_to_string x]) m.jid
+  and aff = affiliation_to_string m.affiliation
+  and role = role_to_string m.role
+  in
+  jid @ [ "affiliation: " ^ aff ; "role: " ^ role ]
 
 let member r = function
   | `Bare _ -> None
@@ -134,10 +172,7 @@ let reset_room r =
 let sorted_members r =
   List.sort (fun a b -> String.compare a.nickname b.nickname) r.members
 
-let self_member r =
-  match member r (`Full (r.room_jid, r.my_nick)) with
-  | Some x -> x
-  | None -> assert false
+let self_member r = member r (`Full (r.room_jid, r.my_nick))
 
 let new_message room message =
   { room with message_history = message :: room.message_history }

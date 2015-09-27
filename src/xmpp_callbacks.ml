@@ -32,6 +32,7 @@ let xmpp_to_presence = function
 module Version = XEP_version.Make (XMPPClient)
 module Disco = XEP_disco.Make (XMPPClient)
 module Roster = Roster.Make (XMPPClient)
+module Xep_muc = XEP_muc.Make (XMPPClient)
 
 open Lwt
 
@@ -49,6 +50,8 @@ type user_data = {
   receipt              : Xjid.t -> string -> unit ;
   inc_fp               : Xjid.t -> string -> (User.verification_status * int * bool) ;
   failure              : exn -> unit Lwt.t ;
+  group_message        : Xjid.t -> float option -> string option -> string option -> Xep_muc.User.data option -> unit ;
+  group_presence       : Xjid.t -> User.presence -> string option -> Xep_muc.User.data -> unit ;
 }
 
 (*
@@ -144,7 +147,7 @@ let rec restart_keepalive t =
   in
   keepalive := Some (Lwt_engine.on_timer 45. false (fun _ -> Lwt.async doit))
 
-let send_msg t jid id body failure =
+let send_msg t ?(kind=Chat) jid id body failure =
   let x, req = match jid with
     | `Full _ ->
        let session = t.user_data.session jid in
@@ -158,7 +161,7 @@ let send_msg t jid id body failure =
   in
   let jid_to = Xjid.jid_to_xmpp_jid jid in
   (try_lwt
-     send_message t ~kind:Chat ~jid_to ~body ~x ?id ()
+     send_message t ~kind ~jid_to ~body ~x ?id ()
    with e -> failure e) >>= fun () ->
   if req then
     request_disco t jid
@@ -237,50 +240,66 @@ let notify_user msg jid ctx inc_fp = function
   | `SMP_success             -> msg (`Local (jid, "OTR SMP")) false "successfully verified!"
   | `SMP_failure             -> msg (`Local (jid, "OTR SMP")) false "failure"
 
+let maybe_element qname x =
+  try Some (Xml.get_element qname x)
+  with Not_found -> None
+
 let message_callback (t : user_data session_data) stanza =
   restart_keepalive t ;
   match stanza.jid_from with
   | None -> t.user_data.locallog "error" "no from in stanza" ; return_unit
   | Some jidt ->
-    let jid = Xjid.xmpp_jid_to_jid jidt in
-    let msg ?timestamp dir enc txt =
-      let data =
-        if enc then
-          let txt = validate_utf8 txt in
-          let txt = Escape.strip_tags txt in
-          Escape.unescape txt
-        else
-          txt
-      in
-      t.user_data.message jid ?timestamp dir enc data ;
-    in
-    List.iter (process_receipt (t.user_data.receipt jid)) stanza.x ;
-    match stanza.content.body, delayed_timestamp stanza.content.message_delay with
-    | None, _ -> return_unit
-    | Some v, Some timestamp ->
-       let session = t.user_data.session jid in
-       let ctx, _, ret = Otr.Engine.handle session.User.otr v in
-       t.user_data.update_otr jid session ctx ;
-       List.iter (notify_user (msg ~timestamp) jid ctx t.user_data.inc_fp) ret ;
-       return_unit
-    | Some v, None ->
-      let session = t.user_data.session jid in
-      let ctx, out, ret = Otr.Engine.handle session.User.otr v in
-      t.user_data.update_otr jid session ctx ;
-      List.iter (notify_user msg jid ctx t.user_data.inc_fp) ret ;
-      let jid_to = stanza.jid_from in
-      Lwt_list.iter_s (answer_receipt jid_to t stanza.id) stanza.x >>= fun () ->
-      match out with
-      | None -> return_unit
-      | Some body ->
-        (try_lwt
-           send_message t ?jid_to ~kind:Chat ~body ()
-         with e -> t.user_data.failure e) >>= fun () ->
-        if (t.user_data.session jid).User.receipt = `Unknown then
-          try_lwt request_disco t jid
-          with e -> t.user_data.failure e
-        else
-          return_unit
+     let jid = Xjid.xmpp_jid_to_jid jidt in
+     match stanza.content.message_type with
+     | Some Groupchat ->
+        let timestamp = delayed_timestamp stanza.content.message_delay
+        and data =
+          Utils.option
+            None
+            (fun e -> Some (Xep_muc.User.decode e))
+            (maybe_element (Xep_muc.ns_muc_user, "x") stanza.x)
+        in
+        t.user_data.group_message jid timestamp stanza.content.subject stanza.content.body data ;
+        Lwt.return_unit
+     | _ ->
+        let msg ?timestamp dir enc txt =
+          let data =
+            if enc then
+              let txt = validate_utf8 txt in
+              let txt = Escape.strip_tags txt in
+              Escape.unescape txt
+            else
+              txt
+          in
+          t.user_data.message jid ?timestamp dir enc data ;
+        in
+        List.iter (process_receipt (t.user_data.receipt jid)) stanza.x ;
+        match stanza.content.body, delayed_timestamp stanza.content.message_delay with
+        | None, _ -> return_unit
+        | Some v, Some timestamp ->
+           let session = t.user_data.session jid in
+           let ctx, _, ret = Otr.Engine.handle session.User.otr v in
+           t.user_data.update_otr jid session ctx ;
+           List.iter (notify_user (msg ~timestamp) jid ctx t.user_data.inc_fp) ret ;
+           return_unit
+        | Some v, None ->
+           let session = t.user_data.session jid in
+           let ctx, out, ret = Otr.Engine.handle session.User.otr v in
+           t.user_data.update_otr jid session ctx ;
+           List.iter (notify_user msg jid ctx t.user_data.inc_fp) ret ;
+           let jid_to = stanza.jid_from in
+           Lwt_list.iter_s (answer_receipt jid_to t stanza.id) stanza.x >>= fun () ->
+           match out with
+           | None -> return_unit
+           | Some body ->
+              (try_lwt
+                 send_message t ?jid_to ~kind:Chat ~body ()
+               with e -> t.user_data.failure e) >>= fun () ->
+              if (t.user_data.session jid).User.receipt = `Unknown then
+                try_lwt request_disco t jid
+                with e -> t.user_data.failure e
+              else
+                return_unit
 
 let message_error t ?id ?jid_from ?jid_to ?lang error =
   restart_keepalive t ;
@@ -309,42 +328,49 @@ let presence_callback t stanza =
        | Some x when x = "" -> (None, "")
        | Some x -> let data = validate_utf8 x in (Some data, " - " ^ data)
      in
-     let handle_presence presence =
-       let ppart old =
-         let presence_char = User.presence_to_char presence
-         and presence_string = User.presence_to_string presence
-         in
-         "[" ^ old ^ ">" ^ presence_char ^ "] (now " ^ presence_string ^ ")" ^ statstring
-       in
-       match jid with
-       | `Bare _ ->
-          let info = "presence " ^ ppart "_" in
-          t.user_data.log (`From jid) info
-       | `Full _ ->
-          let session = t.user_data.session jid in
-          let priority = match stanza.content.priority with
-            | None -> 0
-            | Some x -> x
+     match maybe_element (Xep_muc.ns_muc_user, "x") stanza.x with
+     | Some el ->
+        let pres = xmpp_to_presence stanza.content.show
+        and data = Xep_muc.User.decode el
+        in
+        t.user_data.group_presence jid pres status data
+     | None ->
+        let handle_presence presence =
+          let ppart old =
+            let presence_char = User.presence_to_char presence
+            and presence_string = User.presence_to_string presence
+            in
+            "[" ^ old ^ ">" ^ presence_char ^ "] (now " ^ presence_string ^ ")" ^ statstring
           in
-          if User.presence_unmodified session presence status priority then
-            ()
-          else
-            let old = User.presence_to_char session.User.presence in
-            t.user_data.update_presence jid session presence status priority ;
-            let info = "presence changed: " ^ ppart old in
-            t.user_data.log (`From jid) info
-     in
-     let handle_subscription txt hlp =
-       t.user_data.message jid (`Local (jid, txt)) false hlp
-     in
-     match stanza.content.presence_type with
-     | None              -> handle_presence (xmpp_to_presence stanza.content.show)
-     | Some Unavailable  -> handle_presence `Offline
-     | Some Probe        -> handle_subscription "probed" statstring
-     | Some Subscribe    -> handle_subscription "subscription request" ("(use /authorization allow cancel) to accept/deny" ^ statstring)
-     | Some Subscribed   -> handle_subscription "you are now subscribed to their presence" statstring
-     | Some Unsubscribe  -> handle_subscription "wants to unsubscribe from your presence" ("(use /authorization cancel allow) to accept/deny" ^ statstring)
-     | Some Unsubscribed -> handle_subscription "you have been unsubscribed from their presence" statstring
+          match jid with
+          | `Bare _ ->
+             let info = "presence " ^ ppart "_" in
+             t.user_data.log (`From jid) info
+          | `Full _ ->
+             let session = t.user_data.session jid in
+             let priority = match stanza.content.priority with
+               | None -> 0
+               | Some x -> x
+             in
+             if User.presence_unmodified session presence status priority then
+               ()
+             else
+               let old = User.presence_to_char session.User.presence in
+               t.user_data.update_presence jid session presence status priority ;
+               let info = "presence changed: " ^ ppart old in
+               t.user_data.log (`From jid) info
+        in
+        let handle_subscription txt hlp =
+          t.user_data.message jid (`Local (jid, txt)) false hlp
+        in
+        match stanza.content.presence_type with
+        | None              -> handle_presence (xmpp_to_presence stanza.content.show)
+        | Some Unavailable  -> handle_presence `Offline
+        | Some Probe        -> handle_subscription "probed" statstring
+        | Some Subscribe    -> handle_subscription "subscription request" ("(use /authorization allow cancel) to accept/deny" ^ statstring)
+        | Some Subscribed   -> handle_subscription "you are now subscribed to their presence" statstring
+        | Some Unsubscribe  -> handle_subscription "wants to unsubscribe from your presence" ("(use /authorization cancel allow) to accept/deny" ^ statstring)
+        | Some Unsubscribed -> handle_subscription "you have been unsubscribed from their presence" statstring
   ) ;
   return_unit
 

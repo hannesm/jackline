@@ -104,13 +104,16 @@ let load_config dsa cfg =
 
 let dump_user cfgdir user =
   user_dir cfgdir >>= fun userdir ->
-  let out = Xjid.bare_jid_to_string user.User.bare_jid in
-  match User.store_user user with
-  | None ->
-     let file = Filename.concat userdir out in
-     delete file
-  | Some sexp ->
-     write userdir out sexp
+  match user with
+  | `Room _ -> Lwt.return_unit (* XXX MUC revisit *)
+  | `User user ->
+     let out = Xjid.bare_jid_to_string user.User.bare_jid in
+     match User.store_user user with
+     | None ->
+        let file = Filename.concat userdir out in
+        delete file
+     | Some sexp ->
+        write userdir out sexp
 
 let notify_user cfgdir =
   let mvar = Lwt_mvar.create_empty () in

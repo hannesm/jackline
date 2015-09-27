@@ -197,7 +197,7 @@ let format_buddies buddies active notifications width =
   and notify_char buddy jid =
     match List.exists (Xjid.jid_matches jid) notifications, Buddy.expanded buddy with
     | true, true -> "*"
-    | false, false -> if List.length (Buddy.all_resources buddy) > 1 then "+" else " " (* this is wrong here.. *)
+    | false, false -> if List.length (Buddy.all_resources buddy) > 1 then "+" else " " (* XXX MUC this is wrong here.. *)
     | true, false -> Zed_utf8.singleton (UChar.of_int 0x2600)
     | false, true -> " "
   and color buddy resource = buddy_to_color (Buddy.color buddy resource) in
@@ -213,13 +213,14 @@ let format_buddies buddies active notifications width =
   in
 
   let draw_room room =
-    let presence = (Muc.self_member room).Muc.presence
+    let presence = Utils.option `Offline (fun x -> x.Muc.presence) (Muc.self_member room)
     and size = List.length room.Muc.members
     in
-    Printf.sprintf "%s(%d) %s"
+    Printf.sprintf "%s(%d) %s%s"
                    (User.presence_to_char presence)
                    size
                    (Xjid.bare_jid_to_string room.Muc.room_jid)
+                   (Utils.option "" (fun t -> " - " ^ t) room.Muc.topic)
   and draw_member = function
     | `Member m ->
        let presence = m.Muc.presence
@@ -271,38 +272,47 @@ let format_messages buddy jid msgs =
   let now = Unix.time () in
   let printmsg { User.direction ; encrypted ; received ; timestamp ; message ; _ } =
     let time = print_time ~now timestamp in
-    let en = if encrypted then "O" else "-" in
-    let msg_color, pre = match direction with
-      | `From _ -> (`Highlight, "<" ^ en ^ "- ")
-      | `To _   -> let f = if received then "-" else "?" in
-                   (`Default, f ^ en ^ "> ")
-      | `Local (_, x) when x = "" -> (`Default, "*** ")
-      | `Local (_, x) -> (`Default, "***" ^ x ^ "*** ")
+    let msg_color, pre =
+      match buddy with
+      | `Room r ->
+         (match direction with
+          | `From (`Full (_, nick)) -> (`Highlight, nick ^ ": ")
+          | `From (`Bare _) -> (`Highlight, " ")
+          | `Local (_, x) -> (`Default, "***" ^ x ^ " ")
+          | `To _ -> (`Default, "? ") (* XXX MUC depends on whether already received by myself *)
+         )
+      | `User _ ->
+         let en = if encrypted then "O" else "-" in
+         let msg_color, pre = match direction with
+           | `From _ -> (`Highlight, "<" ^ en ^ "- ")
+           | `To _   -> let f = if received then "-" else "?" in
+                        (`Default, f ^ en ^ "> ")
+           | `Local (_, x) when x = "" -> (`Default, "*** ")
+           | `Local (_, x) -> (`Default, "***" ^ x ^ "*** ")
+         in
+         let r =
+           let other = User.jid_of_direction direction in
+           match jid with
+           | `Bare _ ->
+              Utils.option "" (fun x -> "(" ^ x ^ ") ") (Xjid.resource other)
+           | `Full (_, r) ->
+              Utils.option "" (fun x -> "(" ^ x ^ ") ")
+                           (match Xjid.resource other with
+                            | None -> None
+                            | Some x when x = r -> None
+                            | Some x -> Some x)
+         in
+         (msg_color, r ^ pre)
     in
-    let r =
-      let other = User.jid_of_direction direction in
-      match jid with
-      | `Bare _ ->
-         Utils.option "" (fun x -> "(" ^ x ^ ") ") (Xjid.resource other)
-      | `Full (_, r) ->
-         Utils.option "" (fun x -> "(" ^ x ^ ") ")
-                      (match Xjid.resource other with
-                       | None -> None
-                       | Some x when x = r -> None
-                       | Some x -> Some x)
-    in
-    (msg_color, time ^ r ^ pre ^ message)
+    (msg_color, time ^ pre ^ message)
   in
   let jid_tst o =
-    match buddy with
-    | `Room _ -> true
-    | `User u when
-           List.length u.User.active_sessions < 2 ||
-             not u.User.expand -> true
-    | `User _ ->
-       match jid with
-       | `Bare _ -> Xjid.jid_matches jid o
-       | `Full _ -> Xjid.jid_matches o jid
+    match buddy, jid with
+    | `Room _, `Bare _ -> true
+    | `Room _, `Full _ -> Xjid.jid_matches jid o
+    | `User u, _ when List.length u.User.active_sessions < 2 || not u.User.expand -> true
+    | `User _, `Bare _ -> Xjid.jid_matches jid o
+    | `User _, `Full _ -> Xjid.jid_matches o jid
   in
   List.map printmsg
     (List.filter
@@ -765,8 +775,7 @@ let warn jid user add_msg =
   | _ -> ()
 
 let send_msg t state active_user failure message =
-  let jid = state.active_contact in
-  let handle_otr_out user_out =
+  let handle_otr_out jid user_out =
     let add_msg direction encrypted data =
       let msg = User.message direction encrypted false data in
       let u = active state in
@@ -789,32 +798,38 @@ let send_msg t state active_user failure message =
        add_msg (`To (jid, id)) true (Escape.unescape m) ;
        id
   in
-  let maybe_send out user_out =
+  let maybe_send ?kind jid out user_out =
     Utils.option
       Lwt.return_unit
-      (fun body -> send t jid (Some (handle_otr_out user_out)) body failure)
+      (fun body -> send t ?kind jid (Some (handle_otr_out jid user_out)) body failure)
       out
   in
-  let out, user_out =
-    match Utils.option None (User.find_session active_user) (Xjid.resource jid) with
-    | None ->
-       let ctx = Otr.State.new_session (otr_config active_user state) state.config.Xconfig.dsa () in
-       let _, out, user_out = Otr.Engine.send_otr ctx message in
-       (out, user_out)
-    | Some session ->
-       let ctx = session.User.otr in
-       let msg =
-         if Otr.State.is_encrypted ctx then
-           Escape.escape message
-         else
-           message
-       in
-       let ctx, out, user_out = Otr.Engine.send_otr ctx msg in
-       let user = User.update_otr active_user session ctx in
-       Buddy.replace_user state.users user ;
-       (out, user_out)
+  let jid, out, user_out, kind =
+    match active_user with
+    | `Room _ -> (* XXX MUC should also be more careful, privmsg.. *)
+       let jid = `Bare (Xjid.t_to_bare state.active_contact) in
+       (jid, Some message, `Sent message, Some Xmpp_callbacks.XMPPClient.Groupchat)
+    | `User u ->
+       let jid = state.active_contact in
+       match Utils.option None (User.find_session u) (Xjid.resource jid) with
+       | None ->
+          let ctx = Otr.State.new_session (otr_config u state) state.config.Xconfig.dsa () in
+          let _, out, user_out = Otr.Engine.send_otr ctx message in
+          (jid, out, user_out, None)
+       | Some session ->
+          let ctx = session.User.otr in
+          let msg =
+            if Otr.State.is_encrypted ctx then
+              Escape.escape message
+            else
+              message
+          in
+          let ctx, out, user_out = Otr.Engine.send_otr ctx msg in
+          let user = User.update_otr u session ctx in
+          Buddy.replace_user state.users user ;
+          (jid, out, user_out, None)
   in
-  maybe_send out user_out
+  maybe_send ?kind jid out user_out
 
 let rec loop term state network log =
   let history = Buddy.readline_history (active state) in
@@ -858,14 +873,14 @@ let rec loop term state network log =
           Buddy.replace_buddy state.users (Buddy.expand active) ;
           (* transition from expanded to collapsed *)
           if Buddy.expanded active then
+            (* XXX MUC not entirely sure whether this is true *)
             (state.active_contact <- `Bare (Buddy.bare active)) ;
           loop term state network log
        | _, Some '/' ->
           if String.trim message = "/quit" then
             quit state >|= fun () -> state
           else
-            let user = match active with `User u -> u | `Room r -> assert false in
-            Cli_commands.exec message state term user session self failure log force_redraw >>= fun () ->
+            Cli_commands.exec message state term active session self failure log force_redraw >>= fun () ->
             loop term state network log
        | _, _ when self ->
           err "try `M-x doctor` in emacs instead" >>= fun () ->
@@ -873,9 +888,7 @@ let rec loop term state network log =
        | _, _ ->
           (match !xmpp_session with
            | None -> err "no active session, try to connect first"
-           | Some t ->
-              let act = match active with `User u -> u | _ -> assert false in
-              send_msg t state act failure message) >>= fun () ->
+           | Some t -> send_msg t state active failure message) >>= fun () ->
           loop term state network log
 
 let init_system log myjid connect_mvar =

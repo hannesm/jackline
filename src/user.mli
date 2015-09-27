@@ -26,6 +26,7 @@ type session = {
   receipt  : receipt_state ;
 }
 
+val session_info : session -> string
 val presence_unmodified : session -> presence -> string option -> int -> bool
 
 type verification_status = [
@@ -55,6 +56,8 @@ val subscription_to_chars : subscription -> string * string
 type property = [
   | `Pending | `PreApproved
 ]
+
+val property_to_string : property -> string
 
 type direction = [
   | `From of Xjid.t
@@ -102,6 +105,8 @@ val new_user : jid:Xjid.bare_jid ->
                ?otr_custom_config:Otr.State.config option ->
                unit ->
                user
+
+val info : user -> string list
 
 (* messages *)
 val insert_message : ?timestamp:float -> user -> direction -> bool -> bool -> string -> user

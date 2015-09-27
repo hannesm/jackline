@@ -3,6 +3,7 @@ type buddy = [ `User of User.user | `Room of Muc.groupchat ]
 
 val compare_buddy : buddy -> buddy -> int
 
+val name : buddy -> string option
 val bare : buddy -> Xjid.bare_jid
 val preserve_messages : buddy -> bool
 val expanded : buddy -> bool
@@ -10,11 +11,15 @@ val messages : buddy -> User.message list
 val saved_input_buffer : buddy -> string
 val readline_history : buddy -> string list
 
+val info : buddy -> string list
+
 val expand : buddy -> buddy
 val set_saved_input_buffer : buddy -> string -> buddy
 val add_readline_history : buddy -> string -> buddy
+val set_preserve_messages : buddy -> bool -> buddy
 
 val reset : buddy -> buddy
+val clear_messages : buddy -> buddy
 
 val marshal_history : buddy -> string option
 

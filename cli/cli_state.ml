@@ -28,7 +28,7 @@ type state = {
   config                      : Xconfig.t                  ; (* set initially *)
 
   state_mvar                  : notify_v Lwt_mvar.t       ; (* set initially *)
-  user_mvar                   : User.user Lwt_mvar.t      ; (* set initially *)
+  user_mvar                   : Buddy.buddy Lwt_mvar.t      ; (* set initially *)
   connect_mvar                : connect_v Lwt_mvar.t      ; (* set initially *)
 
   users                       : Buddy.buddies             ; (* read from disk, extended by xmpp callbacks *)
@@ -225,8 +225,8 @@ let add_status state dir msg =
      let self = User.insert_message self dir false true msg in
      Buddy.replace_user state.users self
 
-let send s jid id body fail =
-  Xmpp_callbacks.send_msg s jid id body fail
+let send s ?kind jid id body fail =
+  Xmpp_callbacks.send_msg s ?kind jid id body fail
 
 let random_string () =
   let open Nocrypto in
