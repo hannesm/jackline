@@ -156,6 +156,11 @@ let jid_of_direction = function
   | `To (j, _) -> j
   | `Local (j, _) -> j
 
+type chatkind = [
+  | `Chat
+  | `GroupChat
+] with sexp
+
 (* TODO: should likely life within each session *)
 type message = {
   direction  : direction ;
@@ -163,6 +168,7 @@ type message = {
   received   : bool ;
   timestamp  : float ;
   message    : string ;
+  kind       : chatkind ;
   mutable persistent : bool ; (* internal use only (mark whether this needs to be written) *)
 } with sexp
 
@@ -220,9 +226,9 @@ let new_user ~jid ?(name=None) ?(groups=[]) ?(subscription=`None) ?(otr_fingerpr
   in
   { bare_jid = jid ; name ; groups ; subscription ; properties ; otr_fingerprints ; preserve_messages ; active_sessions ; message_history ; saved_input_buffer ; readline_history ; otr_custom_config ; expand }
 
-let message ?(timestamp = Unix.time ()) direction encrypted received message =
+let message ?(timestamp = Unix.time ()) ?(kind = `Chat) direction encrypted received message =
   { direction ; encrypted ; received ;
-    timestamp ; message ; persistent = false }
+    timestamp ; message ; persistent = false ; kind }
 
 let new_message user message =
   { user with message_history = message :: user.message_history }

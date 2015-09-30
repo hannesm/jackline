@@ -67,16 +67,22 @@ type direction = [
 
 val jid_of_direction : direction -> Xjid.t
 
+type chatkind = [
+  | `Chat
+  | `GroupChat
+] with sexp
+
 type message = {
   direction  : direction ;
   encrypted  : bool ;
   received   : bool ;
   timestamp  : float ;
   message    : string ;
+  kind       : chatkind ;
   mutable persistent : bool ; (* internal use only (mark whether this needs to be written) *)
 } with sexp
 
-val message : ?timestamp:float -> direction -> bool -> bool -> string -> message
+val message : ?timestamp:float -> ?kind:chatkind -> direction -> bool -> bool -> string -> message
 
 type user = {
   bare_jid          : Xjid.bare_jid ;
