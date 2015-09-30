@@ -73,18 +73,11 @@ let start_client cfgdir debug () =
   let connect_mvar = Cli_state.Connect.connect_me config (log ?step:None) out state_mvar in
   let state = Cli_state.empty_state cfgdir config users connect_mvar state_mvar in
 
-  let us =
-    Buddy.fold
-      (fun _ v acc ->
-       match v with
-       | `User u -> u :: acc
-       | `Room _ -> acc)
-      users []
-  in
+  let us = Buddy.fold (fun _ v acc -> v :: acc) users [] in
 
   (if users_sexp_existed then
      (* write out all the users to users/ *)
-     Lwt_list.iter_s (fun u -> Lwt_mvar.put state.Cli_state.user_mvar (`User u)) us >>= fun () ->
+     Lwt_list.iter_s (Lwt_mvar.put state.Cli_state.user_mvar) us >>= fun () ->
      (* delete users.sexp *)
      Persistency.delete (Filename.concat cfgdir Persistency.users)
    else
