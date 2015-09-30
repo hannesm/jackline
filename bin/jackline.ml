@@ -96,6 +96,8 @@ let start_client cfgdir debug () =
 
   ignore (LTerm.save_state term);  (* save the terminal state *)
 
+  log (`Local (`Full myjid, "multi user chat support"), "type /join test@jabber.ietf.org for some fun (see you there)");
+
   (* main loop *)
   Cli_client.loop term state n (log ?step:None) >>= fun state ->
 
