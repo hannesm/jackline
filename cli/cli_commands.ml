@@ -296,6 +296,7 @@ let handle_connect state log redraw failure =
                 | `Room r -> r
                 | _ -> assert false)
             | _ ->
+               notify state (`Bare r.Muc.room_jid) ;
                let msg = User.message ?timestamp ~kind:`GroupChat (`From jid) false true msg in
                Muc.new_message room msg
        in
