@@ -85,8 +85,10 @@ let _ =
 
   (* multi user chat *)
   new_command
-    "join" "/join [chatroom ?nickname]"
-    "joins chatroom (using nickname if provided)" [] ;
+    "join" "/join [chatroom]" "joins chatroom" [] ;
+
+  new_command
+    "leave" "/join [?reason]" "leaves active chatroom (using reason)" [] ;
 
   (* nothing below here, please *)
   new_command
@@ -333,14 +335,18 @@ let handle_connect state log redraw failure =
           let affiliation = Utils.option `None (fun x -> x) affiliation
           and role = Utils.option `None (fun x -> x) role
           in
-          let members = match Muc.member r jid with
-            | None -> Muc.new_member nick ~jid:real_jid affiliation role presence status :: r.Muc.members
-            | Some m ->
-               (* XXX MUC need to be a bit smarter here *)
-               { m with Muc.nickname = nick ; jid = real_jid ; affiliation ; role ; presence ; status } ::
-                 List.filter (fun m -> m.Muc.nickname <> nick) r.Muc.members
-          in
-          Buddy.replace_room state.users { r with Muc.members }
+          if nickname = r.Muc.my_nick && presence = `Offline then
+            let r = Muc.reset_room r in
+            Buddy.replace_room state.users r
+          else
+            let members = match Muc.member r jid with
+              | None -> Muc.new_member nick ~jid:real_jid affiliation role presence status :: r.Muc.members
+              | Some m ->
+                 (* XXX MUC need to be a bit smarter here *)
+                 { m with Muc.nickname = nick ; jid = real_jid ; affiliation ; role ; presence ; status } ::
+                   List.filter (fun m -> m.Muc.nickname <> nick) r.Muc.members
+            in
+            Buddy.replace_room state.users { r with Muc.members }
   in
   let (user_data : Xmpp_callbacks.user_data) = {
       Xmpp_callbacks.log ;
@@ -715,6 +721,17 @@ let handle_join s my_nick buddies room err =
      Xmpp_callbacks.Xep_muc.enter_room s (Xjid.jid_to_xmpp_jid (`Bare room_jid))
   | _ -> err "not a bare jid"
 
+let handle_leave buddy reason =
+  match buddy with
+  | `Room r ->
+     let nick = r.Muc.my_nick
+     and jid = `Bare r.Muc.room_jid
+     in
+     let clos s failure =
+       Xmpp_callbacks.Xep_muc.leave_room s ?reason ~nick (Xjid.jid_to_xmpp_jid jid)
+     in
+     (["leaving room"], None, Some clos)
+  | _ -> (["not a chatroom"], None, None)
 
 let exec input state term contact session isself failure log redraw =
   let msg = tell_user log state.active_contact in
@@ -804,6 +821,8 @@ let exec input state term contact session isself failure log redraw =
                  handle_info contact (session state) state.config_directory
              in
              (datas, None, None)
+
+          | ("leave", reason), Some _ -> handle_leave contact reason
 
          | ("remove", _), None -> err "not connected"
          | ("remove", _), Some _ -> need_user (fun u -> ([], None, Some (handle_remove u)))

@@ -333,7 +333,10 @@ let presence_callback t stanza =
      in
      match maybe_element (Xep_muc.ns_muc_user, "x") stanza.x with
      | Some el ->
-        let pres = xmpp_to_presence stanza.content.show
+        let pres =
+          match stanza.content.presence_type with
+          | Some Unavailable -> `Offline
+          | None -> xmpp_to_presence stanza.content.show
         and data = Xep_muc.User.decode el
         in
         t.user_data.group_presence jid pres status data
