@@ -185,7 +185,7 @@ let format_log log =
   in
   List.map print_log log
 
-let format_buddies buddies active notifications width =
+let format_buddies buddies active notifications isself width =
   let env jid =
     let matches o = Xjid.jid_matches o jid in
     if matches active then
@@ -195,12 +195,17 @@ let format_buddies buddies active notifications width =
     else
       ([], [])
   and notify_char buddy jid =
-    match List.exists (Xjid.jid_matches jid) notifications, Buddy.expanded buddy with
+    match
+      List.exists (Xjid.jid_matches jid) notifications,
+      Buddy.expanded buddy
+    with
     | true, true -> "*"
     | false, false -> if List.length (Buddy.all_resources buddy) > 1 then "+" else " " (* XXX MUC this is wrong here.. *)
     | true, false -> Zed_utf8.singleton (UChar.of_int 0x2600)
     | false, true -> " "
-  and color buddy resource = buddy_to_color (Buddy.color buddy resource) in
+  and color buddy resource =
+    buddy_to_color (Buddy.color isself buddy resource)
+  in
 
   let draw (print : string) (b : Buddy.buddy) (r : Buddy.resource option) =
     let jid = Buddy.jid b r in
@@ -236,7 +241,12 @@ let format_buddies buddies active notifications width =
     and subscription = user.User.subscription
     and resource = session.User.resource
     in
-    let pr, po = User.subscription_to_chars subscription in
+    let pr, po =
+      if isself (`Bare user.User.bare_jid) then
+        ("{", "}")
+      else
+        User.subscription_to_chars subscription
+    in
     Printf.sprintf "%s%s%s %s/%s"
                    pr
                    (User.presence_to_char presence)
@@ -321,7 +331,8 @@ let format_messages buddy jid msgs =
 
 let buddy_list users show_offline self active notifications length width =
   let buddies = active_buddies_resources users show_offline self active notifications in
-  let formatted_buddies = format_buddies buddies active notifications width in
+  let isself = Xjid.jid_matches (`Bare (fst self)) in
+  let formatted_buddies = format_buddies buddies active notifications isself width in
 
   let flattened = show_resources buddies in
   let bs = List.length flattened
@@ -362,11 +373,11 @@ let horizontal_line buddy resource fg_color buddy_width scrollback show_buddy_li
            match buddy with
            | `User user ->
               Utils.option
-                (red, " - no OTR")
+                (red, " - no OTR ")
                 (fun fp -> match User.verified_fp user fp with
-                           | `Verified -> (fg_color, " - OTR verified")
-                           | `Unverified -> (red, " - unverified OTR: " ^ (User.pp_fingerprint fp))
-                           | `Revoked -> (red, " - revoked"))
+                           | `Verified -> (fg_color, " - OTR verified ")
+                           | `Unverified -> (red, " - unverified OTR: " ^ (User.pp_fingerprint fp) ^ " ")
+                           | `Revoked -> (red, " - revoked "))
                 (User.otr_fingerprint s.User.otr)
            | _ -> assert false)
       resource
@@ -507,7 +518,7 @@ let make_prompt size network state redraw =
     let active = active state in
     let resource = resource state in
 
-    let fg_color = buddy_to_color (Buddy.color active resource) in
+    let fg_color = buddy_to_color (Buddy.color (fun _ -> isself) active resource) in
 
     let main_window =
       let msg_colors, data =
