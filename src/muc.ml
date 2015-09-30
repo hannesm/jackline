@@ -123,14 +123,14 @@ let new_member nickname ?(jid=None) affiliation role presence status =
   { jid ; nickname ; affiliation ; role ; presence ; status }
 
 type groupchat = {
-  room_jid : Xjid.bare_jid ;
+  room_jid : Xjid.bare_jid ; (* persistent *)
   topic : string option ;
-  my_nick : string ;
+  my_nick : string ; (* persistent *)
   members : member list ;
   features : features list ;
   expand : bool ;
   preserve_messages : bool ;
-  message_history : User.message list ;
+  message_history : User.message list ; (* persistent if preserve_messages *)
   saved_input_buffer : string ;
   readline_history : string list ;
 }
@@ -176,3 +176,46 @@ let self_member r = member r (`Full (r.room_jid, r.my_nick))
 
 let new_message room message =
   { room with message_history = message :: room.message_history }
+
+open Sexplib
+open Sexplib.Conv
+
+let db_version = 1
+
+let t_of_sexp t version =
+  match t with
+  | Sexp.List l ->
+    (match
+       List.fold_left (fun (room_jid, my_nick, preserve_messages) v -> match v with
+           | Sexp.List [ Sexp.Atom "room_jid" ; jabberid ] ->
+             assert (room_jid = None);
+             let room_jid = Xjid.bare_jid_of_sexp jabberid in
+             (Some room_jid, my_nick, preserve_messages)
+           | Sexp.List [ Sexp.Atom "my_nick" ; Sexp.Atom nick ] ->
+             assert (my_nick = None);
+             (room_jid, Some nick, preserve_messages)
+           | Sexp.List [ Sexp.Atom "preserve_messages" ; hf ] ->
+             assert (preserve_messages = None) ;
+             let preserve_messages = bool_of_sexp hf in
+             (room_jid, my_nick, Some preserve_messages)
+           | _ -> assert false)
+         (None, None, None) l
+     with
+     | Some room_jid, Some my_nick, Some preserve_messages ->
+       Some (new_room ~jid:room_jid ~my_nick ~preserve_messages ())
+     | _ -> None )
+  | _ -> None
+
+let record kvs =
+  Sexp.List (List.map (fun (k, v) -> (Sexp.List [Sexp.Atom k; v])) kvs)
+
+let sexp_of_t t =
+  record [
+    "room_jid"          , Xjid.sexp_of_bare_jid t.room_jid ;
+    "my_nick"           , sexp_of_string t.my_nick ;
+    "preserve_messages" , sexp_of_bool t.preserve_messages ;
+  ]
+
+let store_room room =
+  let sexp = sexp_of_t room in
+  Some Sexp.(List [ sexp_of_int db_version ; sexp ])

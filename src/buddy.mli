@@ -43,6 +43,8 @@ val jid : buddy -> resource option -> Xjid.t
 type color = [ `Default | `Good | `Bad ]
 val color : buddy -> resource option -> color
 
+val store : buddy -> Sexplib.Sexp.t option
+
 type buddies
 
 (* actions on buddies *)

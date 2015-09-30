@@ -147,4 +147,4 @@ val active_session : user -> session option
 val load_history : Xjid.t -> string -> bool -> message list
 val load_user : string -> user option
 val load_users : string -> string -> user list (* for the users.sexp file which no longer exists *)
-val store_user : user -> string option
+val store_user : user -> Sexplib.Sexp.t option

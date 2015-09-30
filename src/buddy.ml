@@ -165,6 +165,10 @@ let marshal_history buddy =
   else
     None
 
+let store = function
+  | `User u -> User.store_user u
+  | `Room r -> Muc.store_room r
+
 module StringHash =
   struct
     type t = Xjid.bare_jid

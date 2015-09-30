@@ -520,5 +520,5 @@ let store_user user =
   match user.preserve_messages, user.otr_fingerprints, user.otr_custom_config with
   | false, [], None -> None
   | _ ->
-     let u_sexp = sexp_of_t user in
-     Some Sexp.(to_string_hum (List [ sexp_of_int db_version ; u_sexp ]))
+     let sexp = sexp_of_t user in
+     Some Sexp.(List [ sexp_of_int db_version ; sexp ])
