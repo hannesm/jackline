@@ -303,12 +303,11 @@ let handle_connect state log redraw failure =
        redraw ()
   and group_presence jid presence status data =
     match jid with
-    | `Bare _ -> Xmpp_connection.dbg "presence with bare jid from a room, weird" ; ()
+    | `Bare _ -> ()
     | `Full (bare, nickname) ->
        match Buddy.find_room state.users bare with
-       | None -> Xmpp_connection.dbg "group presence from sth not a room" ; ()
+       | None -> ()
        | Some r ->
-          Xmpp_connection.dbg "group presence with a room" ;
           let real_jid, nick, affiliation, role =
             let open Xmpp_callbacks.Xep_muc in
             let to_affiliation = function
