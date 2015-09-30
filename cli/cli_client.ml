@@ -72,19 +72,19 @@ let active_buddies buddies show_offline self active notifications =
 
 let active_resources show_offline active notifications buddy =
   if show_offline && Buddy.expanded buddy then
-    (buddy, Buddy.all_resources buddy)
+    Buddy.all_resources buddy
   else
     if Buddy.expanded buddy then
       let tst full_jid =
         List.exists (Xjid.jid_matches full_jid) notifications || active = full_jid
       in
-      (buddy, Buddy.active_resources tst buddy)
+      Buddy.active_resources tst buddy
     else
-      (buddy, Utils.option [] (fun s -> [s]) (Buddy.active buddy))
+      Utils.option [] (fun s -> [s]) (Buddy.active buddy)
 
 let active_buddies_resources buddies show_offline self active notifications =
   let buddies = active_buddies buddies show_offline self active notifications in
-  List.map (active_resources show_offline active notifications) buddies
+  List.combine buddies (List.map (active_resources show_offline active notifications) buddies)
 
 let show_resource = function
   | `Room r, members -> `Bare r.Muc.room_jid ::
@@ -185,7 +185,7 @@ let format_log log =
   in
   List.map print_log log
 
-let format_buddies buddies active notifications isself width =
+let format_buddies buddies show_offline active notifications isself width =
   let env jid =
     let matches o = Xjid.jid_matches o jid in
     if matches active then
@@ -200,7 +200,9 @@ let format_buddies buddies active notifications isself width =
       Buddy.expanded buddy
     with
     | true, true -> "*"
-    | false, false -> if List.length (Buddy.all_resources buddy) > 1 then "+" else " " (* XXX MUC this is wrong here.. *)
+    | false, false ->
+       let res = active_resources show_offline active notifications buddy in
+       if List.length res > 1 then "+" else " "
     | true, false -> Zed_utf8.singleton (UChar.of_int 0x2600)
     | false, true -> " "
   and color buddy resource =
@@ -332,7 +334,7 @@ let format_messages buddy jid msgs =
 let buddy_list users show_offline self active notifications length width =
   let buddies = active_buddies_resources users show_offline self active notifications in
   let isself = Xjid.jid_matches (`Bare (fst self)) in
-  let formatted_buddies = format_buddies buddies active notifications isself width in
+  let formatted_buddies = format_buddies buddies show_offline active notifications isself width in
 
   let flattened = show_resources buddies in
   let bs = List.length flattened
