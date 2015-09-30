@@ -174,15 +174,16 @@ let handle_connect state log redraw failure =
     let d = `Local (state.active_contact, str) in
     log (d, txt)
   and message jid ?timestamp dir enc txt =
-    match Buddy.find_user state.users (Xjid.t_to_bare jid) with
-    | None -> () (* XXX MUC: might be a private message (in multi user chat)! *)
-    | Some user ->
+    match Buddy.find_buddy state.users (Xjid.t_to_bare jid) with
+    | Some (`User user) ->
        let user = User.insert_message ?timestamp user dir enc true txt in
        Buddy.replace_user state.users user ;
        (match dir with
         | `Local (_, s) when Astring.String.is_prefix ~affix:"OTR" s -> ()
         | _ -> notify state jid) ;
        redraw ()
+    | Some (`Room room) -> () (* XXX is a private message *)
+    | None -> () (* XXX create? *)
   and receipt jid id =
     match Buddy.find_user state.users (Xjid.t_to_bare jid) with
     | None -> ()
@@ -191,35 +192,39 @@ let handle_connect state log redraw failure =
        Buddy.replace_buddy state.users buddy ;
        redraw ()
   and user jid =
-    match Buddy.find_user state.users (Xjid.t_to_bare jid) with
-    | None -> assert false (* XXX MUC create!? *)
+    let bare = Xjid.t_to_bare jid in
+    match Buddy.find_user state.users bare with
+    | None -> User.new_user ~jid:bare ()
     | Some user -> user
   and session jid =
-    match Buddy.find_user state.users (Xjid.t_to_bare jid) with
-    | None -> assert false (* XXX MUC create sth!? *)
-    | Some user ->
-       let r = match Xjid.resource jid with Some x -> x | None -> assert false
+    let user =
+      let bare = Xjid.t_to_bare jid in
+      match Buddy.find_user state.users bare with
+      | None -> User.new_user ~jid:bare ()
+      | Some user -> user
+    in
+    let r = match Xjid.resource jid with Some x -> x | None -> assert false
+    in
+    match User.find_session user r, User.find_similar_session user r with
+    | Some session, _ -> session
+    | None, Some similar ->
+       let new_session = { similar with User.resource = r ; presence = `Offline ; priority = 0 ; status = None }
+       and similar = { similar with User.dispose = true }
        in
-       match User.find_session user r, User.find_similar_session user r with
-       | Some session, _ -> session
-       | None, Some similar ->
-          let new_session = { similar with User.resource = r ; presence = `Offline ; priority = 0 ; status = None }
-          and similar = { similar with User.dispose = true }
-          in
-          let u =
-            let u, removed = User.replace_session user similar in
-            let u, removed' = User.replace_session u new_session in
-            (if removed || removed' then
-               update_notifications state u similar.User.resource new_session.User.resource) ;
-            u
-          in
-          Buddy.replace_user state.users u ;
-          new_session
-       | None, None ->
-          let otr_config = otr_config user state in
-          let u, s = User.create_session user r otr_config state.config.Xconfig.dsa in
-          Buddy.replace_user state.users u ;
-          s
+       let u =
+         let u, removed = User.replace_session user similar in
+         let u, removed' = User.replace_session u new_session in
+         (if removed || removed' then
+            update_notifications state u similar.User.resource new_session.User.resource) ;
+         u
+       in
+       Buddy.replace_user state.users u ;
+       new_session
+    | None, None ->
+       let otr_config = otr_config user state in
+       let u, s = User.create_session user r otr_config state.config.Xconfig.dsa in
+       Buddy.replace_user state.users u ;
+       s
   and update_otr jid session otr =
     match Buddy.find_user state.users (Xjid.t_to_bare jid) with
     | None -> () (* should not happen! *)
@@ -228,7 +233,7 @@ let handle_connect state log redraw failure =
        Buddy.replace_user state.users user
   and update_presence jid session presence status priority =
     match Buddy.find_user state.users (Xjid.t_to_bare jid) with
-    | None -> (* XXX MUC create one!? *) assert false
+    | None -> (* XXX can never happen!? *) assert false
     | Some user ->
        let session = { session with User.presence ; status ; priority } in
        let user, removed = User.replace_session user session in
@@ -241,7 +246,7 @@ let handle_connect state log redraw failure =
        maybe_expand state state.active_contact
   and update_receipt_state jid receipt =
     match Buddy.find_user state.users (Xjid.t_to_bare jid) with
-    | None -> (* XXX MUC create one? *) assert false
+    | None -> (* XXX can never happen!? *) assert false
     | Some user ->
        let r = match Xjid.resource jid with
          | Some x -> x

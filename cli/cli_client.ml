@@ -873,7 +873,6 @@ let rec loop term state network log =
           Buddy.replace_buddy state.users (Buddy.expand active) ;
           (* transition from expanded to collapsed *)
           if Buddy.expanded active then
-            (* XXX MUC not entirely sure whether this is true *)
             (state.active_contact <- `Bare (Buddy.bare active)) ;
           loop term state network log
        | _, Some '/' ->
