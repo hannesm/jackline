@@ -241,6 +241,18 @@ let set_history b msgs =
   | `Room r -> `Room { r with Muc.message_history = msgs }
   | `User u -> `User { u with User.message_history = msgs }
 
+let received b id =
+  let tst msg = match msg.User.direction with
+    | `To (_, x) when x = id -> true
+    | _ -> false
+  in
+  let msgs =
+    List.map
+      (fun m -> if tst m then { m with User.received = true } else m)
+      (messages b)
+  in
+  set_history b msgs
+
 let load_history directory buddy =
   let bare = bare buddy in
   let file = Filename.concat directory (Xjid.bare_jid_to_string bare) in

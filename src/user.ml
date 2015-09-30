@@ -237,17 +237,6 @@ let insert_message ?timestamp u dir enc rcvd msg =
   let message = message ?timestamp dir enc rcvd msg in
   new_message u message
 
-let received_message u id =
-  let tst msg = match msg.direction with
-    | `To (_, x) when x = id -> true
-    | _ -> false
-  in
-  { u with message_history =
-             List.map (fun m ->
-               if tst m then { m with received = true } else m)
-               u.message_history
-  }
-
 let encrypted = Otr.State.is_encrypted
 
 let userid u s = Xjid.jid_to_string (`Full (u.bare_jid, s.resource))

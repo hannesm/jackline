@@ -116,7 +116,6 @@ val info : user -> string list
 
 (* messages *)
 val insert_message : ?timestamp:float -> user -> direction -> bool -> bool -> string -> user
-val received_message : user -> string -> user
 val new_message : user -> message -> user
 
 (* convenience *)

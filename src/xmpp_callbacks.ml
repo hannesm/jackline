@@ -50,7 +50,7 @@ type user_data = {
   receipt              : Xjid.t -> string -> unit ;
   inc_fp               : Xjid.t -> string -> (User.verification_status * int * bool) ;
   failure              : exn -> unit Lwt.t ;
-  group_message        : Xjid.t -> float option -> string option -> string option -> Xep_muc.User.data option -> unit ;
+  group_message        : Xjid.t -> float option -> string option -> string option -> Xep_muc.User.data option -> string option -> unit ;
   group_presence       : Xjid.t -> User.presence -> string option -> Xep_muc.User.data -> unit ;
 }
 
@@ -261,8 +261,8 @@ let message_callback (t : user_data session_data) stanza =
             None
             (fun e -> Some (Xep_muc.User.decode e))
             (maybe_element (Xep_muc.ns_muc_user, "x") stanza.x)
-        in
-        t.user_data.group_message jid timestamp stanza.content.subject stanza.content.body data ;
+        and id = stanza.id in
+        t.user_data.group_message jid timestamp stanza.content.subject stanza.content.body data id ;
         Lwt.return_unit
      | _ ->
         let msg ?timestamp dir enc txt =

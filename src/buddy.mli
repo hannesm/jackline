@@ -11,6 +11,8 @@ val messages : buddy -> User.message list
 val saved_input_buffer : buddy -> string
 val readline_history : buddy -> string list
 
+val received : buddy -> string -> buddy
+
 val info : buddy -> string list
 
 val expand : buddy -> buddy

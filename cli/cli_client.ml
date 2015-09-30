@@ -279,7 +279,7 @@ let format_messages buddy jid msgs =
           | `From (`Full (_, nick)) -> (`Highlight, nick ^ ": ")
           | `From (`Bare _) -> (`Highlight, " ")
           | `Local (_, x) -> (`Default, "***" ^ x ^ " ")
-          | `To _ -> (`Default, "? ") (* XXX MUC depends on whether already received by myself *)
+          | `To _ -> (`Default, if received then "-> " else "?> ")
          )
       | `User _ ->
          let en = if encrypted then "O" else "-" in

@@ -187,8 +187,8 @@ let handle_connect state log redraw failure =
     match Buddy.find_user state.users (Xjid.t_to_bare jid) with
     | None -> ()
     | Some user ->
-       let user = User.received_message user id in
-       Buddy.replace_user state.users user ;
+       let buddy = Buddy.received (`User user) id in
+       Buddy.replace_buddy state.users buddy ;
        redraw ()
   and user jid =
     match Buddy.find_user state.users (Xjid.t_to_bare jid) with
@@ -275,7 +275,7 @@ let handle_connect state log redraw failure =
           Buddy.replace_user state.users u ;
           Lwt.async (fun () -> Lwt_mvar.put state.user_mvar (`User u)) ;
           (fp.User.verified, pred fp.User.session_count, List.exists (fun x -> x.User.verified = `Verified) user.User.otr_fingerprints)
-  and group_message jid timestamp topic body data =
+  and group_message jid timestamp topic body data id =
     match Buddy.find_room state.users (Xjid.t_to_bare jid) with
     | None -> assert false
     | Some r ->
@@ -283,10 +283,17 @@ let handle_connect state log redraw failure =
        let room = match body with
          | None -> room
          | Some msg ->
-            let msg = User.message ?timestamp (`From jid) false true msg in
-            Muc.new_message room msg
+            match id, Xjid.resource jid with
+            | Some id, Some x when x = room.Muc.my_nick ->
+               (match Buddy.received (`Room room) id with
+                | `Room r -> r
+                | _ -> assert false)
+            | _ ->
+               let msg = User.message ?timestamp ~kind:`GroupChat (`From jid) false true msg in
+               Muc.new_message room msg
        in
-       Buddy.replace_room state.users room
+       Buddy.replace_room state.users room ;
+       redraw ()
   and group_presence jid presence status data =
     match jid with
     | `Bare _ -> Xmpp_connection.dbg "presence with bare jid from a room, weird" ; ()
