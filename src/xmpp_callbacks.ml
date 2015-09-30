@@ -86,11 +86,14 @@ let request_disco t jid =
          match el with
          | Some (Xml.Xmlelement ((ns, "query"), _, els)) when ns = Disco.ns_disco_info ->
             (* pick el with ns_receipts *)
-            let receipt = match ns_receipts with None -> assert false | Some x -> x in
-            if List.exists (function
-                             | Xml.Xmlelement ((_, "feature"), attrs, _) ->
-                                Xml.safe_get_attr_value "var" attrs = receipt
-                             | _ -> false) els
+            let Some receipt = ns_receipts in
+            if
+              List.exists
+                (function
+                  | Xml.Xmlelement ((_, "feature"), attrs, _) ->
+                     Xml.safe_get_attr_value "var" attrs = receipt
+                  | _ -> false)
+                els
             then
               `Supported
             else
