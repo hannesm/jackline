@@ -83,6 +83,13 @@ let _ =
   new_command
     "remove" "/remove" "remove current user from roster" [] ;
 
+  (* multi user chat *)
+  new_command
+    "join" "/join [chatroom]" "joins chatroom" [] ;
+
+  new_command
+    "leave" "/join [?reason]" "leaves active chatroom (using reason)" [] ;
+
   (* nothing below here, please *)
   new_command
     "help" "/help [cmd]" "shows available commands or detailed help for cmd"
@@ -157,7 +164,7 @@ let handle_help msg = function
 let handle_connect state log redraw failure =
   let remove jid =
     let bare = Xjid.t_to_bare jid in
-    User.remove state.users bare ;
+    Buddy.remove state.users bare ;
     if Xjid.jid_matches (`Bare bare) state.active_contact then
       activate_user state (`Full state.config.Xconfig.jid) ;
     if Xjid.jid_matches (`Bare bare) state.last_active_contact then
@@ -169,23 +176,36 @@ let handle_connect state log redraw failure =
     let d = `Local (state.active_contact, str) in
     log (d, txt)
   and message jid ?timestamp dir enc txt =
-    let user = User.find_or_create state.users jid in
-    let user = User.insert_message ?timestamp user dir enc true txt in
-    User.replace_user state.users user ;
-    (match dir with
-     | `Local (_, s) when Astring.String.is_prefix ~affix:"OTR" s -> ()
-     | _ -> notify state jid) ;
-    redraw ()
+    match Buddy.find_buddy state.users (Xjid.t_to_bare jid) with
+    | Some (`User user) ->
+       let user = User.insert_message ?timestamp user dir enc true txt in
+       Buddy.replace_user state.users user ;
+       (match dir with
+        | `Local (_, s) when Astring.String.is_prefix ~affix:"OTR" s -> ()
+        | _ -> notify state jid) ;
+       redraw ()
+    | Some (`Room room) -> () (* XXX is a private message *)
+    | None -> () (* XXX create? *)
   and receipt jid id =
-    let user = User.find_or_create state.users jid in
-    let user = User.received_message user id in
-    User.replace_user state.users user ;
-    redraw ()
+    match Buddy.find_user state.users (Xjid.t_to_bare jid) with
+    | None -> ()
+    | Some user ->
+       let buddy = Buddy.received (`User user) id in
+       Buddy.replace_buddy state.users buddy ;
+       redraw ()
   and user jid =
-    User.find_or_create state.users jid
+    let bare = Xjid.t_to_bare jid in
+    match Buddy.find_user state.users bare with
+    | None -> User.new_user ~jid:bare ()
+    | Some user -> user
   and session jid =
-    let user = User.find_or_create state.users jid
-    and r = match Xjid.resource jid with Some x -> x | None -> assert false
+    let user =
+      let bare = Xjid.t_to_bare jid in
+      match Buddy.find_user state.users bare with
+      | None -> User.new_user ~jid:bare ()
+      | Some user -> user
+    in
+    let r = match Xjid.resource jid with Some x -> x | None -> assert false
     in
     match User.find_session user r, User.find_similar_session user r with
     | Some session, _ -> session
@@ -200,60 +220,132 @@ let handle_connect state log redraw failure =
             update_notifications state u similar.User.resource new_session.User.resource) ;
          u
        in
-       User.replace_user state.users u ;
+       Buddy.replace_user state.users u ;
        new_session
     | None, None ->
        let otr_config = otr_config user state in
        let u, s = User.create_session user r otr_config state.config.Xconfig.dsa in
-       User.replace_user state.users u ;
+       Buddy.replace_user state.users u ;
        s
   and update_otr jid session otr =
-    let user = User.find_or_create state.users jid in
-    let user = User.update_otr user session otr in
-    User.replace_user state.users user
+    match Buddy.find_user state.users (Xjid.t_to_bare jid) with
+    | None -> () (* should not happen! *)
+    | Some user ->
+       let user = User.update_otr user session otr in
+       Buddy.replace_user state.users user
   and update_presence jid session presence status priority =
-    let user = User.find_or_create state.users jid in
-    let session = { session with User.presence ; status ; priority } in
-    let user, removed = User.replace_session user session in
-    (if removed then
-       let r = session.User.resource in
-       match User.find_similar_session user r with
-       | None -> ()
-       | Some x -> update_notifications state user x.User.resource r) ;
-    User.replace_user state.users user ;
-    maybe_expand state state.active_contact
+    match Buddy.find_user state.users (Xjid.t_to_bare jid) with
+    | None -> (* XXX can never happen!? *) assert false
+    | Some user ->
+       let session = { session with User.presence ; status ; priority } in
+       let user, removed = User.replace_session user session in
+       (if removed then
+          let r = session.User.resource in
+          match User.find_similar_session user r with
+          | None -> ()
+          | Some x -> update_notifications state user x.User.resource r) ;
+       Buddy.replace_user state.users user ;
+       maybe_expand state state.active_contact
   and update_receipt_state jid receipt =
-    let user = User.find_or_create state.users jid
-    and r = match Xjid.resource jid with
-      | Some x -> x
-      | None -> assert false
-    in
-    match User.find_session user r with
-    | Some s ->
-       let u, _ = User.replace_session user { s with User.receipt } in
-       User.replace_user state.users u
-    | None -> assert false
+    match Buddy.find_user state.users (Xjid.t_to_bare jid) with
+    | None -> (* XXX can never happen!? *) assert false
+    | Some user ->
+       let r = match Xjid.resource jid with
+         | Some x -> x
+         | None -> assert false
+       in
+       match User.find_session user r with
+       | Some s ->
+          let u, _ = User.replace_session user { s with User.receipt } in
+          Buddy.replace_user state.users u
+       | None -> assert false
   and update_user user alert =
-    User.replace_user state.users user ;
+    Buddy.replace_user state.users user ;
     if alert then notify state (`Bare user.User.bare_jid) ;
     redraw ()
   and inc_fp jid raw_fp =
     match Xjid.resource jid with
     | None -> assert false
     | Some resource ->
-       let user = User.find_or_create state.users jid in
-       let fp = User.find_raw_fp user raw_fp in
-       let resources =
-         if List.mem resource fp.User.resources then
-           fp.User.resources
-         else
-           resource :: fp.User.resources
+       match Buddy.find_user state.users (Xjid.t_to_bare jid) with
+       | None -> assert false
+       | Some user ->
+          let fp = User.find_raw_fp user raw_fp in
+          let resources =
+            if List.mem resource fp.User.resources then
+              fp.User.resources
+            else
+              resource :: fp.User.resources
+          in
+          let fp = { fp with User.session_count = succ fp.User.session_count ; User.resources = resources } in
+          let u = User.replace_fp user fp in
+          Buddy.replace_user state.users u ;
+          Lwt.async (fun () -> Lwt_mvar.put state.user_mvar (`User u)) ;
+          (fp.User.verified, pred fp.User.session_count, List.exists (fun x -> x.User.verified = `Verified) user.User.otr_fingerprints)
+  and group_message jid timestamp topic body data id =
+    match Buddy.find_room state.users (Xjid.t_to_bare jid) with
+    | None -> assert false
+    | Some r ->
+       let room = Utils.option r (fun x -> { r with Muc.topic = Some x }) topic in
+       let room = match body with
+         | None -> room
+         | Some msg ->
+            match id, Xjid.resource jid with
+            | Some id, Some x when x = room.Muc.my_nick ->
+               (match Buddy.received (`Room room) id with
+                | `Room r -> r
+                | _ -> assert false)
+            | _ ->
+               let msg = User.message ?timestamp ~kind:`GroupChat (`From jid) false true msg in
+               Muc.new_message room msg
        in
-       let fp = { fp with User.session_count = succ fp.User.session_count ; User.resources = resources } in
-       let u = User.replace_fp user fp in
-       User.replace_user state.users u ;
-       Lwt.async (fun () -> Lwt_mvar.put state.user_mvar u) ;
-       (fp.User.verified, pred fp.User.session_count, List.exists (fun x -> x.User.verified = `Verified) user.User.otr_fingerprints)
+       Buddy.replace_room state.users room ;
+       redraw ()
+  and group_presence jid presence status data =
+    match jid with
+    | `Bare _ -> ()
+    | `Full (bare, nickname) ->
+       match Buddy.find_room state.users bare with
+       | None -> ()
+       | Some r ->
+          let real_jid, nick, affiliation, role =
+            let open Xmpp_callbacks.Xep_muc in
+            let to_affiliation = function
+              | AffiliationOwner -> `Owner
+              | AffiliationAdmin -> `Admin
+              | AffiliationMember -> `Member
+              | AffiliationOutcast -> `Outcast
+              | AffiliationNone -> `None
+            and to_role = function
+              | RoleModerator -> `Moderator
+              | RoleParticipant -> `Participant
+              | RoleVisitor -> `Visitor
+              | RoleNone -> `None
+            in
+            match data.User.item with
+            | None -> Xmpp_connection.dbg "data item is none" ; assert false
+            | Some x ->
+               (Utils.option None (fun x -> Some (Xjid.xmpp_jid_to_jid x)) x.User.jid,
+                Utils.option None (fun x -> Some x) x.User.nick,
+                Utils.option None (fun x -> Some (to_affiliation x)) x.User.affiliation,
+                Utils.option None (fun x -> Some (to_role x)) x.User.role)
+          in
+          let nick = Utils.option nickname (fun x -> x) nick in
+          let affiliation = Utils.option `None (fun x -> x) affiliation
+          and role = Utils.option `None (fun x -> x) role
+          in
+          if nickname = r.Muc.my_nick && presence = `Offline then
+            let r = Muc.reset_room r in
+            Buddy.replace_room state.users r
+          else
+            let members = match Muc.member r jid with
+              | None -> Muc.new_member nick ~jid:real_jid affiliation role presence status :: r.Muc.members
+              | Some m ->
+                 (* XXX MUC need to be a bit smarter here *)
+                 { m with Muc.nickname = nick ; jid = real_jid ; affiliation ; role ; presence ; status } ::
+                   List.filter (fun m -> m.Muc.nickname <> nick) r.Muc.members
+            in
+            Buddy.replace_room state.users { r with Muc.members }
   in
   let (user_data : Xmpp_callbacks.user_data) = {
       Xmpp_callbacks.log ;
@@ -269,6 +361,8 @@ let handle_connect state log redraw failure =
       receipt ;
       inc_fp ;
       failure ;
+      group_message ;
+      group_presence ;
   }
   in
   Lwt_mvar.put state.Cli_state.connect_mvar (Connect user_data)
@@ -326,10 +420,10 @@ let handle_revoke user err fp =
   else
     err "not a hex-encoded OTR fingerprint"
 
-let handle_log user v a =
-  if user.User.preserve_messages <> v then
-    let user = { user with User.preserve_messages = v } in
-    (["logging turned " ^ a], Some user, None)
+let handle_log buddy v a =
+  if Buddy.preserve_messages buddy <> v then
+    let buddy = Buddy.set_preserve_messages buddy v in
+    (["logging turned " ^ a], Some buddy, None)
   else
     ([], None, None)
 
@@ -381,70 +475,29 @@ let handle_own_otr_info dsa =
   ["your otr fingerprint:  " ^ (User.pp_binary_fingerprint otr_fp)]
 
 let common_info user cfgdir =
-  let name = match user.User.name with
+  let jid = Xjid.bare_jid_to_string (Buddy.bare user) in
+  let name = match Buddy.name user with
     | None -> []
     | Some x -> ["name: " ^ x]
   and pres =
-    match user.User.preserve_messages with
+    match Buddy.preserve_messages user with
     | true ->
        let histo =
          let dir = Persistency.history in
-         Filename.(concat (concat cfgdir dir) (User.jid user))
+         Filename.(concat (concat cfgdir dir) jid)
        in
        ["persistent history in: " ^ histo]
     | false -> []
   in
-  [ "jid: " ^ (User.jid user) ] @ name @ pres
+  [ "jid: " ^ jid ] @ name @ pres
 
-let marshal_session s =
-  let prio = string_of_int s.User.priority in
-  let pres = User.presence_to_string s.User.presence in
-  let status = match s.User.status with
-    | None -> ""
-    | Some x -> " - " ^ x
-  in
-  let receipts = User.receipt_state_to_string s.User.receipt in
-  s.User.resource ^ " (" ^ prio ^ ") (receipts " ^ receipts ^ "): " ^ pres ^ status
-
-let handle_info user session cfgdir =
-  let ci = common_info user cfgdir
-  and groups =
-    match user.User.groups with
-    | [] -> []
-    | xs -> ["groups: " ^ (String.concat ", " xs)]
-  and add =
-    let add =
-      let ps x = List.mem x user.User.properties in
-      ( if ps `Pending then "pending " else "" ) ^
-        ( if ps `PreApproved then "preapproved" else "" )
-    in
-    let add = if String.length add > 0 then " (" ^ (String.trim add) ^ ")" else "" in
-    ["subscription: " ^ ((User.subscription_to_string user.User.subscription) ^ add)]
-  and sessions =
-    List.map (fun s ->
-      let act = match session with
-        | Some x when x = s -> "(active) "
-        | _ -> ""
-      in
-      act ^ (marshal_session s))
-      (User.sorted_sessions user)
-  in
-  ci @ groups @ add @ sessions
+let handle_info buddy session cfgdir =
+  common_info buddy cfgdir @ Buddy.info buddy
 
 let handle_own_info user session cfgdir dsa =
-  let ci = common_info user cfgdir
+  let ci = common_info (`User user) cfgdir
   and otr_fp = handle_own_otr_info dsa
-  and sessions =
-    let active = User.active_session user in
-    List.map (fun s ->
-      let own = if s = session then " (own) " else " " in
-      let act =
-        match active with
-        | Some x when x = s -> own ^ "(active) "
-        | _ -> own
-      in
-      act ^ marshal_session s)
-      user.User.active_sessions
+  and sessions = User.info user
   in
   ci @ otr_fp @ sessions
 
@@ -543,7 +596,7 @@ let handle_smp_question term users user session question =
       | _ ->  c)
       user (List.rev ret)
     in
-    User.replace_user users user ;
+    Buddy.replace_user users user ;
     match out with
     | None      -> Lwt.return_unit
     | Some body -> send s jid None body failure
@@ -575,7 +628,8 @@ let handle_smp_answer user session secret =
 let handle_remove user =
   fun s failure ->
   (try_lwt
-     Xmpp_callbacks.(Roster.put ~remove:() s (User.jid user)
+     let bare_jid = Xjid.bare_jid_to_string user.User.bare_jid in
+     Xmpp_callbacks.(Roster.put ~remove:() s bare_jid
        (fun ?jid_from ?jid_to ?lang el ->
         ignore jid_to ; ignore lang ; ignore el ;
         match jid_from with
@@ -583,7 +637,7 @@ let handle_remove user =
         | Some x -> match Xjid.string_to_jid x with
                     | None -> fail XMPPClient.BadRequest
                     | Some jid ->
-                       s.XMPPClient.user_data.log (`From jid) ("Removal of " ^ User.jid user ^ " successful") ;
+                       s.XMPPClient.user_data.log (`From jid) ("Removal of " ^ bare_jid ^ " successful") ;
                        return_unit))
    with e -> failure e)
 
@@ -658,17 +712,36 @@ let tell_user (log:(User.direction * string) -> unit) jid ?(prefix:string option
   in
   log (`Local (jid, f), msg)
 
-let exec input state term contact session self failure log redraw =
+let handle_join s my_nick buddies room err =
+  match Xjid.string_to_jid room with
+  | Some (`Bare room_jid) ->
+     let room = Muc.new_room ~jid:room_jid ~my_nick () in
+     Buddy.replace_room buddies room ;
+     Xmpp_callbacks.Xep_muc.enter_room s (Xjid.jid_to_xmpp_jid (`Bare room_jid))
+  | _ -> err "not a bare jid"
+
+let handle_leave buddy reason =
+  match buddy with
+  | `Room r ->
+     let nick = r.Muc.my_nick
+     and jid = `Bare r.Muc.room_jid
+     in
+     let clos s failure =
+       Xmpp_callbacks.Xep_muc.leave_room s ?reason ~nick (Xjid.jid_to_xmpp_jid jid)
+     in
+     (["leaving room"], None, Some clos)
+  | _ -> (["not a chatroom"], None, None)
+
+let exec input state term contact session isself failure log redraw =
   let msg = tell_user log state.active_contact in
   let err = msg "error" in
-  let own_session =
-    let id, resource = state.config.Xconfig.jid in
-    match User.find_session (User.find_or_create state.users (`Bare id)) resource with
-    | None -> assert false
-    | Some x -> x
+  let own_session = selfsession state in
+  let real_user = match contact with
+    | `User u -> Some u
+    | _ -> None
   in
 
-  let global_things = ["add";"status";"priority"] in
+  let global_things = ["add";"status";"priority";"join"] in
   match cmd_arg input with
   (* completely independent *)
   | ("help" , x) -> handle_help (msg ?prefix:None) x ; Lwt.return_unit
@@ -708,6 +781,12 @@ let exec input state term contact session self failure log redraw =
             Lwt_mvar.put state.connect_mvar (Presence p) >>= fun () ->
             send_status s p failure)
 
+     (* multi user chat *)
+     | ("join", Some a), Some s ->
+        let my_nick = fst (fst state.config.Xconfig.jid) in
+        handle_join s my_nick state.users a err
+
+
      (* commands using active_contact as context *)
      | other, s ->
         let err str =
@@ -716,10 +795,17 @@ let exec input state term contact session self failure log redraw =
         let handle_help msg arg =
           handle_help msg arg ; ([], None, None)
         in
+        let need_user f =
+          Utils.option
+            (err "not applicable")
+            (fun x -> let (d, u, c) = f x in
+                      (d, Utils.option None (fun u -> Some (`User u)) u, c))
+            real_user
+        in
 
         let datas, u, clos = match other, s with
           | ("clear", _), _ ->
-             ([], Some { contact with User.message_history = [] }, None)
+             ([], Some (Buddy.clear_messages contact), None)
 
           | ("log", None), _ -> handle_help (msg ~prefix:"argument required") (Some "log")
           | ("log", Some a), _ when a = "on"  -> handle_log contact true a
@@ -728,16 +814,17 @@ let exec input state term contact session self failure log redraw =
 
           | ("info", _), _ ->
              let datas =
-               if self then
-                 handle_own_info contact own_session state.config_directory state.config.Xconfig.dsa
+               if isself then
+                 handle_own_info (self state) own_session state.config_directory state.config.Xconfig.dsa
                else
                  handle_info contact (session state) state.config_directory
              in
              (datas, None, None)
 
+          | ("leave", reason), Some _ -> handle_leave contact reason
+
          | ("remove", _), None -> err "not connected"
-         | ("remove", _), Some _ -> let clos = handle_remove contact in
-                                    ([], None, Some clos)
+         | ("remove", _), Some _ -> need_user (fun u -> ([], None, Some (handle_remove u)))
 
          | ("fingerprint", None), _ ->
             let datas =
@@ -746,86 +833,101 @@ let exec input state term contact session self failure log redraw =
             in
             (datas, None, None)
          | ("fingerprint", Some fp), _ ->
-            if self then
+            if isself then
               err "won't talk to myself"
             else
-              handle_fingerprint contact (session state) err fp
+              need_user (fun u -> handle_fingerprint u (session state) err fp)
 
          | ("revoke", None), _ -> handle_help (msg ~prefix:"argument required") (Some "revoke")
-         | ("revoke", Some fp), _ -> handle_revoke contact err fp
+         | ("revoke", Some fp), _ -> need_user (fun u -> handle_revoke u err fp)
 
          | ("authorization", _), None -> err "not connected"
          | ("authorization", None), _ -> handle_help (msg ~prefix:"argument required") (Some "authorization")
          | ("authorization", Some a), Some _ ->
-            if self then
+            if isself then
               err "won't authorize myself"
             else
-              (match handle_authorization a with
-               | None   -> handle_help (msg ~prefix:"unknown argument") (Some "authorization")
-               | Some (kind, m) ->
-                  let clos = fun s failure ->
-                    (try_lwt
-                       let jid_to = Xjid.jid_to_xmpp_jid (`Bare contact.User.bare_jid) in
-                       Xmpp_callbacks.XMPPClient.send_presence s ~jid_to ~kind ()
-                     with e -> failure e)
-                  in
-                  ([m], None, Some clos))
+              need_user
+                (fun u ->
+                 match handle_authorization a with
+                 | None   -> handle_help (msg ~prefix:"unknown argument") (Some "authorization")
+                 | Some (kind, m) ->
+                    let clos = fun s failure ->
+                      (try_lwt
+                       let jid_to = Xjid.jid_to_xmpp_jid (`Bare u.User.bare_jid) in
+                           Xmpp_callbacks.XMPPClient.send_presence s ~jid_to ~kind ()
+                           with e -> failure e)
+                    in
+                    ([m], None, Some clos))
 
          | ("otrpolicy", None), _ ->
-            let cfg = otr_config contact state in
-            (print_otr_policy cfg, None, None)
-         | ("otrpolicy", Some _), _ when self -> err "cannot adjust own otr policy"
+            need_user
+              (fun u -> let cfg = otr_config u state in
+                        (print_otr_policy cfg, None, None))
+
+         | ("otrpolicy", Some _), _ when isself -> err "cannot adjust own otr policy"
          | ("otrpolicy", Some z), _ ->
-            let cfg = otr_config contact state in
-            adjust_otr_policy state.config.Xconfig.otr_config cfg contact z
+            need_user
+              (fun u -> let cfg = otr_config u state in
+                        adjust_otr_policy state.config.Xconfig.otr_config cfg u z)
+
 
          | ("otr", None), _ ->
             handle_help (msg ~prefix:"argument required") (Some "otr")
          | ("otr", Some "info"), _  ->
-            if self then
-              (handle_own_otr_info state.config.Xconfig.dsa, None, None)
-            else
-              (handle_otr_info contact (session state), None, None)
+            need_user
+              (fun u -> if isself then
+                          (handle_own_otr_info state.config.Xconfig.dsa, None, None)
+                        else
+                          (handle_otr_info u (session state), None, None))
 
          | ("otr", Some _), None  -> err "not connected"
          | ("otr", Some "start"), Some _ ->
-            if self then
-              err "do not like to talk to myself"
-            else
-              let cfg = otr_config contact state in
-              handle_otr_start contact (session state) cfg state.config.Xconfig.dsa
+            need_user
+              (fun u ->
+               if isself then
+                 err "do not like to talk to myself"
+               else
+                 let cfg = otr_config u state in
+                 handle_otr_start u (session state) cfg state.config.Xconfig.dsa)
 
          | ("otr", Some "stop"), Some _ ->
-            if self then
-              err "do not like to talk to myself"
-            else
-              handle_otr_stop contact (session state) err
+            need_user
+              (fun u ->
+               if isself then
+                 err "do not like to talk to myself"
+               else
+                 handle_otr_stop u (session state) err)
 
          | ("otr", Some _), _ -> handle_help (msg ~prefix:"unknown argument") (Some "otr")
 
-         | ("smp", _), _ when self -> err "do not like to talk to myself"
+         | ("smp", _), _ when isself -> err "do not like to talk to myself"
          | ("smp", None), _ -> handle_help (msg ~prefix:"argument required") (Some "smp")
          | ("smp", _), None -> err "not connected"
 
          | ("smp", Some a), Some _ ->
-            (match session state with
-             | Some session when User.encrypted session.User.otr ->
-                (match split_ws a with
-                 | "abort", _ -> handle_smp_abort contact session
-                 | "shared", Some arg -> handle_smp_shared contact session arg
-                 | "question", Some question -> handle_smp_question term state.users contact session question
-                 | "answer", Some arg -> handle_smp_answer contact session arg
-                 | _ -> handle_help (msg ~prefix:"argument required") (Some "smp"))
-             | _ -> err "need a secure session, use /otr start first")
+            need_user
+              (fun u ->
+               match session state with
+               | Some session when User.encrypted session.User.otr ->
+                  (match split_ws a with
+                   | "abort", _ -> handle_smp_abort u session
+                   | "shared", Some arg -> handle_smp_shared u session arg
+                   | "question", Some question -> handle_smp_question term state.users u session question
+                   | "answer", Some arg -> handle_smp_answer u session arg
+                   | _ -> handle_help (msg ~prefix:"argument required") (Some "smp"))
+               | _ -> err "need a secure session, use /otr start first")
          | _ -> handle_help (msg ~prefix:"unknown command") None
         in
 
         let user old =
           let u = List.fold_left
-                    (fun c d -> User.insert_message c (`Local (state.active_contact, "")) false false d)
+                    (fun c d ->
+                     let msg = User.message (`Local (state.active_contact, "")) false false d in
+                     Buddy.new_message c msg)
                     old datas
           in
-          User.replace_user state.users u ;
+          Buddy.replace_buddy state.users u ;
           u
         in
         (match u with

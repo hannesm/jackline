@@ -11,6 +11,10 @@ true : annot, bin_annot
   package(erm_xmpp), syntax(camlp4o)
 <src/user.{ml,mli}>: package(sexplib), package(sexplib.syntax), package(otr), \
   package(erm_xmpp), package(otr), package(hex), syntax(camlp4o)
+<src/muc.{ml,mli}>: package(sexplib), package(sexplib.syntax), \
+  package(erm_xmpp), package(hex), syntax(camlp4o)
+<src/buddy.{ml,mli}>: package(sexplib), package(sexplib.syntax), \
+  package(erm_xmpp), package(hex), syntax(camlp4o)
 <src/xmpp_callbacks.ml>: package(camomile), package(erm_xmpp), \
   package(lwt), package(lwt.syntax), package(otr), package(sexplib), \
   package(tls), package(tls.lwt), package(zed), package(ptime), \
