@@ -155,7 +155,7 @@ let marshal_history buddy =
         (messages buddy)
     in
     List.iter (fun x -> x.User.persistent <- true) new_msgs ;
-    let hist_version = sexp_of_int 2 in
+    let hist_version = sexp_of_int 3 in
     if List.length new_msgs > 0 then
       let sexps = List.map User.sexp_of_message new_msgs in
       let sexp = Sexplib.Sexp.(List [ hist_version ; List sexps ]) in
@@ -164,6 +164,88 @@ let marshal_history buddy =
       None
   else
     None
+
+module History_updates = struct
+  open Sexplib
+
+  let tr_m s =
+    let open Sexp in
+    let tr_dir = function
+      | List [ Atom "From" ; Atom jid ] ->
+         (match Xjid.string_to_jid jid with
+          | Some jid -> List [ Atom "From" ; Xjid.sexp_of_t jid ]
+          | None -> Printf.printf "from failed" ;
+                    List [ Atom "From" ; Xjid.sexp_of_t (`Bare ("none", "none")) ])
+      | x -> x
+    in
+    match s with
+    | List s ->
+       let r = List.fold_left (fun acc s ->
+          let s = match s with
+            | List [ Atom "direction" ; value ] -> List [ Atom "direction" ; tr_dir value ]
+            | x -> x
+          in
+          s :: acc) [] s
+       in
+       List (List.rev r)
+    | x -> x
+
+  let tr_1 jid s =
+    let open Sexp in
+    let tr_dir = function
+      | List [ Atom "To" ; id ] ->
+         List [ Atom "To" ; List [ Xjid.sexp_of_t jid ; id ] ]
+      | List [ Atom "Local" ; data ] ->
+         List [ Atom "Local" ; List [ Xjid.sexp_of_t jid ; data ] ]
+      | x -> x
+    in
+    match s with
+    | List s ->
+       let r = List.fold_left (fun acc s ->
+          let s = match s with
+            | List [ Atom "direction" ; value ] -> List [ Atom "direction" ; tr_dir value ]
+            | x -> x
+          in
+          s :: acc) [] s
+       in
+       List (List.rev r)
+    | x -> x
+
+  let tr_kind = function
+    | Sexp.List s -> Sexp.List (Sexp.List [ Sexp.Atom "kind" ; User.sexp_of_chatkind `Chat ] :: s)
+    | x -> x
+end
+
+let load_history_hlp jid file =
+  let open Sexplib in
+  let open Sexplib.Conv in
+  let load_h = function
+    | Sexp.List [ ver ; Sexp.List msgs ] ->
+      let version = int_of_sexp ver in
+      let msgs = match version with
+        | 0 -> List.map History_updates.tr_kind (List.map (History_updates.tr_1 jid) (List.map History_updates.tr_m msgs))
+        | 1 -> List.map History_updates.tr_kind (List.map (History_updates.tr_1 jid) msgs)
+        | 2 -> List.map History_updates.tr_kind msgs
+        | 3 -> msgs
+        | _ -> Printf.printf "unknown message format" ; []
+      in
+      List.map User.message_of_sexp msgs
+    | _ -> Printf.printf "parsing history failed" ; []
+  in
+  match (try Some (Sexp.load_rev_sexps file) with _ -> None) with
+  | Some hists -> List.flatten (List.map load_h hists)
+  | _ -> []
+
+let set_history b msgs =
+  match b with
+  | `Room r -> `Room { r with Muc.message_history = msgs }
+  | `User u -> `User { u with User.message_history = msgs }
+
+let load_history directory buddy =
+  let bare = bare buddy in
+  let file = Filename.concat directory (Xjid.bare_jid_to_string bare) in
+  let msgs = load_history_hlp (`Bare bare) file in
+  set_history buddy msgs
 
 let store = function
   | `User u -> User.store_user u

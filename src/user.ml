@@ -427,68 +427,6 @@ let sexp_of_t t =
     "otr_custom_config", sexp_of_option Otr.State.sexp_of_config t.otr_custom_config ;
   ]
 
-
-let tr_m s =
-  let open Sexp in
-  let tr_dir = function
-    | List [ Atom "From" ; Atom jid ] ->
-       (match Xjid.string_to_jid jid with
-        | Some jid -> List [ Atom "From" ; Xjid.sexp_of_t jid ]
-        | None -> Printf.printf "from failed" ;
-                  List [ Atom "From" ; Xjid.sexp_of_t (`Bare ("none", "none")) ])
-    | x -> x
-  in
-  match s with
-  | List s ->
-     let r = List.fold_left (fun acc s ->
-        let s = match s with
-          | List [ Atom "direction" ; value ] -> List [ Atom "direction" ; tr_dir value ]
-          | x -> x
-        in
-        s :: acc) [] s
-     in
-     List (List.rev r)
-  | x -> x
-
-let tr_1 jid s =
-  let open Sexp in
-  let tr_dir = function
-    | List [ Atom "To" ; id ] ->
-       List [ Atom "To" ; List [ Xjid.sexp_of_t jid ; id ] ]
-    | List [ Atom "Local" ; data ] ->
-       List [ Atom "Local" ; List [ Xjid.sexp_of_t jid ; data ] ]
-    | x -> x
-  in
-  match s with
-  | List s ->
-     let r = List.fold_left (fun acc s ->
-        let s = match s with
-          | List [ Atom "direction" ; value ] -> List [ Atom "direction" ; tr_dir value ]
-          | x -> x
-        in
-        s :: acc) [] s
-     in
-     List (List.rev r)
-  | x -> x
-
-let load_history jid file strict =
-  let load_h = function
-    | Sexp.List [ ver ; Sexp.List msgs ] ->
-      let version = int_of_sexp ver in
-      ( match version with
-        | 0 -> List.map message_of_sexp (List.map (tr_1 jid) (List.map tr_m msgs))
-        | 1 -> List.map message_of_sexp (List.map (tr_1 jid) msgs)
-        | 2 -> List.map message_of_sexp msgs
-        | _ -> Printf.printf "unknown message format" ; [] )
-    | _ -> Printf.printf "parsing history failed" ; []
-  in
-  match (try Some (Sexp.load_rev_sexps file) with _ -> None) with
-    | Some hists -> List.flatten (List.map load_h hists)
-    | _ ->
-      if strict then
-        Printf.printf "parsing histories failed" ;
-      []
-
 let load_user bytes =
   try (match Sexp.of_string bytes with
        | Sexp.List [ ver ; user ] ->
@@ -497,21 +435,14 @@ let load_user bytes =
        | _ -> None)
     with _ -> None
 
-let load_users hist_dir bytes =
+let load_users bytes =
   ( try (match Sexp.of_string bytes with
        | Sexp.List [ ver ; Sexp.List users ] ->
          let version = int_of_sexp ver in
          List.fold_left (fun acc s ->
              match try t_of_sexp s version with _ -> None with
                | None -> Printf.printf "parse failure %s\n%!" (Sexp.to_string_hum s) ; acc
-               | Some u ->
-                  let message_history =
-                    load_history
-                      (`Bare u.bare_jid)
-                      (Filename.concat hist_dir (jid u)) u.preserve_messages
-                  in
-                  let u = { u with message_history } in
-                  u :: acc)
+               | Some u -> u :: acc)
            [] users
        | _ -> Printf.printf "parse failed while parsing db\n" ; [])
     with _ -> [] )

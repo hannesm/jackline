@@ -143,14 +143,7 @@ let load_user_dir cfgdir users =
           | None -> Printf.printf "something went wrong while loading %s/%s\n" dir f
           | Some x ->
              let bare = x.User.bare_jid in
-             let message_history =
-               User.load_history
-                 (`Bare bare)
-                 (Filename.concat hist_dir (Xjid.bare_jid_to_string bare))
-                 x.User.preserve_messages
-             in
-             let user = { x with User.message_history } in
-             Buddy.replace_user users user) ;
+             Buddy.replace_user users x) ;
          loadone ())
     with End_of_file -> Lwt_unix.closedir dh
   in
@@ -168,15 +161,24 @@ let dump_histories cfgdir users =
   Lwt_list.iter_p (dump_history cfgdir) users
 
 let load_users cfg =
-  message_history_dir cfg >>= fun histo ->
   let data = Buddy.create () in
   read cfg users >|= function
   | Some x ->  (try
-                   let us = User.load_users histo x in
+                   let us = User.load_users x in
                    List.iter (Buddy.replace_user data) us ;
                    data
                 with _ -> data)
   | None -> data
+
+let load_histories cfg users =
+  message_history_dir cfg >|= fun histo ->
+  let buddies =
+    Buddy.fold
+      (fun _ v acc -> Buddy.load_history histo v :: acc)
+      users
+      []
+  in
+  List.iter (Buddy.replace_buddy users) buddies
 
 let pass_file = "password"
 

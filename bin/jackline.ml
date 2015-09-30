@@ -44,6 +44,7 @@ let start_client cfgdir debug () =
   let users_sexp_existed = Buddy.length users > 0 in
 
   Persistency.load_user_dir cfgdir users >>= fun () ->
+  Persistency.load_histories cfgdir users >>= fun () ->
 
   (* setup self contact *)
   let myjid = config.Xconfig.jid in

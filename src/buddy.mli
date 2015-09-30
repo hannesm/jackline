@@ -22,6 +22,7 @@ val reset : buddy -> buddy
 val clear_messages : buddy -> buddy
 
 val marshal_history : buddy -> string option
+val load_history : string -> buddy -> buddy
 
 val active_presence : buddy -> User.presence
 
