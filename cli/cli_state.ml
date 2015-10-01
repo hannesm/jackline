@@ -254,10 +254,18 @@ let notify state jid =
   else
     state.notifications <- jid :: state.notifications
 
-let notified state jid =
-  state.notifications <- List.filter
-                           (fun x -> not (Xjid.jid_matches jid x))
-                           state.notifications ;
+let notified state =
+  let active = state.active_contact in
+  let bare = Xjid.t_to_bare active in
+  let unmarked =
+    match Buddy.find_buddy state.users (Xjid.t_to_bare active) with
+    | None -> (* ??? *) (fun _ -> false)
+    | Some (`User u) when not u.User.expand -> Xjid.jid_matches (`Bare bare)
+    | Some (`User u) -> (fun i -> Xjid.jid_matches i active)
+    | Some (`Room r) -> (=) active
+  in
+  let leftover = List.filter (fun x -> not (unmarked x)) state.notifications in
+  state.notifications <- leftover ;
   if List.length state.notifications = 0 then
     Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear)
 
@@ -305,7 +313,7 @@ let activate_user state active =
      state.active_contact      <- active ;
      state.scrollback          <- 0 ;
      state.window_mode         <- BuddyList ;
-     notified state active)
+     notified state)
 
 
 let update_notifications state user oldr newr =

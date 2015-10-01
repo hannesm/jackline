@@ -624,8 +624,7 @@ let navigate_message_buffer state direction =
   | Down, 0 -> ()
   | Down, n ->
     state.scrollback <- n - 1 ;
-    if state.scrollback = 0 then
-      notified state state.active_contact ;
+    if state.scrollback = 0 then notified state ;
     force_redraw ()
   | Up, n -> state.scrollback <- n + 1; force_redraw ()
 
