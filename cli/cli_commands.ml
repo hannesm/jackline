@@ -730,7 +730,8 @@ let handle_leave buddy reason =
      let clos s failure =
        Xmpp_callbacks.Xep_muc.leave_room s ?reason ~nick (Xjid.jid_to_xmpp_jid jid)
      in
-     (["leaving room"], None, Some clos)
+     let r = `Room { r with Muc.last_status = false } in
+     (["leaving room"], Some r, Some clos)
   | _ -> (["not a chatroom"], None, None)
 
 let exec input state term contact session isself failure log redraw =

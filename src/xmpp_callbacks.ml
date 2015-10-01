@@ -505,7 +505,7 @@ let session_callback (kind, show, status, priority) mvar t =
    with e -> t.user_data.failure e) >>= fun () ->
 
   restart_keepalive t ;
-  mvar ()
+  mvar t
 
 let tls_epoch_to_line t =
   let open Tls in

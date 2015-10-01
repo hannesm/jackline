@@ -76,7 +76,7 @@ let start_client cfgdir debug () =
     let file = Filename.concat cfgdir "notification.state" in
     Cli_state.Notify.notify_writer myjid config.Xconfig.notification_callback file
   in
-  let connect_mvar = Cli_state.Connect.connect_me config (log ?step:None) out state_mvar in
+  let connect_mvar = Cli_state.Connect.connect_me config (log ?step:None) out state_mvar users in
   let state = Cli_state.empty_state cfgdir config users connect_mvar state_mvar in
 
   let us = Buddy.fold (fun _ v acc -> v :: acc) users [] in

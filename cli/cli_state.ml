@@ -132,7 +132,7 @@ module Connect = struct
     report sa ;
     sa
 
-  let connect_me config log out state_mvar =
+  let connect_me config log out state_mvar users =
     let mvar = Lwt_mvar.create Cancel in
     let failure reason =
       disconnect () >>= fun () ->
@@ -160,7 +160,14 @@ module Connect = struct
               ?out sockaddr
               config.Xconfig.jid certname password
               (kind, show, s, prio) authenticator user_data
-              (fun () -> Lwt_mvar.put mvar (Success user_data))) >|= fun session ->
+              (fun session ->
+                 Lwt_mvar.put mvar (Success user_data) >>= fun () ->
+                 let users = Buddy.fold (fun k v acc ->
+                                match v with
+                                | `Room r when r.Muc.last_status -> k :: acc
+                                | _ -> acc) users []
+                 in
+                 Lwt_list.iter_s (fun x -> Xmpp_callbacks.Xep_muc.enter_room session (Xjid.jid_to_xmpp_jid (`Bare x))) users)) >|= fun session ->
                xmpp_session := Some session ;
                Lwt.async (fun () -> Xmpp_callbacks.parse_loop session)
       with exn -> failure exn
