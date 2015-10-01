@@ -58,7 +58,13 @@ let start_client cfgdir debug () =
     Buddy.replace_user users u
   in
 
-  let n, log = S.create (`Local (`Full myjid, "welcome to jackline " ^ Utils.version), "type /help for help") in
+  let greeting =
+    "multi user chat support: see you at /join test@jabber.ietf.org; \
+     type /help for help"
+  in
+
+  let n, log = S.create (`Local (`Full myjid, "welcome to jackline " ^ Utils.version), greeting)
+  in
 
   (if debug then
      Persistency.open_append (Unix.getenv "PWD") "out.txt" >|= fun fd ->
@@ -95,8 +101,6 @@ let start_client cfgdir debug () =
   Cli_client.init_system (log ?step:None) myjid connect_mvar ;
 
   ignore (LTerm.save_state term);  (* save the terminal state *)
-
-  log (`Local (`Full myjid, "multi user chat support"), "type /join test@jabber.ietf.org for some fun (see you there)");
 
   (* main loop *)
   Cli_client.loop term state n (log ?step:None) >>= fun state ->
