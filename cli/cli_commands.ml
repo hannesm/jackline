@@ -88,7 +88,7 @@ let _ =
     "join" "/join [chatroom]" "joins chatroom" [] ;
 
   new_command
-    "leave" "/join [?reason]" "leaves active chatroom (using reason)" [] ;
+    "leave" "/leave [?reason]" "leaves active chatroom (using reason)" [] ;
 
   (* nothing below here, please *)
   new_command
