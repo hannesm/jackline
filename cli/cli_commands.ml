@@ -798,7 +798,7 @@ let exec input state term contact session isself failure log redraw =
         in
         let need_user f =
           Utils.option
-            (err "not applicable")
+            (["not applicable"], None, None)
             (fun x -> let (d, u, c) = f x in
                       (d, Utils.option None (fun u -> Some (`User u)) u, c))
             real_user
