@@ -26,7 +26,6 @@ type session = {
   receipt  : receipt_state ;
 }
 
-val session_info : session -> string
 val presence_unmodified : session -> presence -> string option -> int -> bool
 
 type verification_status = [
@@ -112,7 +111,7 @@ val new_user : jid:Xjid.bare_jid ->
                unit ->
                user
 
-val info : user -> string list
+val info : user -> session option -> string list
 
 (* messages *)
 val insert_message : ?timestamp:float -> user -> direction -> bool -> bool -> string -> user

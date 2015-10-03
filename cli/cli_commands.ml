@@ -492,13 +492,13 @@ let common_info user cfgdir =
   in
   [ "jid: " ^ jid ] @ name @ pres
 
-let handle_info buddy session cfgdir =
-  common_info buddy cfgdir @ Buddy.info buddy
+let handle_info buddy resource cfgdir =
+  common_info buddy cfgdir @ Buddy.info buddy resource
 
 let handle_own_info user session cfgdir dsa =
   let ci = common_info (`User user) cfgdir
   and otr_fp = handle_own_otr_info dsa
-  and sessions = User.info user
+  and sessions = User.info user (Some session)
   in
   ci @ otr_fp @ sessions
 
@@ -819,7 +819,7 @@ let exec input state term contact session isself failure log redraw =
                if isself then
                  handle_own_info (self state) own_session state.config_directory state.config.Xconfig.dsa
                else
-                 handle_info contact (session state) state.config_directory
+                 handle_info contact (resource state) state.config_directory
              in
              (datas, None, None)
 

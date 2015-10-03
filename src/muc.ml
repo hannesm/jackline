@@ -139,7 +139,7 @@ type groupchat = {
 let new_room ~jid ?(topic=None) ~my_nick ?(members=[]) ?(features=[]) ?(preserve_messages=false) () =
   { room_jid = jid ; topic ; my_nick ; members ; features ; expand = false ; preserve_messages ; message_history = [] ; saved_input_buffer = "" ; readline_history = [] ; last_status = true }
 
-let member_info m =
+let short_member_info m =
   Printf.sprintf " %s %s (role: %s) (affiliation: %s)" (User.presence_to_char m.presence) m.nickname (role_to_string m.role) (affiliation_to_string m.affiliation)
 
 let info r =
@@ -147,12 +147,12 @@ let info r =
     | None -> "no topic"
     | Some x -> "topic: " ^ x
   and features = "features: " ^ String.concat "," (List.map feature_to_string r.features)
-  and members = List.map member_info r.members
+  and members = List.map short_member_info r.members
   in
   [ topic ; features ] @ members
 
 let member_info m =
-  let jid = Utils.option [] (fun x -> ["jid: " ^ Xjid.jid_to_string x]) m.jid
+  let jid = Utils.option [] (fun x -> ["real jid: " ^ Xjid.jid_to_string x]) m.jid
   and aff = affiliation_to_string m.affiliation
   and role = role_to_string m.role
   in

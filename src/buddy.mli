@@ -13,8 +13,6 @@ val readline_history : buddy -> string list
 
 val received : buddy -> string -> buddy
 
-val info : buddy -> string list
-
 val expand : buddy -> buddy
 val set_saved_input_buffer : buddy -> string -> buddy
 val add_readline_history : buddy -> string -> buddy
@@ -31,6 +29,8 @@ val active_presence : buddy -> User.presence
 val new_message : buddy -> User.message -> buddy
 
 type resource = [ `Session of User.session | `Member of Muc.member ]
+
+val info : buddy -> resource option -> string list
 
 val presence : resource -> User.presence
 

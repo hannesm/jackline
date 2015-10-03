@@ -98,9 +98,12 @@ let name = function
   | `User u -> u.User.name
   | `Room r -> Some (r.Muc.my_nick)
 
-let info = function
-  | `User u -> User.info u
-  | `Room r -> Muc.info r
+let info b s = match b, s with
+  | `User u, None -> User.info u None
+  | `User u, Some (`Session s) -> User.info u (Some s)
+  | `Room r, None -> Muc.info r
+  | `Room _, Some (`Member m) -> Muc.member_info m
+  | _ -> assert false
 
 let messages = function
   | `User u -> u.User.message_history

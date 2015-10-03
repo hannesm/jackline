@@ -196,16 +196,20 @@ let compare_session a b =
 let sorted_sessions user =
   List.sort compare_session user.active_sessions
 
-let session_info s =
+let session_info act s =
   let prio = string_of_int s.priority
   and pres = presence_to_string s.presence
   and status = match s.status with
     | None -> ""
     | Some x -> " - " ^ x
-  and receipts = receipt_state_to_string s.receipt in
-  s.resource ^ " (" ^ prio ^ ") (receipts " ^ receipts ^ "): " ^ pres ^ status
+  and receipts = receipt_state_to_string s.receipt
+  and active = match act with
+    | Some a when a.resource = s.resource -> "(active) "
+    | _ -> ""
+  in
+  s.resource ^ " " ^ active ^ "(" ^ prio ^ ") (receipts " ^ receipts ^ "): " ^ pres ^ status
 
-let info u =
+let info u s =
   let groups =
     match u.groups with
     | [] -> []
@@ -213,8 +217,10 @@ let info u =
   and add =
     let add = String.concat "," (List.map property_to_string u.properties) in
     ["subscription: " ^ subscription_to_string u.subscription ^ add]
+  and sessions =
+    List.map (session_info s) (sorted_sessions u)
   in
-  groups @ add @ List.map session_info (sorted_sessions u)
+  groups @ add @ sessions
 
 let jid u = Xjid.bare_jid_to_string u.bare_jid
 
