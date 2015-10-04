@@ -176,7 +176,8 @@ let handle_connect state log redraw failure =
     let d = `Local (state.active_contact, str) in
     log (d, txt)
   and message jid ?timestamp dir enc txt =
-    match Buddy.find_buddy state.users (Xjid.t_to_bare jid) with
+    let bare = Xjid.t_to_bare jid in
+    match Buddy.find_buddy state.users bare with
     | Some (`User user) ->
        let user = User.insert_message ?timestamp user dir enc true txt in
        Buddy.replace_user state.users user ;
@@ -185,7 +186,14 @@ let handle_connect state log redraw failure =
         | _ -> notify state jid) ;
        redraw ()
     | Some (`Room room) -> () (* XXX is a private message *)
-    | None -> () (* XXX create? *)
+    | None ->
+       let user =
+         let u =  User.new_user ~jid:bare () in
+         User.insert_message ?timestamp u dir enc true txt
+       in
+       Buddy.replace_user state.users user ;
+       notify state jid ;
+       redraw ()
   and receipt jid id =
     match Buddy.find_user state.users (Xjid.t_to_bare jid) with
     | None -> ()

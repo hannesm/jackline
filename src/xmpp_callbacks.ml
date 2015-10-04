@@ -255,6 +255,7 @@ let message_callback (t : user_data session_data) stanza =
      let jid = Xjid.xmpp_jid_to_jid jidt in
      match stanza.content.message_type with
      | Some Groupchat ->
+        (* XXX separate private messages somewhere in here *)
         let timestamp = delayed_timestamp stanza.content.message_delay
         and data =
           Utils.option
@@ -277,15 +278,24 @@ let message_callback (t : user_data session_data) stanza =
           t.user_data.message jid ?timestamp dir enc data ;
         in
         List.iter (process_receipt (t.user_data.receipt jid)) stanza.x ;
-        match stanza.content.body, delayed_timestamp stanza.content.message_delay with
-        | None, _ -> return_unit
-        | Some v, Some timestamp ->
+        match
+          stanza.content.body,
+          delayed_timestamp stanza.content.message_delay,
+          jid
+        with
+        | None, _, _ -> return_unit
+        | Some v, timestamp, `Bare _ ->
+           (* this is likely a message from the jabber server itself *)
+           msg ?timestamp (`From jid) false v ;
+           return_unit
+        | Some v, Some timestamp, `Full _ ->
+           (* some delayed message (offline storage), don't send out receipt / OTR thingies *)
            let session = t.user_data.session jid in
            let ctx, _, ret = Otr.Engine.handle session.User.otr v in
            t.user_data.update_otr jid session ctx ;
            List.iter (notify_user (msg ~timestamp) jid ctx t.user_data.inc_fp) ret ;
            return_unit
-        | Some v, None ->
+        | Some v, None, `Full _ ->
            let session = t.user_data.session jid in
            let ctx, out, ret = Otr.Engine.handle session.User.otr v in
            t.user_data.update_otr jid session ctx ;
