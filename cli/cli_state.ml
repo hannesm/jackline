@@ -261,17 +261,17 @@ let notify state jid =
   else
     state.notifications <- jid :: state.notifications
 
-let notified state =
+let isactive state jid =
   let active = state.active_contact in
   let bare = Xjid.t_to_bare active in
-  let unmarked =
-    match Buddy.find_buddy state.users (Xjid.t_to_bare active) with
-    | None -> (* ??? *) (fun _ -> false)
-    | Some (`User u) when not u.User.expand -> Xjid.jid_matches (`Bare bare)
-    | Some (`User u) -> (fun i -> Xjid.jid_matches i active)
-    | Some (`Room r) -> (=) active
-  in
-  let leftover = List.filter (fun x -> not (unmarked x)) state.notifications in
+  match Buddy.find_buddy state.users bare with
+  | Some (`Room r) -> jid = active
+  | Some (`User u) when not u.User.expand -> Xjid.jid_matches (`Bare bare) jid
+  | Some (`User u) -> Xjid.jid_matches jid active
+  | None -> assert false
+
+let notified state =
+  let leftover = List.filter (fun x -> not (isactive state x)) state.notifications in
   state.notifications <- leftover ;
   if List.length state.notifications = 0 then
     Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear)
@@ -311,7 +311,6 @@ let selfsession state =
   match User.find_session (self state) (snd state.config.Xconfig.jid) with
   | None -> assert false
   | Some s -> s
-
 
 let activate_user state active =
   if state.active_contact <> active then
