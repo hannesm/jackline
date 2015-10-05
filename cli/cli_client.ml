@@ -185,23 +185,19 @@ let format_log log =
   in
   List.map print_log log
 
-let format_buddies buddies show_offline active notifications isself width =
+let format_buddies state buddies isself width =
   let env jid =
-    let matches o = Xjid.jid_matches o jid in
-    if matches active then
+    if isactive state jid then
       ([ B_reverse true ], [ E_reverse ])
-    else if List.exists matches notifications then
+    else if isnotified state jid then
       ([ B_blink true ], [ E_blink ])
     else
       ([], [])
   and notify_char buddy jid =
-    match
-      List.exists (Xjid.jid_matches jid) notifications,
-      Buddy.expanded buddy
-    with
+    match isnotified state jid, Buddy.expanded buddy with
     | true, true -> "*"
     | false, false ->
-       let res = active_resources show_offline active notifications buddy in
+       let res = active_resources state.show_offline state.active_contact state.notifications buddy in
        if List.length res > 1 then "+" else " "
     | true, false -> Zed_utf8.singleton (UChar.of_int 0x2600)
     | false, true -> " "
@@ -331,10 +327,16 @@ let format_messages buddy jid msgs =
        (fun m -> jid_tst (User.jid_of_direction m.User.direction))
        msgs)
 
-let buddy_list users show_offline self active notifications length width =
+let buddy_list state length width =
+  let users = state.users
+  and show_offline = state.show_offline
+  and self = state.config.Xconfig.jid
+  and active = state.active_contact
+  and notifications = state.notifications
+  in
   let buddies = active_buddies_resources users show_offline self active notifications in
   let isself = Xjid.jid_matches (`Bare (fst self)) in
-  let formatted_buddies = format_buddies buddies show_offline active notifications isself width in
+  let formatted_buddies = format_buddies state buddies isself width in
 
   let flattened = show_resources buddies in
   let bs = List.length flattened
@@ -547,7 +549,7 @@ let make_prompt size network state redraw =
       | BuddyList ->
          let chat = line_wrap_with_tags ~max_length:chat_width ~tags:msg_colors data in
          let chat = scroll (`Default, "") chat in
-         let buddies = buddy_list state.users state.show_offline state.config.Xconfig.jid state.active_contact state.notifications main_size buddy_width in
+         let buddies = buddy_list state main_size buddy_width in
               let comb = List.combine buddies chat in
               let pipe = S (Zed_utf8.singleton (UChar.of_int 0x2502)) in
               List.map

@@ -261,14 +261,20 @@ let notify state jid =
   else
     state.notifications <- jid :: state.notifications
 
-let isactive state jid =
-  let active = state.active_contact in
-  let bare = Xjid.t_to_bare active in
-  match Buddy.find_buddy state.users bare with
-  | Some (`Room r) -> jid = active
-  | Some (`User u) when not u.User.expand -> Xjid.jid_matches (`Bare bare) jid
-  | Some (`User u) -> Xjid.jid_matches jid active
+let active state =
+  match Buddy.find_buddy state.users (Xjid.t_to_bare state.active_contact) with
   | None -> assert false
+  | Some x -> x
+
+let isactive state jid =
+  let bare = Xjid.t_to_bare state.active_contact in
+  match active state with
+  | `Room r -> jid = state.active_contact
+  | `User u when not u.User.expand -> Xjid.jid_matches (`Bare bare) jid
+  | `User u -> Xjid.jid_matches jid state.active_contact
+
+let isnotified state jid =
+  List.exists (Xjid.jid_matches jid) state.notifications
 
 let notified state =
   let leftover = List.filter (fun x -> not (isactive state x)) state.notifications in
@@ -279,11 +285,6 @@ let notified state =
 let otr_config user state =
   match user.User.otr_custom_config with
   | None -> state.config.Xconfig.otr_config
-  | Some x -> x
-
-let active state =
-  match Buddy.find_buddy state.users (Xjid.t_to_bare state.active_contact) with
-  | None -> assert false
   | Some x -> x
 
 let session state =
