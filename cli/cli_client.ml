@@ -830,7 +830,12 @@ let send_msg t state active_user failure message =
        (jid, Some message, `Sent message, Some Xmpp_callbacks.XMPPClient.Groupchat)
     | `User u ->
        let jid = state.active_contact in
-       match Utils.option None (User.find_session u) (Xjid.resource jid) with
+       match
+         if u.User.expand then
+           Utils.option None (User.find_session u) (Xjid.resource jid)
+         else
+           session state
+       with
        | None ->
           let ctx = Otr.State.new_session (otr_config u state) state.config.Xconfig.dsa () in
           let _, out, user_out = Otr.Engine.send_otr ctx message in
