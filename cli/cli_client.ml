@@ -482,7 +482,12 @@ let make_prompt size network state redraw =
       | _ -> ())
    | _ -> ()) ;
 
-  let log_size = state.log_height in
+  let log_size =
+    if state.log_height + 10 > size.rows then
+      0
+    else
+      state.log_height
+  in
   let main_size =
     if log_size = 0 then
       size.rows - 2
@@ -496,8 +501,8 @@ let make_prompt size network state redraw =
     | FullScreen | Raw -> size.cols
   in
 
-  if main_size <= 6 || chat_width <= 20 then
-    eval ([S "need more space"])
+  if main_size <= 4 || chat_width <= 20 then
+    eval [S "need more space"]
   else
     let self = self state
     and mysession = selfsession state
