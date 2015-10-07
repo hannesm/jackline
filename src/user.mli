@@ -34,6 +34,8 @@ type verification_status = [
   | `Revoked
 ]
 
+val verification_status_to_string : verification_status -> string
+
 type fingerprint = {
   data          : string ;
   verified      : verification_status ;

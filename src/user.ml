@@ -108,6 +108,11 @@ type verification_status = [
   | `Revoked
 ] with sexp
 
+let verification_status_to_string = function
+  | `Revoked -> "REVOKED"
+  | `Unverified -> "not verified"
+  | `Verified -> "verified"
+
 type fingerprint = {
   data          : string ;
   verified      : verification_status ;
