@@ -102,23 +102,58 @@ let empty_session ~resource ?(presence=`Offline) ?otr ?config ?(priority=0) ?(st
 open Sexplib
 open Sexplib.Conv
 
+type verify = [ `Manual | `SMP ] with sexp
+
+let verify_to_string = function
+  | `Manual -> "manual"
+  | `SMP -> "smp"
+
 type verification_status = [
-  | `Verified
+  | `Verified of (verify * float) list
   | `Unverified
-  | `Revoked
+  | `Revoked of float
 ] with sexp
 
 let verification_status_to_string = function
-  | `Revoked -> "REVOKED"
+  | `Revoked _ -> "REVOKED"
   | `Unverified -> "not verified"
-  | `Verified -> "verified"
+  | `Verified _ -> "verified"
+
+let day_to_string f =
+  let display = Unix.localtime f in
+  Printf.sprintf "%04d-%02d-%02d"
+                 (display.Unix.tm_year + 1900)
+                 (succ display.Unix.tm_mon)
+                 display.Unix.tm_mday
+
+let full_verification_status_to_string = function
+  | `Revoked ts -> "REVOKED since " ^ day_to_string ts
+  | `Unverified -> "not verified"
+  | `Verified xs ->
+     let evs = List.map (fun (v, ts) -> verify_to_string v ^ " on " ^ day_to_string ts) xs in
+     "verified (" ^ (String.concat ", " evs) ^ ")"
 
 type fingerprint = {
   data          : string ;
   verified      : verification_status ;
   resources     : string list ;
-  session_count : int
+  session_count : int ;
+  first         : float ;
+  last          : float ;
 } with sexp
+
+let pp_fingerprint e =
+  String.((sub e 0 8) ^ " " ^ (sub e 8 8) ^ " " ^ (sub e 16 8) ^ " " ^ (sub e 24 8) ^ " " ^ (sub e 32 8))
+
+let fingerprint_to_string fp =
+  let ver = full_verification_status_to_string fp.verified
+  and pp_fp = pp_fingerprint fp.data
+  and used = "used in " ^ string_of_int fp.session_count ^ " sessions"
+  and resources = "resources: " ^ (String.concat ", " fp.resources)
+  and first = "first used on " ^ day_to_string fp.first
+  and last = "last used on " ^ day_to_string fp.last
+  in
+  "  " ^ ver ^ " " ^ pp_fp ^ " (" ^ used ^ ", " ^ resources ^ "), " ^ first ^ ", " ^ last
 
 type subscription = [
   | `None
@@ -266,9 +301,6 @@ let reset_user u =
   in
   { u with active_sessions }
 
-let pp_fingerprint e =
-  String.((sub e 0 8) ^ " " ^ (sub e 8 8) ^ " " ^ (sub e 16 8) ^ " " ^ (sub e 24 8) ^ " " ^ (sub e 32 8))
-
 let hex_fp fp =
   match Hex.of_string fp with `Hex e -> e
 
@@ -287,9 +319,37 @@ let replace_fp u fp =
   in
   { u with otr_fingerprints }
 
+let verify_fp user fp m =
+  let now = Utils.today () in
+  let verified = match fp.verified with
+    | `Verified xs -> `Verified ((m, now) :: xs)
+    | _ -> `Verified [(m, now)]
+  in
+  replace_fp user { fp with verified }
+
+let revoke_fp user fp =
+  let now = Utils.today () in
+  replace_fp user { fp with verified = `Revoked now }
+
+let used_fp user fp resource =
+  let resources =
+    if List.mem resource fp.resources then
+      fp.resources
+    else
+      resource :: fp.resources
+  in
+  let fp = {
+    fp with
+    session_count = succ fp.session_count ;
+    resources ;
+    last = Utils.today ()
+  }
+  in
+  replace_fp user fp
+
 let find_raw_fp u raw =
   try List.find (fun x -> x.data = raw) u.otr_fingerprints with
-    Not_found -> { data = raw ; verified = `Unverified ; resources = []; session_count = 0 }
+    Not_found -> { data = raw ; verified = `Unverified ; resources = []; session_count = 0 ; first = Utils.today () ; last = Utils.today () }
 
 let verified_fp u raw =
   let fps = find_raw_fp u raw in
@@ -350,16 +410,31 @@ let fix_fp s =
     | x -> x
   in
   let open Sexp in
+  let tr_verified' = function
+    | "Verified" -> List [ Atom "Verified" ; List [ List [Atom "Manual"; Atom "0"] ] ]
+    | "Revoked" -> List [ Atom "Revoked" ; Atom "0" ]
+    | x -> Atom x
+  in
   match s with
   | List s ->
      let r = List.fold_left (fun acc s ->
        let s = match s with
-         | List [ Atom "verified" ; Atom value ] -> List [ Atom "verified" ; Atom (tr_verified value) ]
+         | List [ Atom "verified" ; Atom value ] -> List [ Atom "verified" ; tr_verified' (tr_verified value) ]
          | x -> x
        in
        s :: acc) [] s
      in
-     List (List.rev r)
+     let r =
+       if
+         List.exists
+           (function List [ Atom "first" ; _ ] -> true | _ -> false)
+           r
+       then
+         r
+       else
+         List [ Atom "first" ; Atom "0" ] :: List [ Atom "last" ; Atom "0" ] :: r
+     in
+     List r
   | x -> x
 
 let t_of_sexp t version =

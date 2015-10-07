@@ -279,17 +279,28 @@ let handle_connect state log redraw failure =
        | None -> assert false
        | Some user ->
           let fp = User.find_raw_fp user raw_fp in
-          let resources =
-            if List.mem resource fp.User.resources then
-              fp.User.resources
-            else
-              resource :: fp.User.resources
-          in
-          let fp = { fp with User.session_count = succ fp.User.session_count ; User.resources = resources } in
-          let u = User.replace_fp user fp in
+          let u = User.used_fp user fp resource in
           Contact.replace_user state.contacts u ;
           Lwt.async (fun () -> Lwt_mvar.put state.contact_mvar (`User u)) ;
-          (fp.User.verified, pred fp.User.session_count, List.exists (fun x -> x.User.verified = `Verified) user.User.otr_fingerprints)
+          let isverified fp =
+            match fp.User.verified with
+            | `Verified _ -> true
+            | _ -> false
+          in
+          (fp.User.verified,
+           pred fp.User.session_count,
+           List.exists isverified user.User.otr_fingerprints)
+  and verify_fp jid raw_fp =
+    match Xjid.resource jid with
+    | None -> assert false
+    | Some resource ->
+       match Contact.find_user state.contacts (Xjid.t_to_bare jid) with
+       | None -> assert false
+       | Some user ->
+          let fp = User.find_raw_fp user raw_fp in
+          let u = User.verify_fp user fp `SMP in
+          Contact.replace_user state.contacts u ;
+          Lwt.async (fun () -> Lwt_mvar.put state.contact_mvar (`User u))
   and group_message jid timestamp topic body data id =
     match Contact.find_room state.contacts (Xjid.t_to_bare jid) with
     | None -> assert false
@@ -369,6 +380,7 @@ let handle_connect state log redraw failure =
       update_user ;
       receipt ;
       inc_fp ;
+      verify_fp ;
       failure ;
       group_message ;
       group_presence ;
@@ -415,7 +427,7 @@ let handle_fingerprint user session err fp =
   let manual_fp = string_normalize_fingerprint fp in
   if String.length manual_fp = 40 then
     let fp = User.find_raw_fp user manual_fp in
-    let user = User.replace_fp user { fp with User.verified = `Verified } in
+    let user = User.verify_fp user fp `Manual in
     (["verified " ^ manual_fp], Some user, None)
   else
     err "not a hex-encoded OTR fingerprint"
@@ -424,7 +436,7 @@ let handle_revoke user err fp =
   let manual_fp = string_normalize_fingerprint fp in
   if String.length manual_fp = 40 then
     let fp = User.find_raw_fp user manual_fp in
-    let user = User.replace_fp user { fp with User.verified = `Revoked } in
+    let user = User.revoke_fp user fp in
     (["revoked " ^ manual_fp], Some user, None)
   else
     err "not a hex-encoded OTR fingerprint"
@@ -446,17 +458,7 @@ let handle_authorization arg =
   | _                     -> None
 
 let dump_otr_fps fps =
-  let marshal_otr fp =
-    let ver = match fp.User.verified with
-      | `Verified -> "verified"
-      | `Unverified -> "unverified"
-      | `Revoked -> "revoked"
-    in
-    let used = string_of_int fp.User.session_count in
-    let resources = String.concat ", " fp.User.resources in
-    "  " ^ ver ^ " " ^ User.pp_fingerprint fp.User.data ^ " (used in " ^ used ^ " sessions, resources: " ^ resources ^ ")"
-  in
-  "otr fingerprints:" :: List.map marshal_otr fps
+  "otr fingerprints:" :: List.map User.fingerprint_to_string fps
 
 let current_otr_fp session =
   Utils.option

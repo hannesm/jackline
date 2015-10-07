@@ -28,10 +28,13 @@ type session = {
 
 val presence_unmodified : session -> presence -> string option -> int -> bool
 
+
+type verify = [ `Manual | `SMP ]
+
 type verification_status = [
-  | `Verified
+  | `Verified of (verify * float) list
   | `Unverified
-  | `Revoked
+  | `Revoked of float
 ]
 
 val verification_status_to_string : verification_status -> string
@@ -40,8 +43,12 @@ type fingerprint = {
   data          : string ;
   verified      : verification_status ;
   resources     : string list ;
-  session_count : int
+  session_count : int ;
+  first         : float ;
+  last          : float ;
 }
+
+val fingerprint_to_string : fingerprint -> string
 
 type subscription = [
   | `None
@@ -130,9 +137,12 @@ val pp_binary_fingerprint : string -> string
 val otr_fingerprint : Otr.State.session -> string option
 
 (* fingerprint *)
-val replace_fp : user -> fingerprint -> user
 val find_raw_fp : user -> string -> fingerprint
 val verified_fp : user -> string -> verification_status
+
+val verify_fp : user -> fingerprint -> verify -> user
+val revoke_fp : user -> fingerprint -> user
+val used_fp : user -> fingerprint -> string -> user
 
 (* messing around with sessions *)
 val replace_session : user -> session -> user * bool

@@ -378,10 +378,13 @@ let horizontal_line buddy resource fg_color buddy_width scrollback show_buddy_li
            | `User user ->
               Utils.option
                 (red, " - no OTR ")
-                (fun fp -> match User.verified_fp user fp with
-                           | `Verified -> (fg_color, " - OTR verified ")
-                           | `Unverified -> (red, " - unverified OTR: " ^ (User.pp_fingerprint fp) ^ " ")
-                           | `Revoked -> (red, " - revoked "))
+                (fun fp ->
+                 let vs = User.verified_fp user fp in
+                 ((match vs with
+                   | `Verified _ -> fg_color
+                   | `Unverified -> red
+                   | `Revoked _ -> red),
+                  " " ^ User.verification_status_to_string vs ^ " "))
                 (User.otr_fingerprint s.User.otr)
            | _ -> assert false)
       resource
@@ -794,6 +797,7 @@ let warn jid user add_msg =
   | _ -> ()
 
 let send_msg t state active_user failure message =
+  Xmpp_connection.dbg ("sending something (" ^ message ^ ") to " ^ Xjid.jid_to_string state.active_contact) ;
   let handle_otr_out jid user_out =
     let add_msg direction encrypted data =
       let msg = User.message direction encrypted false data in

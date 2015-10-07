@@ -49,6 +49,7 @@ type user_data = {
   update_receipt_state : Xjid.t -> User.receipt_state -> unit ;
   receipt              : Xjid.t -> string -> unit ;
   inc_fp               : Xjid.t -> string -> (User.verification_status * int * bool) ;
+  verify_fp            : Xjid.t -> string -> unit ;
   failure              : exn -> unit Lwt.t ;
   group_message        : Xjid.t -> float option -> string option -> string option -> Xep_muc.User.data option -> string option -> unit ;
   group_presence       : Xjid.t -> User.presence -> string option -> Xep_muc.User.data -> unit ;
@@ -214,7 +215,7 @@ let answer_receipt jid_to t stanza_id = function
        stanza_id
   | _ -> return_unit
 
-let notify_user msg jid ctx inc_fp = function
+let notify_user msg jid ctx inc_fp verify_fp = function
   | `Established_encrypted_session ssid ->
      msg (`Local (jid, "OTR")) false ("encrypted connection established (ssid " ^ ssid ^ ")") ;
      let raw_fp = match User.otr_fingerprint ctx with Some fp -> fp | _ -> assert false in
@@ -236,7 +237,7 @@ let notify_user msg jid ctx inc_fp = function
        in
        let v, c, o = inc_fp jid raw_fp in
        match v with
-       | `Verified -> tos v
+       | `Verified _ -> tos v
        | _ when c = 0 && o -> "POSSIBLE BREAKIN ATTEMPT! new " ^ tos v ^ other o ^ verify
        | _ -> tos v ^ count c ^ other o ^ verify
      in
@@ -247,7 +248,10 @@ let notify_user msg jid ctx inc_fp = function
   | `Received_encrypted e    -> msg (`From jid) true e
   | `SMP_awaiting_secret     -> msg (`Local (jid, "SMP")) false "awaiting SMP secret, answer with /smp answer [secret]"
   | `SMP_received_question q -> msg (`Local (jid, "SMP")) false ("received SMP question (answer with /smp answer [secret]) " ^ q)
-  | `SMP_success             -> msg (`Local (jid, "OTR SMP")) false "successfully verified!"
+  | `SMP_success             ->
+     let raw_fp = match User.otr_fingerprint ctx with Some fp -> fp | _ -> assert false in
+     verify_fp jid raw_fp ;
+     msg (`Local (jid, "OTR SMP")) false "successfully verified!"
   | `SMP_failure             -> msg (`Local (jid, "OTR SMP")) false "failure"
 
 let maybe_element qname x =
@@ -300,13 +304,13 @@ let message_callback (t : user_data session_data) stanza =
            let session = t.user_data.session jid in
            let ctx, _, ret = Otr.Engine.handle session.User.otr v in
            t.user_data.update_otr jid session ctx ;
-           List.iter (notify_user (msg ~timestamp) jid ctx t.user_data.inc_fp) ret ;
+           List.iter (notify_user (msg ~timestamp) jid ctx t.user_data.inc_fp t.user_data.verify_fp) ret ;
            return_unit
         | Some v, None, `Full _ ->
            let session = t.user_data.session jid in
            let ctx, out, ret = Otr.Engine.handle session.User.otr v in
            t.user_data.update_otr jid session ctx ;
-           List.iter (notify_user msg jid ctx t.user_data.inc_fp) ret ;
+           List.iter (notify_user msg jid ctx t.user_data.inc_fp t.user_data.verify_fp) ret ;
            let jid_to = stanza.jid_from in
            Lwt_list.iter_s (answer_receipt jid_to t stanza.id) stanza.x >>= fun () ->
            match out with
