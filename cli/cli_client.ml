@@ -58,11 +58,11 @@ let active_buddies buddies show_offline self active notifications =
       if is_jid (`Full self) || is_jid active || List.exists is_jid notifications then
         true
       else
-        Buddy.active_presence buddy <> `Offline
+        Contact.active_presence buddy <> `Offline
   in
   List.sort
-    Buddy.compare_buddy
-    (Buddy.fold
+    Contact.compare_buddy
+    (Contact.fold
        (fun id buddy acc ->
         if show id buddy then
           buddy :: acc
@@ -71,16 +71,16 @@ let active_buddies buddies show_offline self active notifications =
        buddies [])
 
 let active_resources show_offline active notifications buddy =
-  if show_offline && Buddy.expanded buddy then
-    Buddy.all_resources buddy
+  if show_offline && Contact.expanded buddy then
+    Contact.all_resources buddy
   else
-    if Buddy.expanded buddy then
+    if Contact.expanded buddy then
       let tst full_jid =
         List.exists (Xjid.jid_matches full_jid) notifications || active = full_jid
       in
-      Buddy.active_resources tst buddy
+      Contact.active_resources tst buddy
     else
-      Utils.option [] (fun s -> [s]) (Buddy.active buddy)
+      Utils.option [] (fun s -> [s]) (Contact.active buddy)
 
 let active_buddies_resources buddies show_offline self active notifications =
   let buddies = active_buddies buddies show_offline self active notifications in
@@ -88,10 +88,10 @@ let active_buddies_resources buddies show_offline self active notifications =
 
 let show_resource = function
   | `Room r, members -> `Bare r.Muc.room_jid ::
-                          List.map (fun m -> `Full (Buddy.full_jid (`Room r) m)) members
+                          List.map (fun m -> `Full (Contact.full_jid (`Room r) m)) members
   | `User u, [`Session s] -> [`Full (u.User.bare_jid, s.User.resource)]
   | `User u, sessions -> `Bare u.User.bare_jid ::
-                           List.map (fun s -> `Full (Buddy.full_jid (`User u) s)) sessions
+                           List.map (fun s -> `Full (Contact.full_jid (`User u) s)) sessions
 
 let show_resources rs = List.fold_right (fun rs acc -> (show_resource rs) @ acc) rs []
 
@@ -194,7 +194,7 @@ let format_buddies state buddies isself width =
     else
       ([], [])
   and notify_char buddy jid =
-    match isnotified state jid, Buddy.expanded buddy with
+    match isnotified state jid, Contact.expanded buddy with
     | true, true -> "*"
     | false, false ->
        let res = active_resources state.show_offline state.active_contact state.notifications buddy in
@@ -202,11 +202,11 @@ let format_buddies state buddies isself width =
     | true, false -> Zed_utf8.singleton (UChar.of_int 0x2600)
     | false, true -> " "
   and color buddy resource =
-    buddy_to_color (Buddy.color isself buddy resource)
+    buddy_to_color (Contact.color isself buddy resource)
   in
 
-  let draw (print : string) (b : Buddy.buddy) (r : Buddy.resource option) =
-    let jid = Buddy.jid b r in
+  let draw (print : string) (b : Contact.buddy) (r : Contact.resource option) =
+    let jid = Contact.jid b r in
     let pr, po = env jid
     and fst = notify_char b jid
     and color = color b r
@@ -408,7 +408,7 @@ let horizontal_line buddy resource fg_color buddy_width scrollback show_buddy_li
   in
   let txt =
     let jid =
-      let id = Buddy.jid buddy resource in
+      let id = Contact.jid buddy resource in
       Xjid.jid_to_string id
     in
     match scrollback, buddy with
@@ -476,8 +476,8 @@ let make_prompt size network state redraw =
      let err_prefix = try String.sub err 0 11 with Invalid_argument _ -> "" in
      (match err_prefix, !xmpp_session with
       | (x, None) when x = "async error" || x = "session err" ->
-         let buddies = Buddy.fold (fun _ b acc -> Buddy.reset b :: acc) state.users [] in
-         List.iter (Buddy.replace_buddy state.users) buddies ;
+         let buddies = Contact.fold (fun _ b acc -> Contact.reset b :: acc) state.users [] in
+         List.iter (Contact.replace_buddy state.users) buddies ;
          Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Disconnected)
       | _ -> ())
    | _ -> ()) ;
@@ -527,7 +527,7 @@ let make_prompt size network state redraw =
     let active = active state in
     let resource = resource state in
 
-    let fg_color = buddy_to_color (Buddy.color (fun _ -> isself) active resource) in
+    let fg_color = buddy_to_color (Contact.color (fun _ -> isself) active resource) in
 
     let main_window =
       let msg_colors, data =
@@ -535,7 +535,7 @@ let make_prompt size network state redraw =
           if isself then
             List.map (fun s -> `Default, s) (format_log statusses)
           else
-            format_messages active state.active_contact (Buddy.messages active)
+            format_messages active state.active_contact (Contact.messages active)
         in
         List.split msgs
       in
@@ -576,7 +576,7 @@ let make_prompt size network state redraw =
                                | `Local _ -> false
                                | `From _ -> true
                                | `To _ -> false)
-                     (Buddy.messages active))
+                     (Contact.messages active))
               in
               let wrapped = line_wrap ~raw:() ~max_length:chat_width data in
               let chat = scroll "" wrapped in
@@ -590,7 +590,7 @@ let make_prompt size network state redraw =
          let hline = horizontal_line active resource fg_color buddy_width state.scrollback showing_buddies size.cols in
 
          let notify = List.length state.notifications > 0 in
-         let log = Buddy.preserve_messages active in
+         let log = Contact.preserve_messages active in
          let status = status_line self mysession notify log redraw fg_color size.cols in
          let main = List.flatten main_window in
 
@@ -677,7 +677,7 @@ class read_line ~term ~network ~history ~state ~input_buffer = object(self)
     let saved_input_buffer = self#eval
     and u = active state
     in
-    Buddy.replace_buddy state.users (Buddy.set_saved_input_buffer u saved_input_buffer)
+    Contact.replace_buddy state.users (Contact.set_saved_input_buffer u saved_input_buffer)
 
   method! send_action = function
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = down ->
@@ -747,7 +747,7 @@ let quit state =
   | None -> return_unit
   | Some x ->
      let otr_sessions =
-       Buddy.fold
+       Contact.fold
          (fun _ u acc ->
           match u with
           | `Room _ -> acc
@@ -798,8 +798,8 @@ let send_msg t state active_user failure message =
     let add_msg direction encrypted data =
       let msg = User.message direction encrypted false data in
       let u = active state in
-      let u = Buddy.new_message u msg in
-      Buddy.replace_buddy state.users u
+      let u = Contact.new_message u msg in
+      Contact.replace_buddy state.users u
     in
     (match active state with
      | `User u -> warn jid u add_msg
@@ -850,16 +850,16 @@ let send_msg t state active_user failure message =
           in
           let ctx, out, user_out = Otr.Engine.send_otr ctx msg in
           let user = User.update_otr u session ctx in
-          Buddy.replace_user state.users user ;
+          Contact.replace_user state.users user ;
           (jid, out, user_out, None)
   in
   maybe_send ?kind jid out user_out
 
 let rec loop term state network log =
-  let history = Buddy.readline_history (active state) in
+  let history = Contact.readline_history (active state) in
   match_lwt
     try_lwt
-      let input_buffer = Buddy.saved_input_buffer (active state) in
+      let input_buffer = Contact.saved_input_buffer (active state) in
       (new read_line ~term ~history ~state ~network ~input_buffer)#run >>= fun message ->
       if List.length state.notifications = 0 then
         Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) ;
@@ -872,9 +872,9 @@ let rec loop term state network log =
     | Some message ->
        let active =
          let b = active state in
-         let b = Buddy.add_readline_history b message in
-         let b = Buddy.set_saved_input_buffer b "" in
-         Buddy.replace_buddy state.users b ;
+         let b = Contact.add_readline_history b message in
+         let b = Contact.set_saved_input_buffer b "" in
+         Contact.replace_buddy state.users b ;
          b
        in
        let failure reason =
@@ -894,10 +894,10 @@ let rec loop term state network log =
        in
        match String.length message, fst with
        | 0, _ ->
-          Buddy.replace_buddy state.users (Buddy.expand active) ;
+          Contact.replace_buddy state.users (Contact.expand active) ;
           (* transition from expanded to collapsed *)
-          if Buddy.expanded active then
-            (state.active_contact <- `Bare (Buddy.bare active)) ;
+          if Contact.expanded active then
+            (state.active_contact <- `Bare (Contact.bare active)) ;
           loop term state network log
        | _, Some '/' ->
           if String.trim message = "/quit" then

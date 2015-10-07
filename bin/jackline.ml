@@ -41,7 +41,7 @@ let start_client cfgdir debug () =
   let config = { config with Xconfig.password = password } in
 
   Persistency.load_users cfgdir >>= fun users ->
-  let users_sexp_existed = Buddy.length users > 0 in
+  let users_sexp_existed = Contact.length users > 0 in
 
   Persistency.load_user_dir cfgdir users >>= fun () ->
   Persistency.load_histories cfgdir users >>= fun () ->
@@ -50,12 +50,12 @@ let start_client cfgdir debug () =
   let myjid = config.Xconfig.jid in
   let _ =
     let bare, resource = myjid in
-    let user = match Buddy.find_user users bare with
+    let user = match Contact.find_user users bare with
       | None -> User.new_user ~jid:bare ()
       | Some u -> u
     in
     let u, session = User.create_session user resource config.Xconfig.otr_config config.Xconfig.dsa in
-    Buddy.replace_user users u
+    Contact.replace_user users u
   in
 
   let greeting =
@@ -79,7 +79,7 @@ let start_client cfgdir debug () =
   let connect_mvar = Cli_state.Connect.connect_me config (log ?step:None) out state_mvar users in
   let state = Cli_state.empty_state cfgdir config users connect_mvar state_mvar in
 
-  let us = Buddy.fold (fun _ v acc -> v :: acc) users [] in
+  let us = Contact.fold (fun _ v acc -> v :: acc) users [] in
 
   (if users_sexp_existed then
      (* write out all the users to users/ *)

@@ -164,7 +164,7 @@ let handle_help msg = function
 let handle_connect state log redraw failure =
   let remove jid =
     let bare = Xjid.t_to_bare jid in
-    Buddy.remove state.users bare ;
+    Contact.remove state.users bare ;
     if Xjid.jid_matches (`Bare bare) state.active_contact then
       activate_user state (`Full state.config.Xconfig.jid) ;
     if Xjid.jid_matches (`Bare bare) state.last_active_contact then
@@ -177,10 +177,10 @@ let handle_connect state log redraw failure =
     log (d, txt)
   and message jid ?timestamp dir enc txt =
     let bare = Xjid.t_to_bare jid in
-    match Buddy.find_buddy state.users bare with
+    match Contact.find_buddy state.users bare with
     | Some (`User user) ->
        let user = User.insert_message ?timestamp user dir enc true txt in
-       Buddy.replace_user state.users user ;
+       Contact.replace_user state.users user ;
        (match dir with
         | `Local (_, s) when Astring.String.is_prefix ~affix:"OTR" s -> ()
         | _ -> notify state jid) ;
@@ -191,25 +191,25 @@ let handle_connect state log redraw failure =
          let u =  User.new_user ~jid:bare () in
          User.insert_message ?timestamp u dir enc true txt
        in
-       Buddy.replace_user state.users user ;
+       Contact.replace_user state.users user ;
        notify state jid ;
        redraw ()
   and receipt jid id =
-    match Buddy.find_user state.users (Xjid.t_to_bare jid) with
+    match Contact.find_user state.users (Xjid.t_to_bare jid) with
     | None -> ()
     | Some user ->
-       let buddy = Buddy.received (`User user) id in
-       Buddy.replace_buddy state.users buddy ;
+       let buddy = Contact.received (`User user) id in
+       Contact.replace_buddy state.users buddy ;
        redraw ()
   and user jid =
     let bare = Xjid.t_to_bare jid in
-    match Buddy.find_user state.users bare with
+    match Contact.find_user state.users bare with
     | None -> User.new_user ~jid:bare ()
     | Some user -> user
   and session jid =
     let user =
       let bare = Xjid.t_to_bare jid in
-      match Buddy.find_user state.users bare with
+      match Contact.find_user state.users bare with
       | None -> User.new_user ~jid:bare ()
       | Some user -> user
     in
@@ -228,21 +228,21 @@ let handle_connect state log redraw failure =
             update_notifications state u similar.User.resource new_session.User.resource) ;
          u
        in
-       Buddy.replace_user state.users u ;
+       Contact.replace_user state.users u ;
        new_session
     | None, None ->
        let otr_config = otr_config user state in
        let u, s = User.create_session user r otr_config state.config.Xconfig.dsa in
-       Buddy.replace_user state.users u ;
+       Contact.replace_user state.users u ;
        s
   and update_otr jid session otr =
-    match Buddy.find_user state.users (Xjid.t_to_bare jid) with
+    match Contact.find_user state.users (Xjid.t_to_bare jid) with
     | None -> () (* should not happen! *)
     | Some user ->
        let user = User.update_otr user session otr in
-       Buddy.replace_user state.users user
+       Contact.replace_user state.users user
   and update_presence jid session presence status priority =
-    match Buddy.find_user state.users (Xjid.t_to_bare jid) with
+    match Contact.find_user state.users (Xjid.t_to_bare jid) with
     | None -> (* XXX can never happen!? *) assert false
     | Some user ->
        let session = { session with User.presence ; status ; priority } in
@@ -252,10 +252,10 @@ let handle_connect state log redraw failure =
           match User.find_similar_session user r with
           | None -> ()
           | Some x -> update_notifications state user x.User.resource r) ;
-       Buddy.replace_user state.users user ;
+       Contact.replace_user state.users user ;
        maybe_expand state state.active_contact
   and update_receipt_state jid receipt =
-    match Buddy.find_user state.users (Xjid.t_to_bare jid) with
+    match Contact.find_user state.users (Xjid.t_to_bare jid) with
     | None -> (* XXX can never happen!? *) assert false
     | Some user ->
        let r = match Xjid.resource jid with
@@ -265,17 +265,17 @@ let handle_connect state log redraw failure =
        match User.find_session user r with
        | Some s ->
           let u, _ = User.replace_session user { s with User.receipt } in
-          Buddy.replace_user state.users u
+          Contact.replace_user state.users u
        | None -> assert false
   and update_user user alert =
-    Buddy.replace_user state.users user ;
+    Contact.replace_user state.users user ;
     if alert then notify state (`Bare user.User.bare_jid) ;
     redraw ()
   and inc_fp jid raw_fp =
     match Xjid.resource jid with
     | None -> assert false
     | Some resource ->
-       match Buddy.find_user state.users (Xjid.t_to_bare jid) with
+       match Contact.find_user state.users (Xjid.t_to_bare jid) with
        | None -> assert false
        | Some user ->
           let fp = User.find_raw_fp user raw_fp in
@@ -287,11 +287,11 @@ let handle_connect state log redraw failure =
           in
           let fp = { fp with User.session_count = succ fp.User.session_count ; User.resources = resources } in
           let u = User.replace_fp user fp in
-          Buddy.replace_user state.users u ;
+          Contact.replace_user state.users u ;
           Lwt.async (fun () -> Lwt_mvar.put state.user_mvar (`User u)) ;
           (fp.User.verified, pred fp.User.session_count, List.exists (fun x -> x.User.verified = `Verified) user.User.otr_fingerprints)
   and group_message jid timestamp topic body data id =
-    match Buddy.find_room state.users (Xjid.t_to_bare jid) with
+    match Contact.find_room state.users (Xjid.t_to_bare jid) with
     | None -> assert false
     | Some r ->
        let room = Utils.option r (fun x -> { r with Muc.topic = Some x }) topic in
@@ -300,7 +300,7 @@ let handle_connect state log redraw failure =
          | Some msg ->
             match id, Xjid.resource jid with
             | Some id, Some x when x = room.Muc.my_nick ->
-               (match Buddy.received (`Room room) id with
+               (match Contact.received (`Room room) id with
                 | `Room r -> r
                 | _ -> assert false)
             | _ ->
@@ -308,13 +308,13 @@ let handle_connect state log redraw failure =
                let msg = User.message ?timestamp ~kind:`GroupChat (`From jid) false true msg in
                Muc.new_message room msg
        in
-       Buddy.replace_room state.users room ;
+       Contact.replace_room state.users room ;
        redraw ()
   and group_presence jid presence status data =
     match jid with
     | `Bare _ -> ()
     | `Full (bare, nickname) ->
-       match Buddy.find_room state.users bare with
+       match Contact.find_room state.users bare with
        | None -> ()
        | Some r ->
           let real_jid, nick, affiliation, role =
@@ -345,7 +345,7 @@ let handle_connect state log redraw failure =
           in
           if nickname = r.Muc.my_nick && presence = `Offline then
             let r = Muc.reset_room r in
-            Buddy.replace_room state.users r
+            Contact.replace_room state.users r
           else
             let members = match Muc.member r jid with
               | None -> Muc.new_member nick ~jid:real_jid affiliation role presence status :: r.Muc.members
@@ -354,7 +354,7 @@ let handle_connect state log redraw failure =
                  { m with Muc.nickname = nick ; jid = real_jid ; affiliation ; role ; presence ; status } ::
                    List.filter (fun m -> m.Muc.nickname <> nick) r.Muc.members
             in
-            Buddy.replace_room state.users { r with Muc.members }
+            Contact.replace_room state.users { r with Muc.members }
   in
   let (user_data : Xmpp_callbacks.user_data) = {
       Xmpp_callbacks.log ;
@@ -430,8 +430,8 @@ let handle_revoke user err fp =
     err "not a hex-encoded OTR fingerprint"
 
 let handle_log buddy v a =
-  if Buddy.preserve_messages buddy <> v then
-    let buddy = Buddy.set_preserve_messages buddy v in
+  if Contact.preserve_messages buddy <> v then
+    let buddy = Contact.set_preserve_messages buddy v in
     (["logging turned " ^ a], Some buddy, None)
   else
     ([], None, None)
@@ -484,12 +484,12 @@ let handle_own_otr_info dsa =
   ["your otr fingerprint:  " ^ (User.pp_binary_fingerprint otr_fp)]
 
 let common_info user cfgdir =
-  let jid = Xjid.bare_jid_to_string (Buddy.bare user) in
-  let name = match Buddy.name user with
+  let jid = Xjid.bare_jid_to_string (Contact.bare user) in
+  let name = match Contact.name user with
     | None -> []
     | Some x -> ["name: " ^ x]
   and pres =
-    match Buddy.preserve_messages user with
+    match Contact.preserve_messages user with
     | true ->
        let histo =
          let dir = Persistency.history in
@@ -501,7 +501,7 @@ let common_info user cfgdir =
   [ "jid: " ^ jid ] @ name @ pres
 
 let handle_info buddy resource cfgdir =
-  common_info buddy cfgdir @ Buddy.info buddy resource
+  common_info buddy cfgdir @ Contact.info buddy resource
 
 let handle_own_info user session cfgdir dsa =
   let ci = common_info (`User user) cfgdir
@@ -605,7 +605,7 @@ let handle_smp_question term users user session question =
       | _ ->  c)
       user (List.rev ret)
     in
-    Buddy.replace_user users user ;
+    Contact.replace_user users user ;
     match out with
     | None      -> Lwt.return_unit
     | Some body -> send s jid None body failure
@@ -725,7 +725,7 @@ let handle_join s my_nick buddies room err =
   match Xjid.string_to_jid room with
   | Some (`Bare room_jid) ->
      let room = Muc.new_room ~jid:room_jid ~my_nick () in
-     Buddy.replace_room buddies room ;
+     Contact.replace_room buddies room ;
      Xmpp_callbacks.Xep_muc.enter_room s (Xjid.jid_to_xmpp_jid (`Bare room_jid))
   | _ -> err "not a bare jid"
 
@@ -815,7 +815,7 @@ let exec input state term contact session isself failure log redraw =
 
         let datas, u, clos = match other, s with
           | ("clear", _), _ ->
-             ([], Some (Buddy.clear_messages contact), None)
+             ([], Some (Contact.clear_messages contact), None)
 
           | ("log", None), _ -> handle_help (msg ~prefix:"argument required") (Some "log")
           | ("log", Some a), _ when a = "on"  -> handle_log contact true a
@@ -934,10 +934,10 @@ let exec input state term contact session isself failure log redraw =
           let u = List.fold_left
                     (fun c d ->
                      let msg = User.message (`Local (state.active_contact, "")) false false d in
-                     Buddy.new_message c msg)
+                     Contact.new_message c msg)
                     old datas
           in
-          Buddy.replace_buddy state.users u ;
+          Contact.replace_buddy state.users u ;
           u
         in
         (match u with
