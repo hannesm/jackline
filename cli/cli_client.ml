@@ -328,7 +328,7 @@ let format_messages buddy jid msgs =
        msgs)
 
 let buddy_list state length width =
-  let users = state.users
+  let users = state.contacts
   and show_offline = state.show_offline
   and self = state.config.Xconfig.jid
   and active = state.active_contact
@@ -476,8 +476,8 @@ let make_prompt size network state redraw =
      let err_prefix = try String.sub err 0 11 with Invalid_argument _ -> "" in
      (match err_prefix, !xmpp_session with
       | (x, None) when x = "async error" || x = "session err" ->
-         let buddies = Contact.fold (fun _ b acc -> Contact.reset b :: acc) state.users [] in
-         List.iter (Contact.replace_contact state.users) buddies ;
+         let buddies = Contact.fold (fun _ b acc -> Contact.reset b :: acc) state.contacts [] in
+         List.iter (Contact.replace_contact state.contacts) buddies ;
          Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Disconnected)
       | _ -> ())
    | _ -> ()) ;
@@ -636,7 +636,7 @@ let navigate_message_buffer state direction =
   | Up, n -> state.scrollback <- n + 1; force_redraw ()
 
 let navigate_buddy_list state direction =
-  let userlist = all_jids state.users state.show_offline state.config.Xconfig.jid state.active_contact state.notifications in
+  let userlist = all_jids state.contacts state.show_offline state.config.Xconfig.jid state.active_contact state.notifications in
   let set_active idx =
     let user = List.nth userlist idx in
     activate_user state user ;
@@ -677,7 +677,7 @@ class read_line ~term ~network ~history ~state ~input_buffer = object(self)
     let saved_input_buffer = self#eval
     and u = active state
     in
-    Contact.replace_contact state.users (Contact.set_saved_input_buffer u saved_input_buffer)
+    Contact.replace_contact state.contacts (Contact.set_saved_input_buffer u saved_input_buffer)
 
   method! send_action = function
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = down ->
@@ -759,7 +759,7 @@ let quit state =
                 else acc)
                acc
                u.User.active_sessions)
-         state.users []
+         state.contacts []
      in
      let send_out (user, session) =
        match Otr.Engine.end_otr session.User.otr with
@@ -799,7 +799,7 @@ let send_msg t state active_user failure message =
       let msg = User.message direction encrypted false data in
       let u = active state in
       let u = Contact.new_message u msg in
-      Contact.replace_contact state.users u
+      Contact.replace_contact state.contacts u
     in
     (match active state with
      | `User u -> warn jid u add_msg
@@ -850,7 +850,7 @@ let send_msg t state active_user failure message =
           in
           let ctx, out, user_out = Otr.Engine.send_otr ctx msg in
           let user = User.update_otr u session ctx in
-          Contact.replace_user state.users user ;
+          Contact.replace_user state.contacts user ;
           (jid, out, user_out, None)
   in
   maybe_send ?kind jid out user_out
@@ -874,7 +874,7 @@ let rec loop term state network log =
          let b = active state in
          let b = Contact.add_readline_history b message in
          let b = Contact.set_saved_input_buffer b "" in
-         Contact.replace_contact state.users b ;
+         Contact.replace_contact state.contacts b ;
          b
        in
        let failure reason =
@@ -894,7 +894,7 @@ let rec loop term state network log =
        in
        match String.length message, fst with
        | 0, _ ->
-          Contact.replace_contact state.users (Contact.expand active) ;
+          Contact.replace_contact state.contacts (Contact.expand active) ;
           (* transition from expanded to collapsed *)
           if Contact.expanded active then
             (state.active_contact <- `Bare (Contact.bare active)) ;

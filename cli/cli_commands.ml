@@ -164,7 +164,7 @@ let handle_help msg = function
 let handle_connect state log redraw failure =
   let remove jid =
     let bare = Xjid.t_to_bare jid in
-    Contact.remove state.users bare ;
+    Contact.remove state.contacts bare ;
     if Xjid.jid_matches (`Bare bare) state.active_contact then
       activate_user state (`Full state.config.Xconfig.jid) ;
     if Xjid.jid_matches (`Bare bare) state.last_active_contact then
@@ -177,10 +177,10 @@ let handle_connect state log redraw failure =
     log (d, txt)
   and message jid ?timestamp dir enc txt =
     let bare = Xjid.t_to_bare jid in
-    match Contact.find_contact state.users bare with
+    match Contact.find_contact state.contacts bare with
     | Some (`User user) ->
        let user = User.insert_message ?timestamp user dir enc true txt in
-       Contact.replace_user state.users user ;
+       Contact.replace_user state.contacts user ;
        (match dir with
         | `Local (_, s) when Astring.String.is_prefix ~affix:"OTR" s -> ()
         | _ -> notify state jid) ;
@@ -191,25 +191,25 @@ let handle_connect state log redraw failure =
          let u =  User.new_user ~jid:bare () in
          User.insert_message ?timestamp u dir enc true txt
        in
-       Contact.replace_user state.users user ;
+       Contact.replace_user state.contacts user ;
        notify state jid ;
        redraw ()
   and receipt jid id =
-    match Contact.find_user state.users (Xjid.t_to_bare jid) with
+    match Contact.find_user state.contacts (Xjid.t_to_bare jid) with
     | None -> ()
     | Some user ->
        let buddy = Contact.received (`User user) id in
-       Contact.replace_contact state.users buddy ;
+       Contact.replace_contact state.contacts buddy ;
        redraw ()
   and user jid =
     let bare = Xjid.t_to_bare jid in
-    match Contact.find_user state.users bare with
+    match Contact.find_user state.contacts bare with
     | None -> User.new_user ~jid:bare ()
     | Some user -> user
   and session jid =
     let user =
       let bare = Xjid.t_to_bare jid in
-      match Contact.find_user state.users bare with
+      match Contact.find_user state.contacts bare with
       | None -> User.new_user ~jid:bare ()
       | Some user -> user
     in
@@ -228,21 +228,21 @@ let handle_connect state log redraw failure =
             update_notifications state u similar.User.resource new_session.User.resource) ;
          u
        in
-       Contact.replace_user state.users u ;
+       Contact.replace_user state.contacts u ;
        new_session
     | None, None ->
        let otr_config = otr_config user state in
        let u, s = User.create_session user r otr_config state.config.Xconfig.dsa in
-       Contact.replace_user state.users u ;
+       Contact.replace_user state.contacts u ;
        s
   and update_otr jid session otr =
-    match Contact.find_user state.users (Xjid.t_to_bare jid) with
+    match Contact.find_user state.contacts (Xjid.t_to_bare jid) with
     | None -> () (* should not happen! *)
     | Some user ->
        let user = User.update_otr user session otr in
-       Contact.replace_user state.users user
+       Contact.replace_user state.contacts user
   and update_presence jid session presence status priority =
-    match Contact.find_user state.users (Xjid.t_to_bare jid) with
+    match Contact.find_user state.contacts (Xjid.t_to_bare jid) with
     | None -> (* XXX can never happen!? *) assert false
     | Some user ->
        let session = { session with User.presence ; status ; priority } in
@@ -252,10 +252,10 @@ let handle_connect state log redraw failure =
           match User.find_similar_session user r with
           | None -> ()
           | Some x -> update_notifications state user x.User.resource r) ;
-       Contact.replace_user state.users user ;
+       Contact.replace_user state.contacts user ;
        maybe_expand state state.active_contact
   and update_receipt_state jid receipt =
-    match Contact.find_user state.users (Xjid.t_to_bare jid) with
+    match Contact.find_user state.contacts (Xjid.t_to_bare jid) with
     | None -> (* XXX can never happen!? *) assert false
     | Some user ->
        let r = match Xjid.resource jid with
@@ -265,17 +265,17 @@ let handle_connect state log redraw failure =
        match User.find_session user r with
        | Some s ->
           let u, _ = User.replace_session user { s with User.receipt } in
-          Contact.replace_user state.users u
+          Contact.replace_user state.contacts u
        | None -> assert false
   and update_user user alert =
-    Contact.replace_user state.users user ;
+    Contact.replace_user state.contacts user ;
     if alert then notify state (`Bare user.User.bare_jid) ;
     redraw ()
   and inc_fp jid raw_fp =
     match Xjid.resource jid with
     | None -> assert false
     | Some resource ->
-       match Contact.find_user state.users (Xjid.t_to_bare jid) with
+       match Contact.find_user state.contacts (Xjid.t_to_bare jid) with
        | None -> assert false
        | Some user ->
           let fp = User.find_raw_fp user raw_fp in
@@ -287,11 +287,11 @@ let handle_connect state log redraw failure =
           in
           let fp = { fp with User.session_count = succ fp.User.session_count ; User.resources = resources } in
           let u = User.replace_fp user fp in
-          Contact.replace_user state.users u ;
-          Lwt.async (fun () -> Lwt_mvar.put state.user_mvar (`User u)) ;
+          Contact.replace_user state.contacts u ;
+          Lwt.async (fun () -> Lwt_mvar.put state.contact_mvar (`User u)) ;
           (fp.User.verified, pred fp.User.session_count, List.exists (fun x -> x.User.verified = `Verified) user.User.otr_fingerprints)
   and group_message jid timestamp topic body data id =
-    match Contact.find_room state.users (Xjid.t_to_bare jid) with
+    match Contact.find_room state.contacts (Xjid.t_to_bare jid) with
     | None -> assert false
     | Some r ->
        let room = Utils.option r (fun x -> { r with Muc.topic = Some x }) topic in
@@ -308,13 +308,13 @@ let handle_connect state log redraw failure =
                let msg = User.message ?timestamp ~kind:`GroupChat (`From jid) false true msg in
                Muc.new_message room msg
        in
-       Contact.replace_room state.users room ;
+       Contact.replace_room state.contacts room ;
        redraw ()
   and group_presence jid presence status data =
     match jid with
     | `Bare _ -> ()
     | `Full (bare, nickname) ->
-       match Contact.find_room state.users bare with
+       match Contact.find_room state.contacts bare with
        | None -> ()
        | Some r ->
           let real_jid, nick, affiliation, role =
@@ -345,7 +345,7 @@ let handle_connect state log redraw failure =
           in
           if nickname = r.Muc.my_nick && presence = `Offline then
             let r = Muc.reset_room r in
-            Contact.replace_room state.users r
+            Contact.replace_room state.contacts r
           else
             let members = match Muc.member r jid with
               | None -> Muc.new_member nick ~jid:real_jid affiliation role presence status :: r.Muc.members
@@ -354,7 +354,7 @@ let handle_connect state log redraw failure =
                  { m with Muc.nickname = nick ; jid = real_jid ; affiliation ; role ; presence ; status } ::
                    List.filter (fun m -> m.Muc.nickname <> nick) r.Muc.members
             in
-            Contact.replace_room state.users { r with Muc.members }
+            Contact.replace_room state.contacts { r with Muc.members }
   in
   let (user_data : Xmpp_callbacks.user_data) = {
       Xmpp_callbacks.log ;
@@ -794,7 +794,7 @@ let exec input state term contact session isself failure log redraw =
      (* multi user chat *)
      | ("join", Some a), Some s ->
         let my_nick = fst (fst state.config.Xconfig.jid) in
-        handle_join s my_nick state.users a err
+        handle_join s my_nick state.contacts a err
 
 
      (* commands using active_contact as context *)
@@ -923,7 +923,7 @@ let exec input state term contact session isself failure log redraw =
                   (match split_ws a with
                    | "abort", _ -> handle_smp_abort u session
                    | "shared", Some arg -> handle_smp_shared u session arg
-                   | "question", Some question -> handle_smp_question term state.users u session question
+                   | "question", Some question -> handle_smp_question term state.contacts u session question
                    | "answer", Some arg -> handle_smp_answer u session arg
                    | _ -> handle_help (msg ~prefix:"argument required") (Some "smp"))
                | _ -> err "need a secure session, use /otr start first")
@@ -937,7 +937,7 @@ let exec input state term contact session isself failure log redraw =
                      Contact.new_message c msg)
                     old datas
           in
-          Contact.replace_contact state.users u ;
+          Contact.replace_contact state.contacts u ;
           u
         in
         (match u with
@@ -947,7 +947,7 @@ let exec input state term contact session isself failure log redraw =
          | Some x ->
             let u = user x in
             (* TODO: this is slightly too eager (too many writes) *)
-            Lwt_mvar.put state.user_mvar u) >>= fun () ->
+            Lwt_mvar.put state.contact_mvar u) >>= fun () ->
         match clos, !xmpp_session with
         | Some x, Some s -> x s failure
         | Some _, None -> msg "error" "not connected" ; Lwt.return_unit

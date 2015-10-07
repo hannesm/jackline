@@ -28,10 +28,10 @@ type state = {
   config                      : Xconfig.t                  ; (* set initially *)
 
   state_mvar                  : notify_v Lwt_mvar.t        ; (* set initially *)
-  user_mvar                   : Contact.contact Lwt_mvar.t ; (* set initially *)
+  contact_mvar                : Contact.contact Lwt_mvar.t ; (* set initially *)
   connect_mvar                : connect_v Lwt_mvar.t       ; (* set initially *)
 
-  users                       : Contact.contacts           ; (* read from disk, extended by xmpp callbacks *)
+  contacts                    : Contact.contacts           ; (* read from disk, extended by xmpp callbacks *)
 
   mutable active_contact      : Xjid.t                     ; (* modified by scrolling *)
   mutable last_active_contact : Xjid.t                     ; (* modified by scrolling *)
@@ -194,8 +194,8 @@ module Connect = struct
     mvar
 end
 
-let empty_state config_directory config users connect_mvar state_mvar =
-  let user_mvar = Persistency.notify_user config_directory
+let empty_state config_directory config contacts connect_mvar state_mvar =
+  let contact_mvar = Persistency.notify_user config_directory
   and last_status = (`Local (`Full config.Xconfig.jid, ""), "")
   and active = `Full config.Xconfig.jid
   in
@@ -204,10 +204,10 @@ let empty_state config_directory config users connect_mvar state_mvar =
     config                          ;
 
     state_mvar                      ;
-    user_mvar                       ;
+    contact_mvar                    ;
     connect_mvar                    ;
 
-    users                           ;
+    contacts                        ;
 
     active_contact      = active    ;
     last_active_contact = active    ;
@@ -226,11 +226,11 @@ let empty_state config_directory config users connect_mvar state_mvar =
 
 
 let add_status state dir msg =
-  match Contact.find_user state.users (fst state.config.Xconfig.jid) with
+  match Contact.find_user state.contacts (fst state.config.Xconfig.jid) with
   | None -> assert false
   | Some self ->
      let self = User.insert_message self dir false true msg in
-     Contact.replace_user state.users self
+     Contact.replace_user state.contacts self
 
 let send s ?kind jid id body fail =
   Xmpp_callbacks.send_msg s ?kind jid id body fail
@@ -241,13 +241,13 @@ let random_string () =
   Cstruct.to_string (Base64.encode rnd)
 
 let maybe_expand state jid =
-  match Contact.find_user state.users (Xjid.t_to_bare jid) with
+  match Contact.find_user state.contacts (Xjid.t_to_bare jid) with
   | None -> () (* create one! *)
   | Some user ->
      match user.User.expand, User.active_session user, jid with
      | _, Some s, `Full (_, r) when r = s.User.resource -> ()
      | false, Some _, `Full _ ->
-        Contact.replace_user state.users { user with User.expand = true }
+        Contact.replace_user state.contacts { user with User.expand = true }
      | _ -> ()
 
 let notify state jid =
@@ -262,7 +262,7 @@ let notify state jid =
     state.notifications <- jid :: state.notifications
 
 let active state =
-  match Contact.find_contact state.users (Xjid.t_to_bare state.active_contact) with
+  match Contact.find_contact state.contacts (Xjid.t_to_bare state.active_contact) with
   | None -> assert false
   | Some x -> x
 
@@ -304,7 +304,7 @@ let resource state = match active state with
   | `User _ -> Utils.option None (fun s -> Some (`Session s))  (session state)
 
 let self state =
-  match Contact.find_user state.users (fst state.config.Xconfig.jid) with
+  match Contact.find_user state.contacts (fst state.config.Xconfig.jid) with
   | None -> assert false
   | Some self -> self
 

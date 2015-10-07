@@ -83,7 +83,7 @@ let start_client cfgdir debug () =
 
   (if users_sexp_existed then
      (* write out all the users to users/ *)
-     Lwt_list.iter_s (Lwt_mvar.put state.Cli_state.user_mvar) us >>= fun () ->
+     Lwt_list.iter_s (Lwt_mvar.put state.Cli_state.contact_mvar) us >>= fun () ->
      (* delete users.sexp *)
      Persistency.delete (Filename.concat cfgdir Persistency.users)
    else
