@@ -1,5 +1,5 @@
 
-type buddy = [ `User of User.user | `Room of Muc.groupchat ]
+type contact = [ `User of User.user | `Room of Muc.groupchat ]
 type resource = [ `Session of User.session | `Member of Muc.member ]
 
 type color = [ `Default | `Good | `Bad ]
@@ -8,7 +8,7 @@ let bare = function
   | `User x -> x.User.bare_jid
   | `Room x -> x.Muc.room_jid
 
-let compare_buddy a b =
+let compare_contact a b =
   match a, b with
   | `Room _, `User _ -> -1
   | `User _, `Room _ -> 1
@@ -48,13 +48,13 @@ let active = function
   | `Room r -> None
   | `User u -> Utils.option None (fun s -> Some (`Session s)) (User.active_session u)
 
-let full_jid buddy r =
-  (bare buddy, resource r)
+let full_jid contact r =
+  (bare contact, resource r)
 
-let jid buddy resource =
+let jid contact resource =
   Utils.option
-    (`Bare (bare buddy))
-    (fun r -> `Full (full_jid buddy r))
+    (`Bare (bare contact))
+    (fun r -> `Full (full_jid contact r))
     resource
 
 let active_resources tst = function
@@ -121,13 +121,13 @@ let saved_input_buffer = function
   | `User u -> u.User.saved_input_buffer
   | `Room r -> r.Muc.saved_input_buffer
 
-let set_saved_input_buffer buddy str =
-  match buddy with
+let set_saved_input_buffer contact str =
+  match contact with
   | `User u -> `User { u with User.saved_input_buffer = str }
   | `Room r -> `Room { r with Muc.saved_input_buffer = str }
 
-let new_message buddy message =
-  match buddy with
+let new_message contact message =
+  match contact with
   | `User u -> `User (User.new_message u message)
   | `Room r -> `Room (Muc.new_message r message)
 
@@ -140,7 +140,7 @@ let add_readline_history b h =
   | `User u -> `User { u with User.readline_history = h :: u.User.readline_history }
   | `Room r -> `Room { r with Muc.readline_history = h :: r.Muc.readline_history }
 
-let color self (b : buddy) (r : resource option) =
+let color self (b : contact) (r : resource option) =
   if self (`Bare (bare b)) then
     `Default
   else
@@ -149,16 +149,16 @@ let color self (b : buddy) (r : resource option) =
     | `User _, Some (`Session s) -> if User.(encrypted s.otr) then `Good else `Bad
     | `Room _, _ -> `Default
 
-let marshal_history buddy =
+let marshal_history contact =
   let open Sexplib.Conv in
-  if preserve_messages buddy then
+  if preserve_messages contact then
     let new_msgs =
       List.filter (fun m ->
         match m.User.direction, m.User.persistent with
         | `Local _, _    -> false
         | _       , true -> false
         | _              -> true)
-        (messages buddy)
+        (messages contact)
     in
     List.iter (fun x -> x.User.persistent <- true) new_msgs ;
     let hist_version = sexp_of_int 3 in
@@ -259,11 +259,11 @@ let received b id =
   in
   set_history b msgs
 
-let load_history directory buddy =
-  let bare = bare buddy in
+let load_history directory contact =
+  let bare = bare contact in
   let file = Filename.concat directory (Xjid.bare_jid_to_string bare) in
   let msgs = load_history_hlp (`Bare bare) file in
-  set_history buddy msgs
+  set_history contact msgs
 
 let store = function
   | `User u -> User.store_user u
@@ -276,26 +276,26 @@ module StringHash =
     let hash = Hashtbl.hash
   end
 
-module Buddies = Hashtbl.Make(StringHash)
-type buddies = buddy Buddies.t
+module Contacts = Hashtbl.Make(StringHash)
+type contacts = contact Contacts.t
 
-let create () = Buddies.create 100
-let length = Buddies.length
+let create () = Contacts.create 100
+let length = Contacts.length
 
-let fold = Buddies.fold
-let iter = Buddies.iter
+let fold = Contacts.fold
+let iter = Contacts.iter
 
-let find_buddy t id = try Some (Buddies.find t id) with Not_found -> None
-let replace_buddy buddies buddy = Buddies.replace buddies (bare buddy) buddy
-let remove = Buddies.remove
+let find_contact t id = try Some (Contacts.find t id) with Not_found -> None
+let replace_contact contacts contact = Contacts.replace contacts (bare contact) contact
+let remove = Contacts.remove
 
-let find_room t id = match find_buddy t id with
+let find_room t id = match find_contact t id with
   | Some (`Room r) -> Some r
   | _ -> None
 
-let find_user t id = match find_buddy t id with
+let find_user t id = match find_contact t id with
   | Some (`User u) -> Some u
   | _ -> None
 
-let replace_room t r = replace_buddy t (`Room r)
-let replace_user t r = replace_buddy t (`User r)
+let replace_room t r = replace_contact t (`Room r)
+let replace_user t r = replace_contact t (`User r)

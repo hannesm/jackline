@@ -24,28 +24,28 @@ type connect_v =
   | Presence of (User.presence * string option * int option)
 
 type state = {
-  config_directory            : string                    ; (* set initially *)
+  config_directory            : string                     ; (* set initially *)
   config                      : Xconfig.t                  ; (* set initially *)
 
-  state_mvar                  : notify_v Lwt_mvar.t       ; (* set initially *)
-  user_mvar                   : Contact.buddy Lwt_mvar.t      ; (* set initially *)
-  connect_mvar                : connect_v Lwt_mvar.t      ; (* set initially *)
+  state_mvar                  : notify_v Lwt_mvar.t        ; (* set initially *)
+  user_mvar                   : Contact.contact Lwt_mvar.t ; (* set initially *)
+  connect_mvar                : connect_v Lwt_mvar.t       ; (* set initially *)
 
-  users                       : Contact.buddies             ; (* read from disk, extended by xmpp callbacks *)
+  users                       : Contact.contacts           ; (* read from disk, extended by xmpp callbacks *)
 
-  mutable active_contact      : Xjid.t                ; (* modified by scrolling *)
-  mutable last_active_contact : Xjid.t                ; (* modified by scrolling *)
+  mutable active_contact      : Xjid.t                     ; (* modified by scrolling *)
+  mutable last_active_contact : Xjid.t                     ; (* modified by scrolling *)
 
-  mutable notifications       : Xjid.t list           ; (* list to blink *)
+  mutable notifications       : Xjid.t list                ; (* list to blink *)
 
-  mutable show_offline        : bool                      ; (* F5 stuff *)
-  mutable window_mode         : display_mode              ; (* F12 stuff *)
-  mutable scrollback          : int                       ; (* scroll-pgup/down state *)
+  mutable show_offline        : bool                       ; (* F5 stuff *)
+  mutable window_mode         : display_mode               ; (* F12 stuff *)
+  mutable scrollback          : int                        ; (* scroll-pgup/down state *)
 
-  mutable last_status         : (User.direction * string) ; (* internal use only *)
+  mutable last_status         : (User.direction * string)  ; (* internal use only *)
 
-  mutable log_height          : int                       ;
-  mutable buddy_width         : int                       ;
+  mutable log_height          : int                        ;
+  mutable buddy_width         : int                        ;
 }
 
 module Notify = struct
@@ -262,7 +262,7 @@ let notify state jid =
     state.notifications <- jid :: state.notifications
 
 let active state =
-  match Contact.find_buddy state.users (Xjid.t_to_bare state.active_contact) with
+  match Contact.find_contact state.users (Xjid.t_to_bare state.active_contact) with
   | None -> assert false
   | Some x -> x
 

@@ -177,7 +177,7 @@ let handle_connect state log redraw failure =
     log (d, txt)
   and message jid ?timestamp dir enc txt =
     let bare = Xjid.t_to_bare jid in
-    match Contact.find_buddy state.users bare with
+    match Contact.find_contact state.users bare with
     | Some (`User user) ->
        let user = User.insert_message ?timestamp user dir enc true txt in
        Contact.replace_user state.users user ;
@@ -199,7 +199,7 @@ let handle_connect state log redraw failure =
     | None -> ()
     | Some user ->
        let buddy = Contact.received (`User user) id in
-       Contact.replace_buddy state.users buddy ;
+       Contact.replace_contact state.users buddy ;
        redraw ()
   and user jid =
     let bare = Xjid.t_to_bare jid in
@@ -937,7 +937,7 @@ let exec input state term contact session isself failure log redraw =
                      Contact.new_message c msg)
                     old datas
           in
-          Contact.replace_buddy state.users u ;
+          Contact.replace_contact state.users u ;
           u
         in
         (match u with

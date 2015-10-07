@@ -170,15 +170,15 @@ let load_users cfg =
                 with _ -> data)
   | None -> data
 
-let load_histories cfg users =
+let load_histories cfg contacts =
   message_history_dir cfg >|= fun histo ->
-  let buddies =
+  let contact_list =
     Contact.fold
       (fun _ v acc -> Contact.load_history histo v :: acc)
-      users
+      contacts
       []
   in
-  List.iter (Contact.replace_buddy users) buddies
+  List.iter (Contact.replace_contact contacts) contact_list
 
 let pass_file = "password"
 

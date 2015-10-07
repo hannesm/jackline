@@ -61,7 +61,7 @@ let active_buddies buddies show_offline self active notifications =
         Contact.active_presence buddy <> `Offline
   in
   List.sort
-    Contact.compare_buddy
+    Contact.compare_contact
     (Contact.fold
        (fun id buddy acc ->
         if show id buddy then
@@ -205,7 +205,7 @@ let format_buddies state buddies isself width =
     buddy_to_color (Contact.color isself buddy resource)
   in
 
-  let draw (print : string) (b : Contact.buddy) (r : Contact.resource option) =
+  let draw (print : string) (b : Contact.contact) (r : Contact.resource option) =
     let jid = Contact.jid b r in
     let pr, po = env jid
     and fst = notify_char b jid
@@ -477,7 +477,7 @@ let make_prompt size network state redraw =
      (match err_prefix, !xmpp_session with
       | (x, None) when x = "async error" || x = "session err" ->
          let buddies = Contact.fold (fun _ b acc -> Contact.reset b :: acc) state.users [] in
-         List.iter (Contact.replace_buddy state.users) buddies ;
+         List.iter (Contact.replace_contact state.users) buddies ;
          Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Disconnected)
       | _ -> ())
    | _ -> ()) ;
@@ -677,7 +677,7 @@ class read_line ~term ~network ~history ~state ~input_buffer = object(self)
     let saved_input_buffer = self#eval
     and u = active state
     in
-    Contact.replace_buddy state.users (Contact.set_saved_input_buffer u saved_input_buffer)
+    Contact.replace_contact state.users (Contact.set_saved_input_buffer u saved_input_buffer)
 
   method! send_action = function
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = down ->
@@ -799,7 +799,7 @@ let send_msg t state active_user failure message =
       let msg = User.message direction encrypted false data in
       let u = active state in
       let u = Contact.new_message u msg in
-      Contact.replace_buddy state.users u
+      Contact.replace_contact state.users u
     in
     (match active state with
      | `User u -> warn jid u add_msg
@@ -874,7 +874,7 @@ let rec loop term state network log =
          let b = active state in
          let b = Contact.add_readline_history b message in
          let b = Contact.set_saved_input_buffer b "" in
-         Contact.replace_buddy state.users b ;
+         Contact.replace_contact state.users b ;
          b
        in
        let failure reason =
@@ -894,7 +894,7 @@ let rec loop term state network log =
        in
        match String.length message, fst with
        | 0, _ ->
-          Contact.replace_buddy state.users (Contact.expand active) ;
+          Contact.replace_contact state.users (Contact.expand active) ;
           (* transition from expanded to collapsed *)
           if Contact.expanded active then
             (state.active_contact <- `Bare (Contact.bare active)) ;

@@ -1,70 +1,70 @@
 
-type buddy = [ `User of User.user | `Room of Muc.groupchat ]
+type contact = [ `User of User.user | `Room of Muc.groupchat ]
 
-val compare_buddy : buddy -> buddy -> int
+val compare_contact : contact -> contact -> int
 
-val name : buddy -> string option
-val bare : buddy -> Xjid.bare_jid
-val preserve_messages : buddy -> bool
-val expanded : buddy -> bool
-val messages : buddy -> User.message list
-val saved_input_buffer : buddy -> string
-val readline_history : buddy -> string list
+val name : contact -> string option
+val bare : contact -> Xjid.bare_jid
+val preserve_messages : contact -> bool
+val expanded : contact -> bool
+val messages : contact -> User.message list
+val saved_input_buffer : contact -> string
+val readline_history : contact -> string list
 
-val received : buddy -> string -> buddy
+val received : contact -> string -> contact
 
-val expand : buddy -> buddy
-val set_saved_input_buffer : buddy -> string -> buddy
-val add_readline_history : buddy -> string -> buddy
-val set_preserve_messages : buddy -> bool -> buddy
+val expand : contact -> contact
+val set_saved_input_buffer : contact -> string -> contact
+val add_readline_history : contact -> string -> contact
+val set_preserve_messages : contact -> bool -> contact
 
-val reset : buddy -> buddy
-val clear_messages : buddy -> buddy
+val reset : contact -> contact
+val clear_messages : contact -> contact
 
-val marshal_history : buddy -> string option
-val load_history : string -> buddy -> buddy
+val marshal_history : contact -> string option
+val load_history : string -> contact -> contact
 
-val active_presence : buddy -> User.presence
+val active_presence : contact -> User.presence
 
-val new_message : buddy -> User.message -> buddy
+val new_message : contact -> User.message -> contact
 
 type resource = [ `Session of User.session | `Member of Muc.member ]
 
-val info : buddy -> resource option -> string list
+val info : contact -> resource option -> string list
 
 val presence : resource -> User.presence
 
-val all_resources : buddy -> resource list
-val active_resources : (Xjid.t -> bool) -> buddy -> resource list
+val all_resources : contact -> resource list
+val active_resources : (Xjid.t -> bool) -> contact -> resource list
 
-val active : buddy -> resource option
+val active : contact -> resource option
 
-val full_jid : buddy -> resource -> Xjid.full_jid
+val full_jid : contact -> resource -> Xjid.full_jid
 
-val jid : buddy -> resource option -> Xjid.t
+val jid : contact -> resource option -> Xjid.t
 
 type color = [ `Default | `Good | `Bad ]
-val color : (Xjid.t -> bool) -> buddy -> resource option -> color
+val color : (Xjid.t -> bool) -> contact -> resource option -> color
 
-val store : buddy -> Sexplib.Sexp.t option
+val store : contact -> Sexplib.Sexp.t option
 
-type buddies
+type contacts
 
-(* actions on buddies *)
-val create : unit -> buddies
-val length : buddies -> int
+(* actions on contacts *)
+val create : unit -> contacts
+val length : contacts -> int
 
-val fold : (Xjid.bare_jid -> buddy -> 'a -> 'a) -> buddies -> 'a -> 'a
-val iter : (Xjid.bare_jid -> buddy -> unit) -> buddies -> unit
+val fold : (Xjid.bare_jid -> contact -> 'a -> 'a) -> contacts -> 'a -> 'a
+val iter : (Xjid.bare_jid -> contact -> unit) -> contacts -> unit
 
-(* locating and creating a buddy *)
-val find_buddy : buddies -> Xjid.bare_jid -> buddy option
-val replace_buddy : buddies -> buddy -> unit
+(* locating and creating a contact *)
+val find_contact : contacts -> Xjid.bare_jid -> contact option
+val replace_contact : contacts -> contact -> unit
 
-val find_room : buddies -> Xjid.bare_jid -> Muc.groupchat option
-val find_user : buddies -> Xjid.bare_jid -> User.user option
-val replace_room : buddies -> Muc.groupchat -> unit
-val replace_user : buddies -> User.user -> unit
+val find_room : contacts -> Xjid.bare_jid -> Muc.groupchat option
+val find_user : contacts -> Xjid.bare_jid -> User.user option
+val replace_room : contacts -> Muc.groupchat -> unit
+val replace_user : contacts -> User.user -> unit
 
 (* removal *)
-val remove : buddies -> Xjid.bare_jid -> unit
+val remove : contacts -> Xjid.bare_jid -> unit
