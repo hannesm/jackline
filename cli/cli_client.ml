@@ -367,27 +367,18 @@ let maybe_trim str left =
   else
     ([], 0)
 
-let horizontal_line buddy resource fg_color buddy_width scrollback show_buddy_list width =
+let horizontal_line buddy resource isself fg_color buddy_width scrollback show_buddy_list width =
   let otrcolor, otr =
-    Utils.option
-      (default, "")
-      (function
-        | `Member _ -> (default, "")
-        | `Session s ->
-           match buddy with
-           | `User user ->
-              Utils.option
-                (red, " - no OTR ")
-                (fun fp ->
-                 let vs = User.verified_fp user fp in
-                 ((match vs with
-                   | `Verified _ -> fg_color
-                   | `Unverified -> red
-                   | `Revoked _ -> red),
-                  " " ^ User.verification_status_to_string vs ^ " "))
-                (User.otr_fingerprint s.User.otr)
-           | _ -> assert false)
-      resource
+    (buddy_to_color (Contact.color isself buddy resource),
+     match buddy, resource with
+     | `User user, Some (`Session s) ->
+        Utils.option
+          " - no OTR "
+          (fun fp ->
+           let vs = User.verified_fp user fp in
+           " " ^ User.verification_status_to_string vs ^ " ")
+          (User.otr_fingerprint s.User.otr)
+    | _ -> "")
   in
   let pre =
     if show_buddy_list then
@@ -590,7 +581,11 @@ let make_prompt size network state redraw =
            | BuddyList -> true
            | FullScreen | Raw -> false
          in
-         let hline = horizontal_line active resource fg_color buddy_width state.scrollback showing_buddies size.cols in
+         let hline =
+           horizontal_line
+             active resource (fun _ -> isself) fg_color buddy_width
+             state.scrollback showing_buddies size.cols
+         in
 
          let notify = List.length state.notifications > 0 in
          let log = Contact.preserve_messages active in
