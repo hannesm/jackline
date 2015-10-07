@@ -218,20 +218,27 @@ let notify_user msg jid ctx inc_fp = function
   | `Established_encrypted_session ssid ->
      msg (`Local (jid, "OTR")) false ("encrypted connection established (ssid " ^ ssid ^ ")") ;
      let raw_fp = match User.otr_fingerprint ctx with Some fp -> fp | _ -> assert false in
-     let verify = "verify /fingerprint [fp] over second channel"
-     and used n = "(used " ^ (string_of_int n) ^ " times)"
-     in
      let otrmsg =
-       match inc_fp jid raw_fp with
-       | `Verified, _, _ -> "verified OTR key"
-       | `Unverified, 0, true -> "POSSIBLE BREAKIN ATTEMPT! new unverified key with a different verified key on disk! " ^ verify
-       | `Unverified, n, true -> "unverified key " ^ (used n) ^ " with a different verified key on disk! please " ^ verify
-       | `Unverified, 0, false -> "new unverified key! please " ^ verify
-       | `Unverified, n, false -> "unverified key " ^ (used n) ^ ". please " ^ verify
-       | `Revoked, 0, false -> "REVOKED key (never used before)"
-       | `Revoked, n, false -> "REVOKED key " ^ (used n)
-       | `Revoked, 0, true -> "REVOKED key (never used before), but a verified is available"
-       | `Revoked, n, true -> "REVOKED key " ^ (used n) ^ ", but a verified is available"
+       let verify = " verify /fingerprint [fp] over second channel"
+       and tos x =
+         let stat = User.verification_status_to_string x in
+         stat ^ " key"
+       and other x =
+         if x then
+           ", but a verified is available"
+         else
+           ""
+       and count n =
+         if n = 0 then
+           " (never used before)"
+         else
+           " (used " ^ (string_of_int n) ^ " times)"
+       in
+       let v, c, o = inc_fp jid raw_fp in
+       match v with
+       | `Verified -> tos v
+       | _ when c = 0 && o -> "POSSIBLE BREAKIN ATTEMPT! new " ^ tos v ^ other o ^ verify
+       | _ -> tos v ^ count c ^ other o ^ verify
      in
      msg (`Local (jid, "OTR key")) false otrmsg
   | `Warning w               -> msg (`Local (jid, "OTR warning")) false w
