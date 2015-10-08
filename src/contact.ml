@@ -45,7 +45,7 @@ let all_resources = function
                  (User.sorted_sessions u)
 
 let active = function
-  | `Room r -> None
+  | `Room _ -> None
   | `User u -> Utils.option None (fun s -> Some (`Session s)) (User.active_session u)
 
 let full_jid contact r =
@@ -70,20 +70,6 @@ let active_resources tst = function
        (List.filter
           (fun s -> s.User.presence <> `Offline || tst (`Full (u.User.bare_jid, s.User.resource)))
           (User.sorted_sessions u))
-
-let status = function
-  | `Member m -> m.Muc.status
-  | `Session s -> s.User.status
-
-let bare_resource_info r =
-  let pre = presence r
-  and sta = status r
-  and res = resource r
-  in
-  Printf.sprintf "%s: %s %s"
-                 res
-                 (User.presence_to_string pre)
-                 (Utils.option "" (fun s -> " - " ^ s) sta)
 
 let preserve_messages = function
   | `User u -> u.User.preserve_messages
@@ -145,8 +131,8 @@ let color self (b : contact) (r : resource option) =
     `Default
   else
     match b, r with
-    | `User _, None -> `Default
     | `User _, Some (`Session s) -> if User.(encrypted s.otr) then `Good else `Bad
+    | `User _, _ -> `Default
     | `Room _, _ -> `Default
 
 let marshal_history contact =

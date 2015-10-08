@@ -23,6 +23,7 @@ let feature = function
   | "muc_unmoderated" -> `Non_moderated
   | "muc_nonanonymous" -> `Non_anonymous
   | "muc_semianonymous" -> `Semi_anonymous
+  | _ -> assert false
 (*  | "muc_rooms" -> ?? *)
 
 let statuses = [
@@ -183,7 +184,7 @@ open Sexplib.Conv
 
 let db_version = 1
 
-let t_of_sexp t version =
+let t_of_sexp t _version =
   match t with
   | Sexp.List l ->
     (match

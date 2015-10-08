@@ -185,7 +185,7 @@ let handle_connect state log redraw failure =
         | `Local (_, s) when Astring.String.is_prefix ~affix:"OTR" s -> ()
         | _ -> notify state jid) ;
        redraw ()
-    | Some (`Room room) -> () (* XXX is a private message *)
+    | Some (`Room _) -> () (* XXX is a private message *)
     | None ->
        let user =
          let u =  User.new_user ~jid:bare () in
@@ -291,17 +291,14 @@ let handle_connect state log redraw failure =
            pred fp.User.session_count,
            List.exists isverified user.User.otr_fingerprints)
   and verify_fp jid raw_fp =
-    match Xjid.resource jid with
+    match Contact.find_user state.contacts (Xjid.t_to_bare jid) with
     | None -> assert false
-    | Some resource ->
-       match Contact.find_user state.contacts (Xjid.t_to_bare jid) with
-       | None -> assert false
-       | Some user ->
-          let fp = User.find_raw_fp user raw_fp in
-          let u = User.verify_fp user fp `SMP in
-          Contact.replace_user state.contacts u ;
-          Lwt.async (fun () -> Lwt_mvar.put state.contact_mvar (`User u))
-  and group_message jid timestamp topic body data id =
+    | Some user ->
+       let fp = User.find_raw_fp user raw_fp in
+       let u = User.verify_fp user fp `SMP in
+       Contact.replace_user state.contacts u ;
+       Lwt.async (fun () -> Lwt_mvar.put state.contact_mvar (`User u))
+  and group_message jid timestamp topic body _data id =
     match Contact.find_room state.contacts (Xjid.t_to_bare jid) with
     | None -> assert false
     | Some r ->
@@ -343,7 +340,7 @@ let handle_connect state log redraw failure =
               | RoleNone -> `None
             in
             match data.User.item with
-            | None -> Xmpp_connection.dbg "data item is none" ; assert false
+            | None -> assert false
             | Some x ->
                (Utils.option None (fun x -> Some (Xjid.xmpp_jid_to_jid x)) x.User.jid,
                 Utils.option None (fun x -> Some x) x.User.nick,
@@ -360,9 +357,9 @@ let handle_connect state log redraw failure =
           else
             let members = match Muc.member r jid with
               | None -> Muc.new_member nick ~jid:real_jid affiliation role presence status :: r.Muc.members
-              | Some m ->
+              | Some _ ->
                  (* XXX MUC need to be a bit smarter here *)
-                 { m with Muc.nickname = nick ; jid = real_jid ; affiliation ; role ; presence ; status } ::
+                 { Muc.nickname = nick ; jid = real_jid ; affiliation ; role ; presence ; status } ::
                    List.filter (fun m -> m.Muc.nickname <> nick) r.Muc.members
             in
             Contact.replace_room state.contacts { r with Muc.members }
@@ -423,7 +420,7 @@ let handle_add s a msg failure =
      with e -> failure e)
   with _ -> msg "error" "parsing of jid failed (user@node)" ; Lwt.return_unit
 
-let handle_fingerprint user session err fp =
+let handle_fingerprint user err fp =
   let manual_fp = string_normalize_fingerprint fp in
   if String.length manual_fp = 40 then
     let fp = User.find_raw_fp user manual_fp in
@@ -737,7 +734,7 @@ let handle_leave buddy reason =
      let nick = r.Muc.my_nick
      and jid = `Bare r.Muc.room_jid
      in
-     let clos s failure =
+     let clos s _failure =
        Xmpp_callbacks.Xep_muc.leave_room s ?reason ~nick (Xjid.jid_to_xmpp_jid jid)
      in
      let r = `Room { r with Muc.last_status = false } in
@@ -848,7 +845,7 @@ let exec input state term contact session isself failure log redraw =
             if isself then
               err "won't talk to myself"
             else
-              need_user (fun u -> handle_fingerprint u (session state) err fp)
+              need_user (fun u -> handle_fingerprint u err fp)
 
          | ("revoke", None), _ -> handle_help (msg ~prefix:"argument required") (Some "revoke")
          | ("revoke", Some fp), _ -> need_user (fun u -> handle_revoke u err fp)

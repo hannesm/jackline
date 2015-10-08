@@ -129,7 +129,6 @@ let load_user dir file =
   | None -> None
 
 let load_user_dir cfgdir users =
-  message_history_dir cfgdir >>= fun hist_dir ->
   user_dir cfgdir >>= fun dir ->
   Lwt_unix.opendir dir >>= fun dh ->
   let rec loadone () =
@@ -141,9 +140,7 @@ let load_user_dir cfgdir users =
          load_user dir f >>= fun x ->
          (match x with
           | None -> Printf.printf "something went wrong while loading %s/%s\n" dir f
-          | Some x ->
-             let bare = x.User.bare_jid in
-             Contact.replace_user users x) ;
+          | Some x -> Contact.replace_user users x) ;
          loadone ())
     with End_of_file -> Lwt_unix.closedir dh
   in

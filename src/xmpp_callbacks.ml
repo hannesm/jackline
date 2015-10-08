@@ -87,7 +87,7 @@ let request_disco t jid =
          match el with
          | Some (Xml.Xmlelement ((ns, "query"), _, els)) when ns = Disco.ns_disco_info ->
             (* pick el with ns_receipts *)
-            let Some receipt = ns_receipts in
+            let receipt = match ns_receipts with None -> assert false | Some x -> x in
             if
               List.exists
                 (function
@@ -358,6 +358,7 @@ let presence_callback t stanza =
           match stanza.content.presence_type with
           | Some Unavailable -> `Offline
           | None -> xmpp_to_presence stanza.content.show
+          | _ -> assert false
         and data = Xep_muc.User.decode el
         in
         t.user_data.group_presence jid pres status data

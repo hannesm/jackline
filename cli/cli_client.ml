@@ -282,7 +282,7 @@ let format_messages buddy jid msgs =
     let time = print_time ~now timestamp in
     let msg_color, pre =
       match buddy with
-      | `Room r ->
+      | `Room _ ->
          (match direction with
           | `From (`Full (_, nick)) -> (`Highlight, nick ^ ": ")
           | `From (`Bare _) -> (`Highlight, " ")
@@ -792,7 +792,6 @@ let warn jid user add_msg =
   | _ -> ()
 
 let send_msg t state active_user failure message =
-  Xmpp_connection.dbg ("sending something (" ^ message ^ ") to " ^ Xjid.jid_to_string state.active_contact) ;
   let handle_otr_out jid user_out =
     let add_msg direction encrypted data =
       let msg = User.message direction encrypted false data in

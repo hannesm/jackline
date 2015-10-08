@@ -262,8 +262,6 @@ let info u s =
   in
   groups @ add @ sessions
 
-let jid u = Xjid.bare_jid_to_string u.bare_jid
-
 let new_user ~jid ?(name=None) ?(groups=[]) ?(subscription=`None) ?(otr_fingerprints=[]) ?(preserve_messages=false) ?(properties=[]) ?(active_sessions=[]) ?(otr_custom_config=None) () =
   let message_history = []
   and expand = false
