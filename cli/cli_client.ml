@@ -794,7 +794,6 @@ let rec loop term state network log =
           loop term state network log
 
 let init_system log myjid connect_mvar =
-  let domain = snd (fst myjid) in
   let err r m =
     Lwt.async (fun () ->
       Connect.disconnect () >|= fun () ->
@@ -804,14 +803,6 @@ let init_system log myjid connect_mvar =
                   Lwt.async (fun () -> Lwt_mvar.put connect_mvar Reconnect))))
   in
   Lwt.async_exception_hook := (function
-      | Tls_lwt.Tls_failure `Error (`AuthenticationFailure (`InvalidServerName x)) ->
-        let pre = Printf.sprintf "invalid hostname in certificate: expected %s," domain
-        and warn =
-          Printf.sprintf "inform your server administrator about that, in the meantime add '(certificate_hostname (\"%s\")' to your config.sexp"
-        in
-        (match X509.hostnames x with
-         | x::_ -> err false (Printf.sprintf "%s, but got %s" pre x) ; err false (warn x)
-         | [] -> err false (Printf.sprintf "%s, but found no name" pre))
       | Tls_lwt.Tls_failure `Error (`AuthenticationFailure _) as exn ->
          err false (Printexc.to_string exn)
       | Unix.Unix_error (Unix.EBADF, _, _ ) as exn ->
