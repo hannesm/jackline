@@ -180,7 +180,8 @@ let format_buddies state buddies width =
 
   List.fold_right
     (fun (c, res) acc ->
-     draw (Contact.oneline c None) c None ::
+     let r = if Contact.expanded c then None else Contact.active c in
+     draw (Contact.oneline c None) c r ::
        List.map (fun r -> draw (Contact.oneline c (Some r)) c (Some r)) res @
        acc)
     buddies []
