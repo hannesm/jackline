@@ -185,7 +185,7 @@ let format_log log =
   in
   List.map print_log log
 
-let format_buddies state buddies isself width =
+let format_buddies state buddies width =
   let env jid =
     if isactive state jid then
       ([ B_reverse true ], [ E_reverse ])
@@ -202,7 +202,7 @@ let format_buddies state buddies isself width =
     | true, false -> Zed_utf8.singleton (UChar.of_int 0x2600)
     | false, true -> " "
   and color buddy resource =
-    buddy_to_color (Contact.color isself buddy resource)
+    buddy_to_color (Contact.color buddy resource)
   in
 
   let draw (print : string) (b : Contact.contact) (r : Contact.resource option) =
@@ -367,9 +367,9 @@ let maybe_trim str left =
   else
     ([], 0)
 
-let horizontal_line buddy resource isself fg_color buddy_width scrollback show_buddy_list width =
+let horizontal_line buddy resource fg_color buddy_width scrollback show_buddy_list width =
   let otrcolor, otr =
-    (buddy_to_color (Contact.color isself buddy resource),
+    (buddy_to_color (Contact.color buddy resource),
      match buddy, resource with
      | `User user, Some (`Session s) ->
         Utils.option
@@ -521,7 +521,7 @@ let make_prompt size network state redraw =
     let active = active state in
     let resource = resource state in
 
-    let fg_color = buddy_to_color (Contact.color (fun _ -> isself) active resource) in
+    let fg_color = buddy_to_color (Contact.color active resource) in
 
     let main_window =
       let msg_colors, data =
@@ -583,7 +583,7 @@ let make_prompt size network state redraw =
          in
          let hline =
            horizontal_line
-             active resource (fun _ -> isself) fg_color buddy_width
+             active resource fg_color buddy_width
              state.scrollback showing_buddies size.cols
          in
 

@@ -111,14 +111,12 @@ let add_readline_history b h =
   | `User u -> `User { u with User.readline_history = h :: u.User.readline_history }
   | `Room r -> `Room { r with Muc.readline_history = h :: r.Muc.readline_history }
 
-let color self (b : contact) (r : resource option) =
-  if self (`Bare (bare b)) then
-    `Default
-  else
-    match b, r with
-    | `User _, Some (`Session s) -> if User.(encrypted s.otr) then `Good else `Bad
-    | `User _, _ -> `Default
-    | `Room _, _ -> `Default
+let color (b : contact) (r : resource option) =
+  match b, r with
+  | `User u, _                 when u.User.self               -> `Default
+  | _      , Some (`Session s) when User.encrypted s.User.otr -> `Good
+  | _      , Some (`Session _)                                -> `Bad
+  | _      , _                                                -> `Default
 
 let marshal_history contact =
   let open Sexplib.Conv in
