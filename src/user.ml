@@ -272,6 +272,17 @@ let new_user ~jid ?(name=None) ?(groups=[]) ?(subscription=`None) ?(otr_fingerpr
   in
   { bare_jid = jid ; name ; groups ; subscription ; properties ; otr_fingerprints ; preserve_messages ; active_sessions ; message_history ; saved_input_buffer ; readline_history ; otr_custom_config ; expand ; self }
 
+let active_session user =
+  if List.length user.active_sessions = 0 then
+    None
+  else
+    let sorted = List.sort compare_session user.active_sessions in
+    let s = List.filter (fun x -> x.presence <> `Offline) sorted in
+    if List.length s = 0 then
+      Some (List.hd sorted)
+    else
+      Some (List.hd s)
+
 let message ?(timestamp = Unix.time ()) ?(kind = `Chat) direction encrypted received message =
   { direction ; encrypted ; received ;
     timestamp ; message ; persistent = false ; kind }
@@ -389,17 +400,6 @@ let create_session user resource config dsa =
   assert (not (List.exists (fun s -> s.resource = resource) user.active_sessions)) ;
   let session = empty_session ~resource ~config dsa () in
   ({ user with active_sessions = session :: user.active_sessions }, session)
-
-let active_session user =
-  if List.length user.active_sessions = 0 then
-    None
-  else
-    let sorted = List.sort compare_session user.active_sessions in
-    let s = List.filter (fun x -> x.presence <> `Offline) sorted in
-    if List.length s = 0 then
-      Some (List.hd sorted)
-    else
-      Some (List.hd s)
 
 let db_version = 1
 
