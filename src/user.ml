@@ -226,6 +226,7 @@ type user = {
   otr_custom_config : Otr.State.config option ;
   active_sessions   : session list ; (* not persistent *)
   expand            : bool ; (* not persistent *)
+  self              : bool ; (* not persistent *)
 }
 
 let compare_session a b =
@@ -265,10 +266,11 @@ let info u s =
 let new_user ~jid ?(name=None) ?(groups=[]) ?(subscription=`None) ?(otr_fingerprints=[]) ?(preserve_messages=false) ?(properties=[]) ?(active_sessions=[]) ?(otr_custom_config=None) () =
   let message_history = []
   and expand = false
+  and self = false
   and saved_input_buffer = ""
   and readline_history = []
   in
-  { bare_jid = jid ; name ; groups ; subscription ; properties ; otr_fingerprints ; preserve_messages ; active_sessions ; message_history ; saved_input_buffer ; readline_history ; otr_custom_config ; expand }
+  { bare_jid = jid ; name ; groups ; subscription ; properties ; otr_fingerprints ; preserve_messages ; active_sessions ; message_history ; saved_input_buffer ; readline_history ; otr_custom_config ; expand ; self }
 
 let message ?(timestamp = Unix.time ()) ?(kind = `Chat) direction encrypted received message =
   { direction ; encrypted ; received ;

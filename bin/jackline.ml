@@ -54,6 +54,7 @@ let start_client cfgdir debug () =
       | None -> User.new_user ~jid:bare ()
       | Some u -> u
     in
+    let user = { user with User.self = true } in
     let u, _ = User.create_session user resource config.Xconfig.otr_config config.Xconfig.dsa in
     Contact.replace_user users u
   in

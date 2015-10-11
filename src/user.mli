@@ -106,6 +106,7 @@ type user = {
   otr_custom_config : Otr.State.config option ;
   active_sessions   : session list ; (* not persistent *)
   expand            : bool ; (* not persistent *)
+  self              : bool ; (* not persistent *)
 }
 
 val new_user : jid:Xjid.bare_jid ->
