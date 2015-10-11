@@ -178,65 +178,11 @@ let format_buddies state buddies width =
     pr @ [ B_fg color ; S data ; E_fg ] @ po
   in
 
-  let draw_room room =
-    let presence = Utils.option `Offline (fun x -> x.Muc.presence) (Muc.self_member room)
-    and size = List.length room.Muc.members
-    in
-    Printf.sprintf "%s(%d) %s%s"
-                   (User.presence_to_char presence)
-                   size
-                   (Xjid.bare_jid_to_string room.Muc.room_jid)
-                   (Utils.option "" (fun t -> " - " ^ t) room.Muc.topic)
-  and draw_member = function
-    | `Member m ->
-       let presence = m.Muc.presence
-       and role = m.Muc.role
-       in
-       Printf.sprintf " %s%s %s"
-                      (User.presence_to_char presence)
-                      (Muc.role_to_char role)
-                      m.Muc.nickname
-    | `Session _ -> assert false
-  and draw_single user session =
-    let presence = session.User.presence
-    and subscription = user.User.subscription
-    and resource = session.User.resource
-    in
-    let pr, po =
-      if isself (`Bare user.User.bare_jid) then
-        ("{", "}")
-      else
-        User.subscription_to_chars subscription
-    in
-    Printf.sprintf "%s%s%s %s/%s"
-                   pr
-                   (User.presence_to_char presence)
-                   po
-                   (Xjid.bare_jid_to_string user.User.bare_jid)
-                   resource
-  and draw_user user =
-    let subscription = user.User.subscription in
-    let pr, po = User.subscription_to_chars subscription in
-    Printf.sprintf "%s_%s %s" pr po (Xjid.bare_jid_to_string user.User.bare_jid)
-  and draw_session = function
-    | `Session s ->
-       let presence = s.User.presence
-       and resource = s.User.resource
-       in
-       Printf.sprintf " %s %s" (User.presence_to_char presence) resource
-    | `Member _ -> assert false
-  in
-
   List.fold_right
-    (fun rs acc ->
-     match rs with
-     | `Room r, members -> draw (draw_room r) (`Room r) None ::
-                             List.map (fun m -> draw (draw_member m) (`Room r) (Some m)) members @
-                             acc
-     | `User u, [`Session s] -> draw (draw_single u s) (`User u) (Some (`Session s)) :: acc
-     | `User u, sessions -> draw (draw_user u) (`User u) None ::
-                              List.map (fun s -> draw (draw_session s) (`User u) (Some s)) sessions @
-                              acc)
+    (fun (c, res) acc ->
+     draw (Contact.oneline c None) c None ::
+       List.map (fun r -> draw (Contact.oneline c (Some r)) c (Some r)) res @
+       acc)
     buddies []
 
 let format_messages buddy jid msgs =
