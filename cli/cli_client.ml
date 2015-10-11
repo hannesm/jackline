@@ -237,16 +237,13 @@ let format_messages buddy jid msgs =
        msgs)
 
 let buddy_list state length width =
-  let self = state.config.Xconfig.jid
-  and active = state.active_contact
-  in
   let buddies = active_buddies_resources state in
   let formatted_buddies = format_buddies state buddies width in
 
   let flattened = show_resources buddies in
   let bs = List.length flattened
   and up, down = (length / 2, (length + 1) / 2)
-  and active_idx = find_index active 0 flattened
+  and active_idx = find_index state.active_contact 0 flattened
   in
   match length >= bs with
   | true  -> let pad = [ S (String.make width ' ') ] in
