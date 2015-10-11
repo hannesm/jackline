@@ -283,6 +283,27 @@ let active_session user =
     else
       Some (List.hd s)
 
+let oneline user =
+  let pr, po =
+    if user.self then
+      ("{", "}")
+    else
+      subscription_to_chars user.subscription
+  and jid = Xjid.bare_jid_to_string user.bare_jid
+  and presence =
+    match active_session user with
+    | None -> `Offline
+    | Some s -> s.presence
+  in
+  let p = presence_to_char presence in
+  Printf.sprintf "%s%s%s %s" pr p po jid
+
+let oneline_with_session _ s =
+  let presence = s.presence
+  and resource = s.resource
+  in
+  Printf.sprintf " %s %s" (presence_to_char presence) resource
+
 let message ?(timestamp = Unix.time ()) ?(kind = `Chat) direction encrypted received message =
   { direction ; encrypted ; received ;
     timestamp ; message ; persistent = false ; kind }

@@ -123,6 +123,9 @@ val new_user : jid:Xjid.bare_jid ->
 
 val info : user -> session option -> string list
 
+val oneline : user -> string
+val oneline_with_session : user -> session -> string
+
 (* messages *)
 val insert_message : ?timestamp:float -> user -> direction -> bool -> bool -> string -> user
 val new_message : user -> message -> user

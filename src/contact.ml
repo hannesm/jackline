@@ -238,6 +238,14 @@ let marshal = function
   | `User u -> User.marshal_user u
   | `Room r -> Muc.marshal_room r
 
+let oneline c r =
+  match c, r with
+  | `User u, None -> User.oneline u
+  | `User u, Some (`Session s) -> User.oneline_with_session u s
+  | `Room r, None -> Muc.oneline r
+  | `Room r, Some (`Member m) -> Muc.oneline_with_member r m
+  | _ -> assert false
+
 module StringHash =
   struct
     type t = Xjid.bare_jid

@@ -221,3 +221,24 @@ let sexp_of_t t =
 let marshal_room room =
   let sexp = sexp_of_t room in
   Some Sexp.(List [ sexp_of_int db_version ; sexp ])
+
+let oneline room =
+  let presence = Utils.option `Offline (fun x -> x.presence) (self_member room)
+  and size = List.length room.members
+  in
+  Printf.sprintf
+    "%s(%d) %s%s"
+    (User.presence_to_char presence)
+    size
+    (Xjid.bare_jid_to_string room.room_jid)
+    (Utils.option "" (fun t -> " - " ^ t) room.topic)
+
+let oneline_with_member _ m =
+  let presence = m.presence
+  and role = m.role
+  in
+  Printf.sprintf
+    " %s%s %s"
+    (User.presence_to_char presence)
+    (role_to_char role)
+    m.nickname
