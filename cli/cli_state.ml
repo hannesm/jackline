@@ -197,7 +197,7 @@ end
 let empty_state config_directory config contacts connect_mvar state_mvar =
   let contact_mvar = Persistency.notify_user config_directory
   and last_status = (`Local (`Full config.Xconfig.jid, ""), "")
-  and active = `Full config.Xconfig.jid
+  and active = `Bare (fst config.Xconfig.jid)
   in
   {
     config_directory                ;
@@ -281,6 +281,33 @@ let notified state =
   state.notifications <- leftover ;
   if List.length state.notifications = 0 then
     Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear)
+
+let active_contacts state =
+  let active jid =
+    let id = `Bare jid in
+    state.show_offline || isactive state id || isnotified state id
+  and online contact =
+    Contact.active_presence contact <> `Offline
+  and self = function
+    | `User u when u.User.self -> true
+    | _ -> false
+  in
+  let contacts =
+    Contact.fold
+      (fun id c acc -> if active id || online c || self c then c :: acc else acc)
+      state.contacts []
+  in
+  List.sort Contact.compare_contact contacts
+
+let active_resources state contact =
+  if Contact.expanded contact then
+    if state.show_offline then
+      Contact.all_resources contact
+    else
+      let tst jid = isnotified state jid || isactive state jid in
+      Contact.active_resources tst contact
+  else
+    []
 
 let otr_config user state =
   match user.User.otr_custom_config with

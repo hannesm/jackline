@@ -49,54 +49,17 @@ let buddy_to_color = function
   | `Good -> green
   | `Bad -> red
 
-let active_buddies buddies show_offline self active notifications =
-  let show id buddy =
-    if show_offline then
-      true
-    else
-      let is_jid = Xjid.jid_matches (`Bare id) in
-      if is_jid (`Full self) || is_jid active || List.exists is_jid notifications then
-        true
-      else
-        Contact.active_presence buddy <> `Offline
-  in
-  List.sort
-    Contact.compare_contact
-    (Contact.fold
-       (fun id buddy acc ->
-        if show id buddy then
-          buddy :: acc
-        else
-          acc)
-       buddies [])
+let active_buddies_resources state =
+  let contacts = active_contacts state in
+  List.combine contacts (List.map (active_resources state) contacts)
 
-let active_resources show_offline active notifications buddy =
-  if show_offline && Contact.expanded buddy then
-    Contact.all_resources buddy
-  else
-    if Contact.expanded buddy then
-      let tst full_jid =
-        List.exists (Xjid.jid_matches full_jid) notifications || active = full_jid
-      in
-      Contact.active_resources tst buddy
-    else
-      Utils.option [] (fun s -> [s]) (Contact.active buddy)
-
-let active_buddies_resources buddies show_offline self active notifications =
-  let buddies = active_buddies buddies show_offline self active notifications in
-  List.combine buddies (List.map (active_resources show_offline active notifications) buddies)
-
-let show_resource = function
-  | `Room r, members -> `Bare r.Muc.room_jid ::
-                          List.map (fun m -> `Full (Contact.full_jid (`Room r) m)) members
-  | `User u, [`Session s] -> [`Full (u.User.bare_jid, s.User.resource)]
-  | `User u, sessions -> `Bare u.User.bare_jid ::
-                           List.map (fun s -> `Full (Contact.full_jid (`User u) s)) sessions
+let show_resource (contact, res) =
+  let bare = Contact.jid contact None in
+  bare :: List.map (fun x -> `Full x) (List.map (Contact.full_jid contact) res)
 
 let show_resources rs = List.fold_right (fun rs acc -> (show_resource rs) @ acc) rs []
 
-let all_jids buddies show_offline self active notifications =
-  show_resources (active_buddies_resources buddies show_offline self active notifications)
+let all_jids state = show_resources (active_buddies_resources state)
 
 let line_wrap_with_tags ?raw ~(tags : 'a list) ~max_length entries : ('a * Zed_utf8.t) list =
   let pre = match raw with
@@ -197,7 +160,7 @@ let format_buddies state buddies width =
     match isnotified state jid, Contact.expanded buddy with
     | true, true -> "*"
     | false, false ->
-       let res = active_resources state.show_offline state.active_contact state.notifications buddy in
+       let res = active_resources state buddy in
        if List.length res > 1 then "+" else " "
     | true, false -> Zed_utf8.singleton (UChar.of_int 0x2600)
     | false, true -> " "
@@ -328,15 +291,11 @@ let format_messages buddy jid msgs =
        msgs)
 
 let buddy_list state length width =
-  let users = state.contacts
-  and show_offline = state.show_offline
-  and self = state.config.Xconfig.jid
+  let self = state.config.Xconfig.jid
   and active = state.active_contact
-  and notifications = state.notifications
   in
-  let buddies = active_buddies_resources users show_offline self active notifications in
-  let isself = Xjid.jid_matches (`Bare (fst self)) in
-  let formatted_buddies = format_buddies state buddies isself width in
+  let buddies = active_buddies_resources state in
+  let formatted_buddies = format_buddies state buddies width in
 
   let flattened = show_resources buddies in
   let bs = List.length flattened
@@ -634,7 +593,7 @@ let navigate_message_buffer state direction =
   | Up, n -> state.scrollback <- n + 1; force_redraw ()
 
 let navigate_buddy_list state direction =
-  let userlist = all_jids state.contacts state.show_offline state.config.Xconfig.jid state.active_contact state.notifications in
+  let userlist = all_jids state in
   let set_active idx =
     let user = List.nth userlist idx in
     activate_user state user ;
