@@ -236,9 +236,9 @@ let load_history directory contact =
   let msgs = load_history_hlp (`Bare bare) file in
   set_history contact msgs
 
-let store = function
-  | `User u -> User.store_user u
-  | `Room r -> Muc.store_room r
+let marshal = function
+  | `User u -> User.marshal_user u
+  | `Room r -> Muc.marshal_room r
 
 module StringHash =
   struct

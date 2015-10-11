@@ -218,6 +218,6 @@ let sexp_of_t t =
     "preserve_messages" , sexp_of_bool t.preserve_messages ;
   ]
 
-let store_room room =
+let marshal_room room =
   let sexp = sexp_of_t room in
   Some Sexp.(List [ sexp_of_int db_version ; sexp ])

@@ -162,4 +162,4 @@ val active_session : user -> session option
 (* persistency operations *)
 val load_user : string -> user option
 val load_users : string -> user list (* for the users.sexp file which no longer exists *)
-val store_user : user -> Sexplib.Sexp.t option
+val marshal_user : user -> Sexplib.Sexp.t option

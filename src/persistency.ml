@@ -105,7 +105,7 @@ let load_config dsa cfg =
 let dump_user cfgdir user =
   user_dir cfgdir >>= fun userdir ->
   let out = Xjid.bare_jid_to_string (Contact.bare user) in
-  match Contact.store user with
+  match Contact.marshal user with
   | None ->
      let file = Filename.concat userdir out in
      delete file

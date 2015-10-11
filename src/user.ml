@@ -526,7 +526,7 @@ let load_users bytes =
        | _ -> Printf.printf "parse failed while parsing db\n" ; [])
     with _ -> [] )
 
-let store_user user =
+let marshal_user user =
   match user.preserve_messages, user.otr_fingerprints, user.otr_custom_config with
   | false, [], None -> None
   | _ ->
