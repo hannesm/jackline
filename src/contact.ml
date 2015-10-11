@@ -23,10 +23,8 @@ let resource = function
   | `Session s -> s.User.resource
 
 let active_presence = function
-  | `Room r ->
-     Utils.option `Offline (fun m ->  m.Muc.presence) (Muc.self_member r)
-  | `User x ->
-     Utils.option `Offline (fun s -> s.User.presence) (User.active_session x)
+  | `Room r -> Utils.option `Offline (fun m -> m.Muc.presence) (Muc.self_member r)
+  | `User x -> Utils.option `Offline (fun s -> s.User.presence) (User.active_session x)
 
 let expanded = function
   | `Room r -> r.Muc.expand
@@ -37,12 +35,8 @@ let expand = function
   | `User u -> `User { u with User.expand = not u.User.expand }
 
 let all_resources = function
-  | `Room r -> List.map
-                 (fun m -> `Member m)
-                 (Muc.sorted_members r)
-  | `User u -> List.map
-                 (fun s -> `Session s)
-                 (User.sorted_sessions u)
+  | `Room r -> List.map (fun m -> `Member m) (Muc.sorted_members r)
+  | `User u -> List.map (fun s -> `Session s) (User.sorted_sessions u)
 
 let active = function
   | `Room _ -> None
@@ -57,19 +51,10 @@ let jid contact resource =
     (fun r -> `Full (full_jid contact r))
     resource
 
-let active_resources tst = function
-  | `Room r ->
-     List.map
-       (fun m -> `Member m)
-       (List.filter
-          (fun m -> m.Muc.presence <> `Offline || tst (`Full (r.Muc.room_jid, m.Muc.nickname)))
-          (Muc.sorted_members r))
-  | `User u ->
-     List.map
-       (fun s -> `Session s)
-       (List.filter
-          (fun s -> s.User.presence <> `Offline || tst (`Full (u.User.bare_jid, s.User.resource)))
-          (User.sorted_sessions u))
+let active_resources tst contact =
+  let bare = bare contact in
+  let test r = presence r <> `Offline || tst (`Full (bare, resource r)) in
+  List.filter test (all_resources contact)
 
 let preserve_messages = function
   | `User u -> u.User.preserve_messages
