@@ -132,7 +132,7 @@ module Connect = struct
     report sa ;
     sa
 
-  let connect_me config log out state_mvar users =
+  let connect_me config log state_mvar users =
     let mvar = Lwt_mvar.create Cancel in
     let failure reason =
       disconnect () >>= fun () ->
@@ -157,7 +157,7 @@ module Connect = struct
                 | `Fingerprint fp -> `Hex_fingerprints (`SHA256, [(certname, fp)]))) >>= fun authenticator ->
             let kind, show = Xmpp_callbacks.presence_to_xmpp p in
             Xmpp_callbacks.connect
-              ?out sockaddr
+              sockaddr
               config.Xconfig.jid certname password
               (kind, show, s, prio) authenticator user_data
               (fun session ->

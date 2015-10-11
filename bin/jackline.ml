@@ -68,15 +68,16 @@ let start_client cfgdir debug () =
 
   (if debug then
      Persistency.open_append (Unix.getenv "PWD") "out.txt" >|= fun fd ->
-     Some fd
+     Xmpp_connection.debug_out := Some fd ;
+     (fun () -> Lwt_unix.close fd)
    else
-     return None) >>= fun out ->
+     return (fun () -> Lwt.return_unit)) >>= fun closing ->
 
   let state_mvar =
     let file = Filename.concat cfgdir "notification.state" in
     Cli_state.Notify.notify_writer myjid config.Xconfig.notification_callback file
   in
-  let connect_mvar = Cli_state.Connect.connect_me config (log ?step:None) out state_mvar users in
+  let connect_mvar = Cli_state.Connect.connect_me config (log ?step:None) state_mvar users in
   let state = Cli_state.empty_state cfgdir config users connect_mvar state_mvar in
 
   let us = Contact.fold (fun _ v acc -> v :: acc) users [] in
@@ -105,9 +106,7 @@ let start_client cfgdir debug () =
   (* main loop *)
   Cli_client.loop term state n (log ?step:None) >>= fun state ->
 
-  (match out with
-   | None -> return_unit
-   | Some fd -> Lwt_unix.close fd) >>= fun () ->
+  closing () >>= fun () ->
 
   Lwt_mvar.put state.Cli_state.state_mvar Cli_state.Quit >>= fun () ->
 

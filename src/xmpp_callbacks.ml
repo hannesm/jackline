@@ -571,9 +571,7 @@ let resolve (hostname : string option) (port : int option) (jid_idn : string) =
   | Some x -> to_ipv4 x
   | None -> resolve jid_idn
 
-let connect ?out sockaddr myjid certname password presence authenticator user_data mvar =
-  debug_out := out ;
-
+let connect sockaddr myjid certname password presence authenticator user_data mvar =
   PlainSocket.open_connection sockaddr >>= fun socket_data ->
   let module Socket_module =
     struct type t = PlainSocket.socket
