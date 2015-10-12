@@ -315,7 +315,7 @@ let handle_connect state log redraw failure =
             | _ -> false
           in
           (fp.User.verified,
-           pred fp.User.session_count,
+           fp.User.session_count,
            List.exists isverified user.User.otr_fingerprints)
   and verify_fp jid raw_fp =
     match Contact.find_user state.contacts (Xjid.t_to_bare jid) with
