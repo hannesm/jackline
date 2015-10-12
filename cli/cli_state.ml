@@ -258,9 +258,8 @@ let active state =
 let isactive state jid =
   let bare = Xjid.t_to_bare state.active_contact in
   match active state with
-  | `Room _ -> jid = state.active_contact
   | `User u when not u.User.expand -> Xjid.jid_matches (`Bare bare) jid
-  | `User _ -> Xjid.jid_matches jid state.active_contact
+  | _ -> jid = state.active_contact
 
 let isnotified state jid =
   List.exists (Xjid.jid_matches jid) state.notifications
