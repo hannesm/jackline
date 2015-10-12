@@ -329,6 +329,7 @@ let session state =
   match active state with
   | `Room _ -> None
   | `User user -> match state.active_contact with
+                  | `Bare _ when user.User.expand -> None
                   | `Bare _ -> User.active_session user
                   | `Full (_, r) -> User.find_session user r
 
