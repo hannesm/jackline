@@ -714,17 +714,12 @@ let send_msg t state active_user failure message =
        let jid = `Bare (Xjid.t_to_bare state.active_contact) in
        (jid, Some message, `Sent message, Some Xmpp_callbacks.XMPPClient.Groupchat)
     | `User u ->
-       let jid = state.active_contact in
-       match
-         if u.User.expand then
-           Utils.option None (User.find_session u) (Xjid.resource jid)
-         else
-           session state
-       with
+       let bare = u.User.bare_jid in
+       match session state with
        | None ->
           let ctx = Otr.State.new_session (otr_config u state) state.config.Xconfig.dsa () in
           let _, out, user_out = Otr.Engine.send_otr ctx message in
-          (jid, out, user_out, None)
+          (`Bare bare, out, user_out, None)
        | Some session ->
           let ctx = session.User.otr in
           let msg =
@@ -736,7 +731,7 @@ let send_msg t state active_user failure message =
           let ctx, out, user_out = Otr.Engine.send_otr ctx msg in
           let user = User.update_otr u session ctx in
           Contact.replace_user state.contacts user ;
-          (jid, out, user_out, None)
+          (`Full (bare, session.User.resource), out, user_out, None)
   in
   maybe_send ?kind jid out user_out
 
