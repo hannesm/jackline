@@ -288,18 +288,21 @@ let active_contacts state =
   List.sort Contact.compare_contact contacts
 
 let active_resources state contact =
+  if state.show_offline then
+    Contact.all_resources contact
+  else
+    let tst jid = isnotified state jid || isactive state jid in
+    Contact.active_resources tst contact
+
+let visible_resources state contact =
   if Contact.expanded contact then
-    if state.show_offline then
-      Contact.all_resources contact
-    else
-      let tst jid = isnotified state jid || isactive state jid in
-      Contact.active_resources tst contact
+    active_resources state contact
   else
     []
 
 let active_contacts_resources state =
   let contacts = active_contacts state in
-  List.combine contacts (List.map (active_resources state) contacts)
+  List.combine contacts (List.map (visible_resources state) contacts)
 
 let show_resource (contact, res) =
   let bare = Contact.jid contact None in
