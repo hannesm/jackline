@@ -163,12 +163,26 @@ let handle_help msg = function
 
 let handle_connect state log redraw failure =
   let remove jid =
-    let bare = Xjid.t_to_bare jid in
+    let bare = Xjid.t_to_bare jid
+    and userlist = all_jids state
+    in
+    let contact = Contact.find_contact state.contacts bare in
     Contact.remove state.contacts bare ;
-    if Xjid.jid_matches (`Bare bare) state.active_contact then
-      activate_user state (`Full state.config.Xconfig.jid) ;
+    Utils.option
+      ()
+      (fun c ->
+       let c = match c with
+         | `User u -> `User { u with User.subscription = `None }
+         | `Room r -> `Room r
+       in
+       Lwt.async (fun () -> Lwt_mvar.put state.contact_mvar c))
+      contact ;
+    (if Xjid.jid_matches (`Bare bare) state.active_contact then
+       let idx = Utils.find_index state.active_contact 0 userlist in
+       let new_idx = if idx > 0 then pred idx else succ idx in
+       activate_contact state (List.nth userlist new_idx) ) ;
     if Xjid.jid_matches (`Bare bare) state.last_active_contact then
-      state.last_active_contact <- `Full state.config.Xconfig.jid ;
+      state.last_active_contact <- `Bare (fst state.config.Xconfig.jid) ;
     redraw ()
   and log dir txt =
     log (dir, txt)

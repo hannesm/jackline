@@ -352,15 +352,31 @@ let selfsession state =
   | None -> assert false
   | Some s -> s
 
-let activate_user state active =
-  if state.active_contact <> active then
-    (maybe_expand state active ;
-     state.last_active_contact <- state.active_contact ;
-     state.active_contact      <- active ;
-     state.scrollback          <- 0 ;
-     state.window_mode         <- BuddyList ;
-     notified state)
-
+let activate_contact state active =
+  let find x = Contact.find_contact state.contacts (Xjid.t_to_bare x)
+  and res = Xjid.resource
+  and r_jid c id = if Contact.expanded c then id else `Bare (Contact.bare c)
+  and update ojid njid =
+    state.last_active_contact <- ojid ;
+    state.active_contact      <- njid ;
+    state.scrollback          <- 0 ;
+    state.window_mode         <- BuddyList ;
+    notified state
+  in
+  match find state.active_contact, find active with
+  | Some cur, Some now ->
+     let ojid = r_jid cur state.active_contact
+     and njid = r_jid now active
+     in
+     if ojid <> njid then update state.active_contact njid
+  | None, Some now ->
+     let old = match find state.last_active_contact with
+       | Some c -> r_jid c state.last_active_contact
+       | None -> `Bare (fst state.config.Xconfig.jid)
+     and njid = r_jid now active
+     in
+     update old njid
+  | _, None -> assert false
 
 let update_notifications state user oldr newr =
   let bare = user.User.bare_jid in

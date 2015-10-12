@@ -524,7 +524,7 @@ let navigate_buddy_list state direction =
   let userlist = all_jids state in
   let set_active idx =
     let user = List.nth userlist idx in
-    activate_user state user ;
+    activate_contact state user ;
     force_redraw ()
   and active_idx = Utils.find_index state.active_contact 0 userlist
   in
@@ -598,12 +598,12 @@ class read_line ~term ~network ~history ~state ~input_buffer = object(self)
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrlq ->
       if List.length state.notifications > 0 then
         (self#save_input_buffer ;
-         activate_user state (List.hd (List.rev state.notifications)) ;
+         activate_contact state (List.hd (List.rev state.notifications)) ;
          force_redraw () ;
          super#send_action LTerm_read_line.Break )
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrlx ->
       self#save_input_buffer ;
-      activate_user state state.last_active_contact ;
+      activate_contact state state.last_active_contact ;
       force_redraw () ;
       super#send_action LTerm_read_line.Break
     | action ->
