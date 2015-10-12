@@ -254,8 +254,7 @@ let notify state jid =
   Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Notifications) ;
   if
     List.exists (Xjid.jid_matches jid) state.notifications ||
-      (Xjid.jid_matches jid state.active_contact &&
-         state.scrollback = 0)
+      (Xjid.jid_matches state.active_contact jid && state.scrollback = 0)
   then
     ()
   else
