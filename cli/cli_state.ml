@@ -346,7 +346,6 @@ let selfsession state =
 
 let activate_contact state active =
   let find x = Contact.find_contact state.contacts (Xjid.t_to_bare x)
-  and res = Xjid.resource
   and r_jid c id = if Contact.expanded c then id else `Bare (Contact.bare c)
   and update ojid njid =
     state.last_active_contact <- ojid ;

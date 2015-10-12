@@ -290,7 +290,7 @@ let handle_connect state log redraw failure =
       Contact.fold (fun _ c acc ->
                     match c with
                     | `User u -> { u with User.subscription = `None } :: acc
-                    | `Room r -> acc)
+                    | `Room _ -> acc)
                    state.contacts
                    []
     in
