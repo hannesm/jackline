@@ -526,7 +526,7 @@ let navigate_buddy_list state direction =
     let user = List.nth userlist idx in
     activate_user state user ;
     force_redraw ()
-  and active_idx = find_index state.active_contact 0 userlist
+  and active_idx = Utils.find_index state.active_contact 0 userlist
   in
   match
     direction,
