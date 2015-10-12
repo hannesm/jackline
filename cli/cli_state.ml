@@ -273,7 +273,7 @@ let notified state =
 let active_contacts state =
   let active jid =
     let id = `Bare jid in
-    state.show_offline || isactive state id || isnotified state id
+    state.show_offline || Xjid.jid_matches id state.active_contact || isnotified state id
   and online contact =
     Contact.active_presence contact <> `Offline
   and self = function
