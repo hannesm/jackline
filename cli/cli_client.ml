@@ -143,9 +143,7 @@ let format_buddies state buddies width =
     match isnotified state jid, Contact.expanded buddy with
     | true, true -> "*"
     | false, false ->
-       (match buddy, List.length (active_resources state buddy) with
-        | `User _, x when x < 2 -> " "
-        | _ -> "+")
+       if potentially_visible_resource state buddy then "+" else " "
     | true, false -> Zed_utf8.singleton (UChar.of_int 0x2600)
     | false, true -> " "
   and color buddy resource =
@@ -775,13 +773,7 @@ let rec loop term state network log =
        in
        match String.length message, fst with
        | 0, _ ->
-          let doit = match active with
-            | `Room _ -> true
-            | `User u when u.User.expand -> true
-            | `User _ when List.length (active_resources state active) > 1 -> true
-            | _ -> false
-          in
-          if doit then
+          if Contact.expanded active || potentially_visible_resource state active then
             (Contact.replace_contact state.contacts (Contact.expand active) ;
              if Contact.expanded active then
                (state.active_contact <- `Bare (Contact.bare active))) ;

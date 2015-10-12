@@ -294,6 +294,12 @@ let active_resources state contact =
     let tst jid = isnotified state jid || isactive state jid in
     Contact.active_resources tst contact
 
+let potentially_visible_resource state contact =
+  match contact, List.length (active_resources state contact) with
+  | `Room _, _ -> true
+  | `User _, x when x < 2 -> false
+  | `User _, _ -> true
+
 let visible_resources state contact =
   if Contact.expanded contact then
     active_resources state contact
