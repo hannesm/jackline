@@ -774,10 +774,16 @@ let rec loop term state network log =
        in
        match String.length message, fst with
        | 0, _ ->
-          Contact.replace_contact state.contacts (Contact.expand active) ;
-          (* transition from expanded to collapsed *)
-          if Contact.expanded active then
-            (state.active_contact <- `Bare (Contact.bare active)) ;
+          let doit = match active with
+            | `Room _ -> true
+            | `User u when u.User.expand -> true
+            | `User _ when List.length (active_resources state active) > 1 -> true
+            | _ -> false
+          in
+          if doit then
+            (Contact.replace_contact state.contacts (Contact.expand active) ;
+             if Contact.expanded active then
+               (state.active_contact <- `Bare (Contact.bare active))) ;
           loop term state network log
        | _, Some '/' ->
           if String.trim message = "/quit" then
