@@ -169,7 +169,7 @@ let format_buddies state buddies width =
        acc)
     buddies []
 
-let format_messages buddy jid msgs =
+let format_messages buddy resource jid msgs =
   let now = Unix.time () in
   let printmsg { User.direction ; encrypted ; received ; timestamp ; message ; _ } =
     let time = print_time ~now timestamp in
@@ -192,42 +192,43 @@ let format_messages buddy jid msgs =
            | `Local (_, x) -> (`Default, "***" ^ x ^ "*** ")
          in
          let r =
-           let other = User.jid_of_direction direction in
-           match jid with
-           | `Bare _ ->
-              Utils.option "" (fun x -> "(" ^ x ^ ") ") (Xjid.resource other)
-           | `Full (_, r) ->
-              Utils.option "" (fun x -> "(" ^ x ^ ") ")
-                           (match Xjid.resource other with
-                            | None -> None
-                            | Some x when x = r -> None
-                            | Some x -> Some x)
+           let show_res =
+             let other = User.jid_of_direction direction in
+             let other_resource s = match Xjid.resource other with
+               | None -> None
+               | Some x when x = s.User.resource -> None
+               | Some x -> Some x
+             in
+             match resource with
+             | Some (`Session s) -> other_resource s
+             | _ -> Xjid.resource other
+           in
+           Utils.option "" (fun x -> "(" ^ x ^ ") ") show_res
          in
          (msg_color, r ^ pre)
     in
     (msg_color, time ^ pre ^ message)
   in
-  let jid_tst o =
-    match buddy, jid with
-    | `Room _, `Bare _ -> true
-    | `Room _, `Full _ -> Xjid.jid_matches jid o
-    | `User u, _ when List.length u.User.active_sessions < 2 || not u.User.expand -> true
-    | `User _, `Bare _ -> Xjid.jid_matches jid o
-    | `User _, `Full _ -> Xjid.jid_matches o jid
+  let tst o =
+    if Contact.expanded buddy then
+      match buddy, jid with
+      | `Room _, _ -> true
+      | `User _, `Bare _ -> true
+      | `User _, `Full _ -> Xjid.jid_matches o jid
+    else
+      true
   in
   List.map printmsg
-    (List.filter
-       (fun m -> jid_tst (User.jid_of_direction m.User.direction))
-       msgs)
+    (List.filter (fun m -> tst (User.jid_of_direction m.User.direction)) msgs)
 
 let buddy_list state length width =
-  let buddies = active_buddies_resources state in
+  let buddies = active_contacts_resources state in
   let formatted_buddies = format_buddies state buddies width in
 
   let flattened = show_resources buddies in
   let bs = List.length flattened
   and up, down = (length / 2, (length + 1) / 2)
-  and active_idx = find_index state.active_contact 0 flattened
+  and active_idx = Utils.find_index state.active_contact 0 flattened
   in
   match length >= bs with
   | true  -> let pad = [ S (String.make width ' ') ] in
@@ -415,7 +416,7 @@ let make_prompt size network state redraw =
           if isself then
             List.map (fun s -> `Default, s) (format_log statusses)
           else
-            format_messages active state.active_contact (Contact.messages active)
+            format_messages active resource state.active_contact (Contact.messages active)
         in
         List.split msgs
       in
