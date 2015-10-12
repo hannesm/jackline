@@ -39,11 +39,6 @@ let pad x s =
   | d when d > 0       -> s ^ (String.make d ' ')
   | _ (* when d < 0 *) -> Zed_utf8.sub s 0 x
 
-let rec find_index id i = function
-  | []                              -> 0
-  | x::_ when Xjid.jid_matches id x -> i
-  | _::xs                           -> find_index id (succ i) xs
-
 let buddy_to_color = function
   | `Default -> default
   | `Good -> green
