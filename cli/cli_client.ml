@@ -670,9 +670,9 @@ let warn jid user add_msg =
      (match m.User.direction with
       | `From (`Full (_, r'))  when not (Xjid.resource_similar r r') ->
          let msg =
-           "the last message was received from a different resource (" ^
-             r' ^ "); you might want to expand the contact and send messages \
-                   directly to that resource (instead of " ^ r ^ ")"
+           "message sent to the active resource, " ^ r ^ ", while the last \
+            message was received from " ^ r' ^ "; you might want to expand \
+            the contact and send messages directly to " ^ r' ^ "."
          in
          add_msg (`Local (`Bare (Xjid.t_to_bare jid), "resource warning")) false msg
       | _ -> ())
