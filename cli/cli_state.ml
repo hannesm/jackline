@@ -240,16 +240,6 @@ let random_string () =
   let rnd = Rng.generate 12 in
   Cstruct.to_string (Base64.encode rnd)
 
-let maybe_expand state jid =
-  match Contact.find_user state.contacts (Xjid.t_to_bare jid) with
-  | None -> () (* create one! *)
-  | Some user ->
-     match user.User.expand, User.active_session user, jid with
-     | _, Some s, `Full (_, r) when r = s.User.resource -> ()
-     | false, Some _, `Full _ ->
-        Contact.replace_user state.contacts { user with User.expand = true }
-     | _ -> ()
-
 let notify state jid =
   Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Notifications) ;
   if

@@ -266,8 +266,7 @@ let handle_connect state log redraw failure =
           match User.find_similar_session user r with
           | None -> ()
           | Some x -> update_notifications state user x.User.resource r) ;
-       Contact.replace_user state.contacts user ;
-       maybe_expand state state.active_contact
+       Contact.replace_user state.contacts user
   and update_receipt_state jid receipt =
     match Contact.find_user state.contacts (Xjid.t_to_bare jid) with
     | None -> (* XXX can never happen!? *) assert false
