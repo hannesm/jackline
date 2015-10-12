@@ -269,8 +269,22 @@ let handle_connect state log redraw failure =
        | None -> assert false
   and update_user user alert =
     Contact.replace_user state.contacts user ;
+    Lwt.async (fun () -> Lwt_mvar.put state.contact_mvar (`User user)) ;
     if alert then notify state (`Bare user.User.bare_jid) ;
     redraw ()
+  and reset_users () =
+    let all_users =
+      Contact.fold (fun _ c acc ->
+                    match c with
+                    | `User u -> { u with User.subscription = `None } :: acc
+                    | `Room r -> acc)
+                   state.contacts
+                   []
+    in
+    List.iter (fun u ->
+               Contact.replace_user state.contacts u ;
+               Lwt.async (fun () -> Lwt_mvar.put state.contact_mvar (`User u)))
+              all_users
   and inc_fp jid raw_fp =
     match Xjid.resource jid with
     | None -> assert false
@@ -375,6 +389,7 @@ let handle_connect state log redraw failure =
       update_presence ;
       update_receipt_state ;
       update_user ;
+      reset_users ;
       receipt ;
       inc_fp ;
       verify_fp ;

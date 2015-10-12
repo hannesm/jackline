@@ -44,6 +44,7 @@ type user_data = {
   user                 : Xjid.t -> User.user ;
   session              : Xjid.t -> User.session ;
   update_user          : User.user -> bool -> unit ;
+  reset_users          : unit -> unit ;
   update_otr           : Xjid.t -> User.session -> Otr.State.session -> unit ;
   update_presence      : Xjid.t -> User.session -> User.presence -> string option -> int -> unit ;
   update_receipt_state : Xjid.t -> User.receipt_state -> unit ;
@@ -520,6 +521,7 @@ let session_callback (kind, show, status, priority) mvar t =
   Roster.get t (fun ?jid_from ?jid_to ?lang ?ver items ->
       ignore jid_from ; ignore jid_to ; ignore lang ; ignore ver ;
       let mods = List.map (roster_callback t.user_data.user) items in
+      t.user_data.reset_users () ;
       List.iter (function None -> () | Some x -> t.user_data.update_user x false) mods ;
       return () ) >>= fun () ->
 
