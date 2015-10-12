@@ -144,7 +144,7 @@ let format_buddies state buddies width =
     | true, true -> "*"
     | false, false ->
        (match buddy, List.length (active_resources state buddy) with
-        | `User _, 0 -> " "
+        | `User _, x when x < 2 -> " "
         | _ -> "+")
     | true, false -> Zed_utf8.singleton (UChar.of_int 0x2600)
     | false, true -> " "
