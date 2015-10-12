@@ -308,6 +308,18 @@ let active_resources state contact =
   else
     []
 
+let active_contacts_resources state =
+  let contacts = active_contacts state in
+  List.combine contacts (List.map (active_resources state) contacts)
+
+let show_resource (contact, res) =
+  let bare = Contact.jid contact None in
+  bare :: List.map (fun x -> `Full x) (List.map (Contact.full_jid contact) res)
+
+let show_resources rs = List.fold_right (fun rs acc -> (show_resource rs) @ acc) rs []
+
+let all_jids state = show_resources (active_contacts_resources state)
+
 let otr_config user state =
   match user.User.otr_custom_config with
   | None -> state.config.Xconfig.otr_config
