@@ -262,7 +262,7 @@ let horizontal_line buddy resource fg_color buddy_width scrollback show_buddy_li
           " - no OTR "
           (fun fp ->
            let vs = User.verified_fp user fp in
-           " " ^ User.verification_status_to_string vs ^ " ")
+           " - " ^ User.verification_status_to_string vs ^ " - ")
           (User.otr_fingerprint s.User.otr)
     | _ -> "")
   in
