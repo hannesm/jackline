@@ -191,8 +191,8 @@ let delayed_timestamp = function
   | None -> None
   | Some delay ->
      match Ptime.of_rfc3339 delay.delay_stamp with
-     | Rresult.Ok (time, tz) -> Some (float_of_int tz +. Ptime.to_float_s time)
-     | Rresult.Error _ -> None
+     | Result.Ok (time, tz) -> Some (float_of_int tz +. Ptime.to_float_s time)
+     | Result.Error _ -> None
 
 let process_receipt cb = function
   | Xml.Xmlelement ((ns_rec, "received"), attrs, _) when ns_rec = ns_receipts ->
