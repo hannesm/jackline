@@ -1,8 +1,8 @@
 true : annot, bin_annot
 true : warn_error(+1..49)
 true : warn(+A-4-6-7-9-40-42-44-48)
-<src> : include
-<cli> : include
+"src" : include
+"cli" : include
 
 <src/xconfig.ml>: package(sexplib), package(otr), package(sexplib.syntax), \
   syntax(camlp4o)
