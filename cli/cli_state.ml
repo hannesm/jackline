@@ -291,7 +291,7 @@ let active_resources state contact =
   if state.show_offline then
     Contact.all_resources contact
   else
-    let tst jid = isnotified state jid || isactive state jid in
+    let tst jid = isnotified state jid || state.active_contact = jid in
     Contact.active_resources tst contact
 
 let potentially_visible_resource state contact =
