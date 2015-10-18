@@ -187,3 +187,4 @@ status line
 - I want to receive notifications. -- There are two ways at the moment: `notification.state` contains the current state (written on every change) and a hook script can be defined during interactive configuration or `(notification_callback (/my/favorite/script.sh))` in `config.sexp`.  It is executed with two arguments: the jabber id and state.
 - I want a systray icon. -- there are two projects, [posiputt/jackification](https://github.com/posiputt/jackification), and [cfcs/misc](https://github.com/cfcs/misc/blob/master/jackline_systray.py)
 - I want to have notifications on MacOSX. - Andrej wrote [a script](https://github.com/schoeke/notline) using terminal notifier; otherwise [this guide](https://gist.github.com/prebenlm/5562656) might help.
+- Support? -- join us at jackline@conference.jabber.ccc.de
