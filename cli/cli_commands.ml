@@ -514,7 +514,7 @@ let common_info user cfgdir =
   let jid = Xjid.bare_jid_to_string (Contact.bare user) in
   let name = match Contact.name user with
     | None -> []
-    | Some x -> ["name: " ^ x]
+    | Some x -> [x]
   and pres =
     match Contact.preserve_messages user with
     | true ->

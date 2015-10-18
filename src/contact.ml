@@ -64,8 +64,8 @@ let set_preserve_messages b newval =
   | `Room r -> `Room { r with Muc.preserve_messages = newval }
 
 let name = function
-  | `User u -> u.User.name
-  | `Room r -> Some (r.Muc.my_nick)
+  | `User u -> Utils.option None (fun n -> Some ("name: " ^  n)) u.User.name
+  | `Room r -> Some ("my nick: " ^ r.Muc.my_nick)
 
 let info b s = match b, s with
   | `User u, None -> User.info u None
