@@ -812,6 +812,8 @@ let init_system log myjid connect_mvar =
         (match X509.hostnames x with
          | x::_ -> err false (Printf.sprintf "%s, but got %s" pre x) ; err false (warn x)
          | [] -> err false (Printf.sprintf "%s, but found no name" pre))
+      | Tls_lwt.Tls_failure `Error (`AuthenticationFailure _) as exn ->
+         err false (Printexc.to_string exn)
       | Unix.Unix_error (Unix.EBADF, _, _ ) as exn ->
          xmpp_session := None ; err false (Printexc.to_string exn)
       | exn -> err true (Printexc.to_string exn)
