@@ -156,8 +156,9 @@ let member_info m =
   let jid = Utils.option [] (fun x -> ["real jid: " ^ Xjid.jid_to_string x]) m.jid
   and aff = affiliation_to_string m.affiliation
   and role = role_to_string m.role
+  and nick = m.nickname
   in
-  jid @ [ "affiliation: " ^ aff ; "role: " ^ role ]
+  [ "nickname: " ^ nick ] @ jid @ [ "affiliation: " ^ aff ; "role: " ^ role ]
 
 let member r = function
   | `Bare _ -> None
