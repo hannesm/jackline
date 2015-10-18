@@ -512,9 +512,7 @@ let handle_own_otr_info dsa =
 
 let common_info user cfgdir =
   let jid = Xjid.bare_jid_to_string (Contact.bare user) in
-  let name = match Contact.name user with
-    | None -> []
-    | Some x -> [x]
+  let name = Utils.option [] (fun x -> [x]) (Contact.name user)
   and pres =
     match Contact.preserve_messages user with
     | true ->
