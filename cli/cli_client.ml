@@ -264,7 +264,7 @@ let horizontal_line buddy resource fg_color buddy_width scrollback show_buddy_li
            (User.verification_status_to_color vs,
             " - " ^ User.verification_status_to_string vs ^ " - "))
           (User.otr_fingerprint s.User.otr)
-    | _ -> (Contact.color buddy resource, "")
+    | _ -> (Contact.color buddy resource, " ")
   in
   let pre =
     if show_buddy_list then
