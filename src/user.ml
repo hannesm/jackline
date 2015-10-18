@@ -133,6 +133,13 @@ let full_verification_status_to_string = function
      let evs = List.map (fun (v, ts) -> verify_to_string v ^ " on " ^ day_to_string ts) xs in
      "verified (" ^ (String.concat ", " evs) ^ ")"
 
+type color = [ `Default | `Good | `Bad ]
+
+let verification_status_to_color = function
+  | `Revoked _ -> `Bad
+  | `Unverified -> `Bad
+  | `Verified _ -> `Good
+
 type fingerprint = {
   data          : string ;
   verified      : verification_status ;

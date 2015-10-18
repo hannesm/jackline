@@ -37,7 +37,11 @@ type verification_status = [
   | `Revoked of float
 ]
 
+type color = [ `Default | `Good | `Bad ]
+
 val verification_status_to_string : verification_status -> string
+
+val verification_status_to_color : verification_status -> color
 
 type fingerprint = {
   data          : string ;

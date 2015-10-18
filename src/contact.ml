@@ -2,8 +2,6 @@
 type contact = [ `User of User.user | `Room of Muc.groupchat ]
 type resource = [ `Session of User.session | `Member of Muc.member ]
 
-type color = [ `Default | `Good | `Bad ]
-
 let bare = function
   | `User x -> x.User.bare_jid
   | `Room x -> x.Muc.room_jid

@@ -43,8 +43,7 @@ val full_jid : contact -> resource -> Xjid.full_jid
 
 val jid : contact -> resource option -> Xjid.t
 
-type color = [ `Default | `Good | `Bad ]
-val color : contact -> resource option -> color
+val color : contact -> resource option -> User.color
 val oneline : contact -> resource option -> string
 
 val marshal : contact -> Sexplib.Sexp.t option

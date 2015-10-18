@@ -255,16 +255,16 @@ let maybe_trim str left =
 
 let horizontal_line buddy resource fg_color buddy_width scrollback show_buddy_list width =
   let otrcolor, otr =
-    (buddy_to_color (Contact.color buddy resource),
-     match buddy, resource with
+    match buddy, resource with
      | `User user, Some (`Session s) ->
         Utils.option
-          " - no OTR "
+          (`Bad, " - no OTR ")
           (fun fp ->
            let vs = User.verified_fp user fp in
-           " - " ^ User.verification_status_to_string vs ^ " - ")
+           (User.verification_status_to_color vs,
+            " - " ^ User.verification_status_to_string vs ^ " - "))
           (User.otr_fingerprint s.User.otr)
-    | _ -> "")
+    | _ -> (Contact.color buddy resource, "")
   in
   let pre =
     if show_buddy_list then
@@ -303,7 +303,7 @@ let horizontal_line buddy resource fg_color buddy_width scrollback show_buddy_li
   let status, left = maybe_trim status left in
   let pre, left = maybe_trim pre left in
   let post = if left > 0 then [S (Zed_utf8.make left (UChar.of_int 0x2500))] else [] in
-  B_fg fg_color :: pre @ buddy @ [ E_fg ; B_fg otrcolor ] @ otr @ [ E_fg ; B_fg fg_color ] @ presence @ status @ post @ [ E_fg ]
+  B_fg fg_color :: pre @ buddy @ [ E_fg ; B_fg (buddy_to_color otrcolor) ] @ otr @ [ E_fg ; B_fg fg_color ] @ presence @ status @ post @ [ E_fg ]
 
 let status_line self mysession notify log redraw fg_color width =
   let status = User.presence_to_string mysession.User.presence in
