@@ -224,7 +224,7 @@ let marshal_room room =
 
 let oneline room =
   let presence = Utils.option `Offline (fun x -> x.presence) (self_member room)
-  and size = List.length room.members
+  and size = List.length (List.filter (fun m -> m.presence <> `Offline) room.members)
   in
   Printf.sprintf
     "%s(%d) %s%s"
