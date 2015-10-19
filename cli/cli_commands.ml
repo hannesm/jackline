@@ -469,8 +469,9 @@ let handle_revoke user err fp =
 let history cfgdir contact =
   let jid = Xjid.bare_jid_to_string (Contact.bare contact)
   and dir = Persistency.history
+  and cwd = Sys.getcwd ()
   in
-  Filename.(concat (concat cfgdir dir) jid)
+  Filename.(concat (concat (concat cwd cfgdir) dir) jid)
 
 let handle_log buddy v a cfgdir =
   if Contact.preserve_messages buddy <> v then
