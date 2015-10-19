@@ -47,7 +47,7 @@ why? Did you read through your kernel, libc and malloc implementation?
 What about OpenSSL? libotr? libpurple, loudmouth (or whatever XMPP
 implementation you use)? Programming language runtime?
 
-OCaml is a game changer compared to C: automtic memory management; I
+OCaml is a game changer compared to C: automatic memory management; I
 try to stick to a purely functional (using immutable data and
 declarative) coding style (this code here is not there yet).
 
@@ -116,7 +116,7 @@ XMPP allows a contact to be logged in several times.  By default, the
 resource with the highest priority (and most online status) is used
 for communication.  If a contact is logged in multiple times, a `+`
 occurs to its left side, and pressing `return` will expand the
-contact, displaying all its sessions.  Commmunicating with the
+contact, displaying all its sessions.  Communicating with the
 expanded base contact will deliver the message to the bare contact, if
 a specific resource is active, messages will be sent there.  The chat
 log is filtered by messages to the specific resource, and merged in
