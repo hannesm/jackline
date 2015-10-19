@@ -133,7 +133,7 @@ let configure term () =
   LTerm.fprintl term "OTR config" >>= fun () ->
   let ask_list xs to_string prefix suffix =
     Lwt_list.fold_left_s (fun acc v ->
-      read_yes_no term (prefix ^ (to_string v) ^ suffix) >|= function
+      read_yes_no term (prefix ^ (to_string v) ^ (suffix v)) >|= function
       | true -> v :: acc
       | false -> acc)
       [] xs
@@ -142,7 +142,7 @@ let configure term () =
     Otr.State.all_versions
     Otr.State.version_to_string
     "Protocol "
-    " support (recommended)" >>= fun versions ->
+    (fun _ -> " support (recommended)") >>= fun versions ->
   ( if List.length versions = 0 then
       fail (Invalid_argument "no OTR version selected")
     else
@@ -152,7 +152,7 @@ let configure term () =
     Otr.State.all_policies
     Otr.State.policy_to_string
     ""
-    " (recommended)" >>= fun policies ->
+    (function `REVEAL_MACS -> " (not recommended)" | _ -> " (recommended)") >>= fun policies ->
   let dsa = Nocrypto.Dsa.generate `Fips1024 in
   let otr_config = Otr.State.config versions policies in
 
