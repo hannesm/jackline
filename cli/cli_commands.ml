@@ -466,10 +466,24 @@ let handle_revoke user err fp =
   else
     err "not a hex-encoded OTR fingerprint"
 
-let handle_log buddy v a =
+let history cfgdir contact =
+  let jid = Xjid.bare_jid_to_string (Contact.bare contact)
+  and dir = Persistency.history
+  in
+  Filename.(concat (concat cfgdir dir) jid)
+
+let handle_log buddy v a cfgdir =
   if Contact.preserve_messages buddy <> v then
     let buddy = Contact.set_preserve_messages buddy v in
-    (["logging turned " ^ a], Some buddy, None)
+    let msg =
+      let file = history cfgdir buddy in
+      ("logging turned " ^ a) ::
+        if not v && Sys.file_exists file then
+          [ "please delete the log file (" ^ file ^ ") manually" ]
+        else
+          []
+    in
+    (msg, Some buddy, None)
   else
     ([], None, None)
 
@@ -514,16 +528,18 @@ let common_info user cfgdir =
   let jid = Xjid.bare_jid_to_string (Contact.bare user) in
   let name = Utils.option [] (fun x -> [x]) (Contact.name user)
   and pres =
-    match Contact.preserve_messages user with
-    | true ->
-       let histo =
-         let dir = Persistency.history in
-         Filename.(concat (concat cfgdir dir) jid)
-       in
-       ["persistent history in: " ^ histo]
-    | false -> []
+    let history = history cfgdir user in
+    if Sys.file_exists history then
+      ["persistent history in: " ^ history]
+    else
+      []
+  and logging =
+    if Contact.preserve_messages user then
+      ["communication is LOGGED TO DISK"]
+    else
+      ["communication is not logged to disk"]
   in
-  [ "jid: " ^ jid ] @ name @ pres
+  [ "jid: " ^ jid ] @ name @ pres @ logging
 
 let handle_info buddy resource cfgdir =
   common_info buddy cfgdir @ Contact.info buddy resource
@@ -843,8 +859,8 @@ let exec input state term contact session isself failure log redraw =
              ([], Some (Contact.clear_messages contact), None)
 
           | ("log", None), _ -> handle_help (msg ~prefix:"argument required") (Some "log")
-          | ("log", Some a), _ when a = "on"  -> handle_log contact true a
-          | ("log", Some a), _ when a = "off" -> handle_log contact false a
+          | ("log", Some a), _ when a = "on"  -> handle_log contact true a state.config_directory
+          | ("log", Some a), _ when a = "off" -> handle_log contact false a state.config_directory
           | ("log", Some _), _ -> handle_help (msg ~prefix:"unknown argument") (Some "log")
 
           | ("info", _), _ ->
