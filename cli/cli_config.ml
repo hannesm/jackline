@@ -26,12 +26,14 @@ class read_password term ~prompt = object(self)
     self#set_prompt (S.const (LTerm_text.of_string prompt))
 end
 
-let rec read_yes_no term msg =
-  (new read_inputline ~term ~prompt:(msg ^ " [answer 'y' or 'n']: ") ())#run >>= fun res ->
+let rec read_yes_no term msg default =
+  let string = if default then "y" else "n" in
+  (new read_inputline ~term ~prompt:(msg ^ " [answer 'y' or 'n' (pressing enter defaults to " ^ string ^ ")]: ") ())#run >>= fun res ->
   match res with
   | "Y" | "y" | "Yes" | "yes" -> return true
   | "N" | "n" | "No"  | "no"  -> return false
-  | _ -> read_yes_no term msg
+  | "" -> return default
+  | _ -> read_yes_no term msg default
 
 let exactly_one char s =
   String.contains s char &&
@@ -59,7 +61,7 @@ let configure term () =
        fail (Invalid_argument "invalid priority (range allowed is from 0 to 127)")
      else return (Some prio)) >>= fun priority ->
 
-  read_yes_no term "[optional] configure hostname manually?" >>= fun hostname ->
+  read_yes_no term "[optional] configure hostname manually?" false >>= fun hostname ->
   ( if hostname then
       begin
         (new read_inputline ~term ~prompt:"enter hostname or IP: " ())#run >>= fun hostname ->
@@ -85,7 +87,7 @@ let configure term () =
   let password = if password = "" then None else Some password in
 
   (* trust anchor *)
-  read_yes_no term "Provide a pem-encoded trust anchor (alternative: SHA256 digest of the server certificate)?" >>= fun ta ->
+  read_yes_no term "Provide a pem-encoded trust anchor (alternative: SHA256 digest of the server certificate)?" false >>= fun ta ->
   ( if ta then
       begin
         (new read_inputline ~term ~prompt:"enter path to trust anchor file: " ())#run >>= fun trust_anchor ->
@@ -131,9 +133,9 @@ let configure term () =
 
   (* otr config *)
   LTerm.fprintl term "OTR config" >>= fun () ->
-  let ask_list xs to_string prefix suffix =
+  let ask_list xs to_string prefix suffix default =
     Lwt_list.fold_left_s (fun acc v ->
-      read_yes_no term (prefix ^ (to_string v) ^ (suffix v)) >|= function
+      read_yes_no term (prefix ^ (to_string v) ^ (suffix v)) (default v) >|= function
       | true -> v :: acc
       | false -> acc)
       [] xs
@@ -142,17 +144,19 @@ let configure term () =
     Otr.State.all_versions
     Otr.State.version_to_string
     "Protocol "
-    (fun _ -> " support (recommended)") >>= fun versions ->
-  ( if List.length versions = 0 then
-      fail (Invalid_argument "no OTR version selected")
-    else
-      return versions ) >>= fun versions ->
+    (fun _ -> " support (recommended)")
+    (fun _ -> true) >>= fun versions ->
+  (if List.length versions = 0 then
+     fail (Invalid_argument "no OTR version selected")
+   else
+     return versions ) >>= fun versions ->
 
   ask_list
     Otr.State.all_policies
     Otr.State.policy_to_string
     ""
-    (function `REVEAL_MACS -> " (not recommended)" | _ -> " (recommended)") >>= fun policies ->
+    (function `REVEAL_MACS -> " (not recommended)" | _ -> " (recommended)")
+    (function `REVEAL_MACS -> false | _ -> true) >>= fun policies ->
   let dsa = Nocrypto.Dsa.generate `Fips1024 in
   let otr_config = Otr.State.config versions policies in
 
