@@ -56,6 +56,7 @@ let start_client cfgdir debug () =
     in
     let user = { user with User.self = true } in
     let u, _ = User.create_session user resource config.Xconfig.otr_config config.Xconfig.dsa in
+    let u = { u with User.readline_history = [ "/join jackline@conference.jabber.ccc.de" ; "/connect" ] } in
     Contact.replace_user users u
   in
 
