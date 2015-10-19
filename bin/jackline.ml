@@ -61,7 +61,7 @@ let start_client cfgdir debug () =
   in
 
   let greeting =
-    "multi user chat support: see you at /join jackline@conference.jabber.ccc.de; \
+    "multi user chat support: see you at /join jackline@conference.jabber.ccc.de (use ArrowUp key); \
      type /help for help"
   in
 
