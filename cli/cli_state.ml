@@ -91,10 +91,11 @@ module Notify = struct
         | Clear, D_N -> D
         | _, _ -> s0
       in
-      match s1 with
-      | Q -> write_file (to_string Q)
-      | s when s == s0 -> loop s
-      | _ -> write_file (to_string s1) >>= fun () -> loop s1
+      write_file (to_string s1) >>= fun () ->
+      if s1 = Q then
+        Lwt.return_unit
+      else
+        loop s1
     in
     Lwt.async (fun () -> loop C) ;
     mvar
