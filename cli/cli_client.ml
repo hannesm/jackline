@@ -332,6 +332,20 @@ let status_line self mysession notify log redraw fg_color width =
   status_pre @ [ E_fg ; B_fg status_color ] @ status @ [ E_fg ; B_fg fg_color ] @ status_post @
   [ E_fg ; E_bold ]
 
+(* copied from bos/bos.ml *)
+let tz_offset_s t =
+  let utc = Unix.gmtime t in
+  let local = Unix.localtime t in
+  let dd = local.Unix.tm_yday - utc.Unix.tm_yday in
+  let dh = local.Unix.tm_hour - utc.Unix.tm_hour in
+  let dm = dh * 60 + (local.Unix.tm_min - utc.Unix.tm_min) in
+  let dm =
+    if dd = 1 || dd < -1 (* year wrap *) then dm + (24 * 60) else
+    if dd = -1 || dd > 1 (* year wrap *) then dm - (24 * 60) else
+    dm  (* same day *)
+  in
+  60 * dm
+
 let make_prompt size network state redraw =
   (* network should be an event, then I wouldn't need a check here *)
   (if state.last_status <> network then
@@ -372,9 +386,12 @@ let make_prompt size network state redraw =
   if main_size <= 4 || chat_width <= 20 then
     eval [S "need more space"]
   else
-    let now = match Ptime.of_float_s (Unix.gettimeofday ()) with
-      | None -> Ptime.epoch
-      | Some x -> x
+    let now, tz_offset_s =
+      let t = Unix.gettimeofday () in
+      ((match Ptime.of_float_s t with
+        | None -> Ptime.epoch
+        | Some x -> x),
+       tz_offset_s t)
     in
     let self = self state
     and mysession = selfsession state
@@ -389,7 +406,7 @@ let make_prompt size network state redraw =
           statusses
       in
       let entries =
-        let entries = format_log state.tz_offset_s now entries in
+        let entries = format_log tz_offset_s now entries in
         line_wrap ~max_length:size.cols entries
       in
       let data = pad_l_rev "" log_size entries in
@@ -405,9 +422,9 @@ let make_prompt size network state redraw =
       let msg_colors, data =
         let msgs =
           if isself then
-            List.map (fun s -> `Default, s) (format_log state.tz_offset_s now statusses)
+            List.map (fun s -> `Default, s) (format_log tz_offset_s now statusses)
           else
-            format_messages state.tz_offset_s now active resource state.active_contact (Contact.messages active)
+            format_messages tz_offset_s now active resource state.active_contact (Contact.messages active)
         in
         List.split msgs
       in
