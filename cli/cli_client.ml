@@ -332,19 +332,10 @@ let status_line self mysession notify log redraw fg_color width =
   status_pre @ [ E_fg ; B_fg status_color ] @ status @ [ E_fg ; B_fg fg_color ] @ status_post @
   [ E_fg ; E_bold ]
 
-(* copied from bos/bos.ml *)
-let tz_offset_s t =
-  let utc = Unix.gmtime t in
-  let local = Unix.localtime t in
-  let dd = local.Unix.tm_yday - utc.Unix.tm_yday in
-  let dh = local.Unix.tm_hour - utc.Unix.tm_hour in
-  let dm = dh * 60 + (local.Unix.tm_min - utc.Unix.tm_min) in
-  let dm =
-    if dd = 1 || dd < -1 (* year wrap *) then dm + (24 * 60) else
-    if dd = -1 || dd > 1 (* year wrap *) then dm - (24 * 60) else
-    dm  (* same day *)
-  in
-  60 * dm
+(* copied from https://github.com/mirage/mirage/issues/442#issuecomment-166744911 *)
+let tz_offset_s () =
+  let tm = Unix.gmtime 0. in
+  - (int_of_float (fst (Unix.mktime tm)))
 
 let make_prompt size network state redraw =
   (* network should be an event, then I wouldn't need a check here *)
@@ -386,14 +377,12 @@ let make_prompt size network state redraw =
   if main_size <= 4 || chat_width <= 20 then
     eval [S "need more space"]
   else
-    let now, tz_offset_s =
-      let t = Unix.gettimeofday () in
-      ((match Ptime.of_float_s t with
-        | None -> Ptime.epoch
-        | Some x -> x),
-       tz_offset_s t)
-    in
-    let self = self state
+    let now =
+      match Ptime.of_float_s (Unix.gettimeofday ()) with
+      | None -> Ptime.epoch
+      | Some x -> x
+    and tz_offset_s = tz_offset_s ()
+    and self = self state
     and mysession = selfsession state
     in
     let isself = Xjid.jid_matches (`Bare (fst state.config.Xconfig.jid)) state.active_contact in
