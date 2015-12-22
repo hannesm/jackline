@@ -12,7 +12,7 @@ true : warn(+A-4-6-7-9-40-42-44-48)
 <src/xjid.{ml,mli}>: package(sexplib), package(sexplib.syntax), package(astring), \
   package(erm_xmpp), syntax(camlp4o)
 <src/user.{ml,mli}>: package(sexplib), package(sexplib.syntax), package(otr), \
-  package(erm_xmpp), package(otr), package(hex), syntax(camlp4o)
+  package(erm_xmpp), package(otr), package(hex), package(ptime), syntax(camlp4o)
 <src/muc.{ml,mli}>: package(sexplib), package(sexplib.syntax), \
   package(erm_xmpp), package(hex), syntax(camlp4o)
 <src/contact.{ml,mli}>: package(sexplib), package(sexplib.syntax), \
@@ -26,7 +26,7 @@ true : warn(+A-4-6-7-9-40-42-44-48)
 
 <cli/cli_client.ml>: package(camomile), package(lambda-term), package(lwt), \
   package(lwt.syntax), package(otr), package(react), package(tls), \
-  package(tls.lwt), package(zed), package(erm_xmpp), syntax(camlp4o)
+  package(tls.lwt), package(zed), package(erm_xmpp), package(ptime), syntax(camlp4o)
 <cli/cli_commands.ml>: package(astring), package(lwt), package(lwt.syntax), \
   package(otr), package(erm_xmpp), package(zed), syntax(camlp4o)
 <cli/cli_config.ml>: package(lambda-term), package(lwt), package(nocrypto), \

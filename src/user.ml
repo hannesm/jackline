@@ -208,16 +208,15 @@ type chatkind = [
   | `GroupChat
 ] with sexp
 
-(* TODO: should likely life within each session *)
 type message = {
   direction  : direction ;
   encrypted  : bool ;
   received   : bool ;
-  timestamp  : float ;
+  timestamp  : Ptime.t ;
   message    : string ;
   kind       : chatkind ;
   mutable persistent : bool ; (* internal use only (mark whether this needs to be written) *)
-} with sexp
+}
 
 type user = {
   bare_jid          : Xjid.bare_jid ;
@@ -309,7 +308,11 @@ let oneline_with_session _ s =
   in
   Printf.sprintf " %s %s" (presence_to_char presence) resource
 
-let message ?(timestamp = Unix.time ()) ?(kind = `Chat) direction encrypted received message =
+let ts_now () = match Ptime.of_float_s (Unix.gettimeofday ()) with
+  | None -> Ptime.epoch
+  | Some x -> x
+
+let message ?(timestamp = ts_now ()) ?(kind = `Chat) direction encrypted received message =
   { direction ; encrypted ; received ;
     timestamp ; message ; persistent = false ; kind }
 
@@ -560,3 +563,44 @@ let marshal_user user =
   | _ ->
      let sexp = sexp_of_t user in
      Some Sexp.(List [ sexp_of_int db_version ; sexp ])
+
+let message_of_sexp sexp =
+  match sexp with
+  | Sexp.List l ->
+     (match List.fold_left
+              (fun (dir, encrypted, received, ts, msg, kind) v -> match v with
+               | Sexp.List [ Sexp.Atom "direction" ; d ] ->
+                  let dir = direction_of_sexp d in
+                  (Some dir, encrypted, received, ts, msg, kind)
+               | Sexp.List [ Sexp.Atom "encrypted" ; e ] ->
+                  let encrypted = bool_of_sexp e in
+                  (dir, Some encrypted, received, ts, msg, kind)
+               | Sexp.List [ Sexp.Atom "received" ; r ] ->
+                  let received = bool_of_sexp r in
+                  (dir, encrypted, Some received, ts, msg, kind)
+               | Sexp.List [ Sexp.Atom "timestamp" ; ts ] ->
+                  let ts = Ptime.of_float_s (float_of_sexp ts) in
+                  (dir, encrypted, received, ts, msg, kind)
+               | Sexp.List [ Sexp.Atom "message" ; m ] ->
+                  let msg = string_of_sexp m in
+                  (dir, encrypted, received, ts, Some msg, kind)
+               | Sexp.List [ Sexp.Atom "kind" ; m ] ->
+                  let kind = chatkind_of_sexp m in
+                  (dir, encrypted, received, ts, msg, Some kind)
+               | _ -> (dir, encrypted, received, ts, msg, kind))
+              (None, None, None, None, None, None) l
+      with
+      | Some direction, Some encrypted, Some received, Some timestamp, Some message, Some kind ->
+         { direction ; encrypted ; received ; timestamp ; message ; kind ; persistent = true }
+      | _ -> assert false)
+  | _ -> assert false
+
+let sexp_of_message msg =
+  record [
+      "direction", sexp_of_direction msg.direction ;
+      "encrypted", sexp_of_bool msg.encrypted ;
+      "received", sexp_of_bool msg.received ;
+      "timestamp", sexp_of_float (Ptime.to_float_s msg.timestamp) ;
+      "message", sexp_of_string msg.message ;
+      "kind", sexp_of_chatkind msg.kind ;
+    ]

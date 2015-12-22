@@ -99,28 +99,17 @@ let line_wrap ?raw ~max_length entries : Zed_utf8.t list =
   in
   snd data
 
-let print_time ?now timestamp =
-  let now = match now with
-    | Some x -> x
-    | None -> Unix.time ()
-  in
-  let display = Unix.localtime timestamp in
-  if now -. timestamp < 86400. then (* less than a day ago *)
-    Printf.sprintf "%02d:%02d:%02d "
-      display.Unix.tm_hour
-      display.Unix.tm_min
-      display.Unix.tm_sec
+let print_time ~now ~tz_offset_s timestamp =
+  let daydiff, _ = Ptime.Span.to_d_ps (Ptime.diff now timestamp) in
+  let (_, m, d), ((hh, mm, ss), _) = Ptime.to_date_time ~tz_offset_s timestamp in
+  if daydiff = 0 then (* less than a day ago *)
+    Printf.sprintf "%02d:%02d:%02d " hh mm ss
   else
-    Printf.sprintf "%02d-%02d %02d:%02d "
-      (succ display.Unix.tm_mon)
-      display.Unix.tm_mday
-      display.Unix.tm_hour
-      display.Unix.tm_min
+    Printf.sprintf "%02d-%02d %02d:%02d " m d hh mm
 
-let format_log log =
-  let now = Unix.time () in
+let format_log tz_offset_s now log =
   let print_log { User.direction ; timestamp ; message ; _ } =
-    let time = print_time ~now timestamp in
+    let time = print_time ~now ~tz_offset_s timestamp in
     let from = match direction with
       | `From jid -> Xjid.jid_to_string jid ^ ":"
       | `Local (_, x) when x = "" -> "***"
@@ -168,10 +157,9 @@ let format_buddies state buddies width =
        acc)
     buddies []
 
-let format_messages buddy resource jid msgs =
-  let now = Unix.time () in
+let format_messages tz_offset_s now buddy resource jid msgs =
   let printmsg { User.direction ; encrypted ; received ; timestamp ; message ; _ } =
-    let time = print_time ~now timestamp in
+    let time = print_time ~now ~tz_offset_s timestamp in
     let msg_color, pre =
       match buddy with
       | `Room _ ->
@@ -384,6 +372,10 @@ let make_prompt size network state redraw =
   if main_size <= 4 || chat_width <= 20 then
     eval [S "need more space"]
   else
+    let now = match Ptime.of_float_s (Unix.gettimeofday ()) with
+      | None -> Ptime.epoch
+      | Some x -> x
+    in
     let self = self state
     and mysession = selfsession state
     in
@@ -397,7 +389,7 @@ let make_prompt size network state redraw =
           statusses
       in
       let entries =
-        let entries = format_log entries in
+        let entries = format_log state.tz_offset_s now entries in
         line_wrap ~max_length:size.cols entries
       in
       let data = pad_l_rev "" log_size entries in
@@ -413,9 +405,9 @@ let make_prompt size network state redraw =
       let msg_colors, data =
         let msgs =
           if isself then
-            List.map (fun s -> `Default, s) (format_log statusses)
+            List.map (fun s -> `Default, s) (format_log state.tz_offset_s now statusses)
           else
-            format_messages active resource state.active_contact (Contact.messages active)
+            format_messages state.tz_offset_s now active resource state.active_contact (Contact.messages active)
         in
         List.split msgs
       in

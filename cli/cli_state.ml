@@ -26,6 +26,7 @@ type connect_v =
 type state = {
   config_directory            : string                     ; (* set initially *)
   config                      : Xconfig.t                  ; (* set initially *)
+  tz_offset_s                 : int                        ; (* set initially *)
 
   state_mvar                  : notify_v Lwt_mvar.t        ; (* set initially *)
   contact_mvar                : Contact.contact Lwt_mvar.t ; (* set initially *)
@@ -204,7 +205,7 @@ module Connect = struct
     mvar
 end
 
-let empty_state config_directory config contacts connect_mvar state_mvar =
+let empty_state config_directory config contacts connect_mvar state_mvar tz_offset_s =
   let contact_mvar = Persistency.notify_user config_directory
   and last_status = (`Local (`Full config.Xconfig.jid, ""), "")
   and active = `Bare (fst config.Xconfig.jid)
@@ -212,6 +213,7 @@ let empty_state config_directory config contacts connect_mvar state_mvar =
   {
     config_directory                ;
     config                          ;
+    tz_offset_s                     ;
 
     state_mvar                      ;
     contact_mvar                    ;

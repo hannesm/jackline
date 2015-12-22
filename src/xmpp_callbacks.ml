@@ -40,7 +40,7 @@ type user_data = {
   log                  : User.direction -> string -> unit ;
   locallog             : string -> string -> unit ;
   remove               : Xjid.t -> unit ;
-  message              : Xjid.t -> ?timestamp:float -> User.direction -> bool -> string -> unit ;
+  message              : Xjid.t -> ?timestamp:Ptime.t -> User.direction -> bool -> string -> unit ;
   user                 : Xjid.t -> User.user ;
   session              : Xjid.t -> User.session ;
   update_user          : User.user -> bool -> unit ;
@@ -52,7 +52,7 @@ type user_data = {
   inc_fp               : Xjid.t -> string -> (User.verification_status * int * bool) ;
   verify_fp            : Xjid.t -> string -> unit ;
   failure              : exn -> unit Lwt.t ;
-  group_message        : Xjid.t -> float option -> string option -> string option -> Xep_muc.User.data option -> string option -> unit ;
+  group_message        : Xjid.t -> Ptime.t option -> string option -> string option -> Xep_muc.User.data option -> string option -> unit ;
   group_presence       : Xjid.t -> User.presence -> string option -> Xep_muc.User.data -> unit ;
 }
 
@@ -191,7 +191,7 @@ let delayed_timestamp = function
   | None -> None
   | Some delay ->
      match Ptime.of_rfc3339 delay.delay_stamp with
-     | Result.Ok (time, tz) -> Some (float_of_int tz +. Ptime.to_float_s time)
+     | Result.Ok (time, _) -> Some time
      | Result.Error _ -> None
 
 let process_receipt cb = function

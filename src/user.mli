@@ -88,13 +88,13 @@ type message = {
   direction  : direction ;
   encrypted  : bool ;
   received   : bool ;
-  timestamp  : float ;
+  timestamp  : Ptime.t ;
   message    : string ;
   kind       : chatkind ;
   mutable persistent : bool ; (* internal use only (mark whether this needs to be written) *)
 } with sexp
 
-val message : ?timestamp:float -> ?kind:chatkind -> direction -> bool -> bool -> string -> message
+val message : ?timestamp:Ptime.t -> ?kind:chatkind -> direction -> bool -> bool -> string -> message
 
 type user = {
   bare_jid          : Xjid.bare_jid ;
@@ -131,7 +131,7 @@ val oneline : user -> string
 val oneline_with_session : user -> session -> string
 
 (* messages *)
-val insert_message : ?timestamp:float -> user -> direction -> bool -> bool -> string -> user
+val insert_message : ?timestamp:Ptime.t -> user -> direction -> bool -> bool -> string -> user
 val new_message : user -> message -> user
 
 (* convenience *)

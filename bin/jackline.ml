@@ -1,6 +1,20 @@
 open Lwt
 open React
 
+(* copied from bos/bos.ml *)
+let tz_offset_s t =
+  let utc = Unix.gmtime t in
+  let local = Unix.localtime t in
+  let dd = local.Unix.tm_yday - utc.Unix.tm_yday in
+  let dh = local.Unix.tm_hour - utc.Unix.tm_hour in
+  let dm = dh * 60 + (local.Unix.tm_min - utc.Unix.tm_min) in
+  let dm =
+    if dd = 1 || dd < -1 (* year wrap *) then dm + (24 * 60) else
+    if dd = -1 || dd > 1 (* year wrap *) then dm - (24 * 60) else
+    dm  (* same day *)
+  in
+  60 * dm
+
 let start_client cfgdir debug () =
   Sys.(set_signal sigpipe Signal_ignore) ;
   ignore (LTerm_inputrc.load ());
@@ -80,7 +94,7 @@ let start_client cfgdir debug () =
     Cli_state.Notify.notify_writer myjid config.Xconfig.notification_callback file
   in
   let connect_mvar = Cli_state.Connect.connect_me config (log ?step:None) state_mvar users in
-  let state = Cli_state.empty_state cfgdir config users connect_mvar state_mvar in
+  let state = Cli_state.empty_state cfgdir config users connect_mvar state_mvar (tz_offset_s (Unix.time ())) in
 
   let us = Contact.fold (fun _ v acc -> v :: acc) users [] in
 
