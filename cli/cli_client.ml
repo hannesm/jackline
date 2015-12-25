@@ -332,10 +332,10 @@ let status_line self mysession notify log redraw fg_color width =
   status_pre @ [ E_fg ; B_fg status_color ] @ status @ [ E_fg ; B_fg fg_color ] @ status_post @
   [ E_fg ; E_bold ]
 
-(* copied from https://github.com/mirage/mirage/issues/442#issuecomment-166744911 *)
 let tz_offset_s () =
-  let tm = Unix.gmtime 0. in
-  - (int_of_float (fst (Unix.mktime tm)))
+  match Ptime_clock.current_tz_offset_s () with
+  | None -> 0 (* XXX: report error *)
+  | Some x -> x
 
 let make_prompt size network state redraw =
   (* network should be an event, then I wouldn't need a check here *)
@@ -377,10 +377,7 @@ let make_prompt size network state redraw =
   if main_size <= 4 || chat_width <= 20 then
     eval [S "need more space"]
   else
-    let now =
-      match Ptime.of_float_s (Unix.gettimeofday ()) with
-      | None -> Ptime.epoch
-      | Some x -> x
+    let now = Ptime_clock.now ()
     and tz_offset_s = tz_offset_s ()
     and self = self state
     and mysession = selfsession state

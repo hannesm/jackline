@@ -308,11 +308,7 @@ let oneline_with_session _ s =
   in
   Printf.sprintf " %s %s" (presence_to_char presence) resource
 
-let ts_now () = match Ptime.of_float_s (Unix.gettimeofday ()) with
-  | None -> Ptime.epoch
-  | Some x -> x
-
-let message ?(timestamp = ts_now ()) ?(kind = `Chat) direction encrypted received message =
+let message ?(timestamp = Ptime_clock.now ()) ?(kind = `Chat) direction encrypted received message =
   { direction ; encrypted ; received ;
     timestamp ; message ; persistent = false ; kind }
 
