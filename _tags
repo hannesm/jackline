@@ -7,6 +7,7 @@ true : warn(+A-4-6-7-9-40-42-44-48)
 <src/xconfig.ml>: package(sexplib), package(otr), package(sexplib.syntax), \
   syntax(camlp4o)
 <src/escape.ml>: package(astring)
+<src/utils.ml>: package(ptime.clock.os)
 <src/persistency.ml>: package(sexplib), package(lwt), package(lwt.syntax), \
   package(nocrypto), syntax(camlp4o)
 <src/xjid.{ml,mli}>: package(sexplib), package(sexplib.syntax), package(astring), \

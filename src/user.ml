@@ -109,22 +109,17 @@ let verify_to_string = function
   | `SMP -> "smp"
 
 type verification_status = [
-  | `Verified of (verify * float) list
+  | `Verified of (verify * Ptime.date) list
   | `Unverified
-  | `Revoked of float
-] with sexp
+  | `Revoked of Ptime.date
+]
 
 let verification_status_to_string = function
   | `Revoked _ -> "REVOKED"
   | `Unverified -> "not verified"
   | `Verified _ -> "verified"
 
-let day_to_string f =
-  let display = Unix.localtime f in
-  Printf.sprintf "%04d-%02d-%02d"
-                 (display.Unix.tm_year + 1900)
-                 (succ display.Unix.tm_mon)
-                 display.Unix.tm_mday
+let day_to_string (yy, mm, dd) = Printf.sprintf "%04d-%02d-%02d" yy mm dd
 
 let full_verification_status_to_string = function
   | `Revoked ts -> "REVOKED since " ^ day_to_string ts
@@ -145,9 +140,9 @@ type fingerprint = {
   verified      : verification_status ;
   resources     : string list ;
   session_count : int ;
-  first         : float ;
-  last          : float ;
-} with sexp
+  first         : Ptime.date ;
+  last          : Ptime.date ;
+}
 
 let pp_fingerprint e =
   String.((sub e 0 8) ^ " " ^ (sub e 8 8) ^ " " ^ (sub e 16 8) ^ " " ^ (sub e 24 8) ^ " " ^ (sub e 32 8))
@@ -462,6 +457,79 @@ let fix_fp s =
      List r
   | x -> x
 
+let record kvs =
+  Sexp.List (List.map (fun (k, v) -> (Sexp.List [Sexp.Atom k; v])) kvs)
+
+
+let date_of_sexp s =
+  let f = float_of_sexp s in
+  match Ptime.of_float_s f with
+  | None -> (0,0,0)
+  | Some d -> let date, _ = Ptime.to_date_time d in date
+
+let sexp_of_date d =
+  let f =  match Ptime.of_date_time (d, ((0, 0, 0), 0)) with
+    | Some x -> Ptime.to_float_s x
+    | None -> 0.
+  in
+  sexp_of_float f
+
+let verification_status_of_sexp = function
+  | Sexp.Atom "Unverified" ->
+     `Unverified
+  | Sexp.List [ Sexp.Atom "Revoked" ; day ] ->
+     `Revoked (date_of_sexp day)
+  | Sexp.List [ Sexp.Atom "Verified" ; vs ] ->
+     let vs = list_of_sexp (pair_of_sexp verify_of_sexp date_of_sexp) vs in
+     `Verified vs
+  | _ -> assert false
+
+
+let sexp_of_verification_status = function
+  | `Revoked day -> Sexp.List [ Sexp.Atom "Revoked" ; sexp_of_date day ]
+  | `Verified xs -> Sexp.List [ Sexp.Atom "Verified" ; sexp_of_list (sexp_of_pair sexp_of_verify sexp_of_date) xs ]
+  | `Unverified -> Sexp.Atom "Unverified"
+
+let fingerprint_of_sexp = function
+  | Sexp.List l ->
+     (match List.fold_left
+              (fun (data, verified, resources, session_count, first, last) v -> match v with
+               | Sexp.List [ Sexp.Atom "data" ; Sexp.Atom data ] ->
+                  (Some data, verified, resources, session_count, first, last)
+               | Sexp.List [ Sexp.Atom "verified" ; v ] ->
+                  let verified = verification_status_of_sexp v in
+                  (data, Some verified, resources, session_count, first, last)
+               | Sexp.List [ Sexp.Atom "resources" ; r ] ->
+                  let resources = list_of_sexp string_of_sexp r in
+                  (data, verified, Some resources, session_count, first, last)
+               | Sexp.List [ Sexp.Atom "session_count" ; c ] ->
+                  let session_count = int_of_sexp c in
+                  (data, verified, resources, Some session_count, first, last)
+               | Sexp.List [ Sexp.Atom "first" ; d ] ->
+                  let first = date_of_sexp d in
+                  (data, verified, resources, session_count, Some first, last)
+               | Sexp.List [ Sexp.Atom "last" ; d ] ->
+                  let last = date_of_sexp d in
+                  (data, verified, resources, session_count, first, Some last)
+               | _ -> assert false)
+               (None, None, None, None, None, None) l
+      with
+      | Some data, Some verified, Some resources, Some session_count, Some first, Some last ->
+         { data ; verified ; resources ; session_count ; first ; last }
+      | _ -> assert false)
+  | _ -> assert false
+
+
+let sexp_of_fingerprint f =
+  record [
+      "data", sexp_of_string f.data ;
+      "verified", sexp_of_verification_status f.verified ;
+      "resources", sexp_of_list sexp_of_string f.resources ;
+      "session_count", sexp_of_int f.session_count ;
+      "first", sexp_of_date f.first ;
+      "last", sexp_of_date f.last ;
+    ]
+
 let t_of_sexp t version =
   match t with
   | Sexp.List l ->
@@ -515,10 +583,6 @@ let t_of_sexp t version =
        Some (new_user ~jid ~name ~groups ~subscription ~properties ~otr_fingerprints ~preserve_messages ~otr_custom_config ())
      | _ -> None )
   | _ -> None
-
-
-let record kvs =
-  Sexp.List (List.map (fun (k, v) -> (Sexp.List [Sexp.Atom k; v])) kvs)
 
 let sexp_of_t t =
   record [

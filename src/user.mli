@@ -32,9 +32,9 @@ val presence_unmodified : session -> presence -> string option -> int -> bool
 type verify = [ `Manual | `SMP ]
 
 type verification_status = [
-  | `Verified of (verify * float) list
+  | `Verified of (verify * Ptime.date) list
   | `Unverified
-  | `Revoked of float
+  | `Revoked of Ptime.date
 ]
 
 type color = [ `Default | `Good | `Bad ]
@@ -48,8 +48,8 @@ type fingerprint = {
   verified      : verification_status ;
   resources     : string list ;
   session_count : int ;
-  first         : float ;
-  last          : float ;
+  first         : Ptime.date ;
+  last          : Ptime.date ;
 }
 
 val fingerprint_to_string : fingerprint -> string
