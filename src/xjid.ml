@@ -29,6 +29,7 @@ let string_to_jid_helper s =
   | Some (user, rest) ->
      match Astring.String.cut ~sep:"/" rest with
      | None -> Some (user, rest, None)
+     | Some (domain, resource) when resource = "" -> Some (user, domain, None)
      | Some (domain, resource) -> Some (user, domain, Some resource)
 
 let string_to_bare_jid s =
