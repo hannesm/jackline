@@ -23,8 +23,7 @@ depends: [
   "astring"
   "ptime" {>= "0.8.0"}
   "rresult"
-  "zed"
-  "lambda-term"
+  "notty"
   "react"
   "type_conv"
   "sexplib"
