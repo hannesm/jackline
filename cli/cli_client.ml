@@ -1,14 +1,10 @@
+open Lwt.Infix
 
-open Lwt
-
-open LTerm_style
-open LTerm_text
-open LTerm_geom
-open CamomileLibraryDyn.Camomile
-open React
+(* open React *)
 
 open Cli_state
 
+(*
 let rec take x l acc =
   match x, l with
   | 0, _       -> List.rev acc
@@ -786,7 +782,7 @@ let rec loop term state network log =
            | None -> err "no active session, try to connect first"
            | Some t -> send_msg t state active failure message) >>= fun () ->
           loop term state network log
-
+*)
 let init_system log myjid connect_mvar =
   let err r m =
     Lwt.async (fun () ->

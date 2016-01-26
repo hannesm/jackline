@@ -1,9 +1,8 @@
-open Lwt
+open Lwt.Infix
 open React
 
 let start_client cfgdir debug () =
   Sys.(set_signal sigpipe Signal_ignore) ;
-  ignore (LTerm_inputrc.load ());
 
   Printexc.register_printer (function
       | Tls_lwt.Tls_alert x -> Some ("TLS alert: " ^ Tls.Packet.alert_type_to_string x)
@@ -12,7 +11,7 @@ let start_client cfgdir debug () =
 
   Nocrypto_entropy_lwt.initialize () >>= fun () ->
 
-  Lazy.force LTerm.stdout >>= fun term ->
+  let term = Notty_lwt.Terminal.create () in
 
   Persistency.load_dsa cfgdir >>= fun dsa ->
 
@@ -21,23 +20,23 @@ let start_client cfgdir debug () =
         Cli_config.configure term () >>= fun config ->
         Persistency.dump_config cfgdir config >>= fun () ->
         (match config.Xconfig.password with
-         | None -> return_unit
+         | None -> Lwt.return_unit
          | Some x -> Persistency.dump_password cfgdir x) >>= fun () ->
         Persistency.dump_dsa cfgdir config.Xconfig.dsa >|= fun () ->
         config
-      | Some cfg -> return cfg ) >>= fun config ->
+      | Some cfg -> Lwt.return cfg ) >>= fun config ->
 
   ( match config.Xconfig.password with
     | None -> Persistency.load_password cfgdir
-    | Some x -> return (Some x)) >>= fun password ->
+    | Some x -> Lwt.return (Some x)) >>= fun password ->
   let config = { config with Xconfig.password = password } in
 
   ( match config.Xconfig.password with
     | None ->
        let jid = Xjid.full_jid_to_string config.Xconfig.jid in
-       (new Cli_config.read_password term ~prompt:("password for " ^ jid ^ ": "))#run >|= fun password ->
+       Cli_support.read_password ~prefix:("password for " ^ jid ^ ": ") term >|= fun password ->
        Some password
-    | Some x -> return (Some x)) >>= fun password ->
+    | Some x -> Lwt.return (Some x)) >>= fun password ->
   let config = { config with Xconfig.password = password } in
 
   Persistency.load_users cfgdir >>= fun users ->
@@ -48,14 +47,14 @@ let start_client cfgdir debug () =
 
   (* setup self contact *)
   let myjid = config.Xconfig.jid in
-  let _ =
+  let () =
     let bare, resource = myjid in
     let user = match Contact.find_user users bare with
       | None -> User.new_user ~jid:bare ()
       | Some u -> u
     in
     let user = { user with User.self = true } in
-    let u, _ = User.create_session user resource config.Xconfig.otr_config config.Xconfig.dsa in
+    let u, _session = User.create_session user resource config.Xconfig.otr_config config.Xconfig.dsa in
     let u = { u with User.readline_history = [ "/join jackline@conference.jabber.ccc.de" ; "/connect" ] } in
     Contact.replace_user users u
   in
@@ -65,7 +64,7 @@ let start_client cfgdir debug () =
      type /help for help"
   in
 
-  let n, log = S.create (`Local (`Full myjid, "welcome to jackline " ^ Utils.version), greeting)
+  let _n, log = S.create (`Local (`Full myjid, "welcome to jackline " ^ Utils.version), greeting)
   in
 
   (if debug then
@@ -73,7 +72,7 @@ let start_client cfgdir debug () =
      Xmpp_connection.debug_out := Some fd ;
      (fun () -> Lwt_unix.close fd)
    else
-     return (fun () -> Lwt.return_unit)) >>= fun closing ->
+     Lwt.return (fun () -> Lwt.return_unit)) >>= fun closing ->
 
   let state_mvar =
     let file = Filename.concat cfgdir "notification.state" in
@@ -103,10 +102,8 @@ let start_client cfgdir debug () =
 
   Cli_client.init_system (log ?step:None) myjid connect_mvar ;
 
-  ignore (LTerm.save_state term);  (* save the terminal state *)
-
   (* main loop *)
-  Cli_client.loop term state n (log ?step:None) >>= fun state ->
+  (*  Cli_client.loop term state n (log ?step:None) >>= fun state -> *)
 
   closing () >>= fun () ->
 
@@ -115,10 +112,7 @@ let start_client cfgdir debug () =
   (* cancel history dumper *)
   Lwt_engine.stop_event hist_dumper ;
   (* store histories a last time *)
-  Persistency.dump_histories cfgdir users >>= fun () ->
-
-  (* restore the terminal state *)
-  LTerm.load_state term
+  Persistency.dump_histories cfgdir users
 
 
 let config_dir = ref ""
