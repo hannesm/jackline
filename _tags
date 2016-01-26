@@ -26,7 +26,7 @@ true : warn(+A-4-6-7-9-40-42-44-48)
 <src/xmpp_connection.ml>: package(erm_xmpp), package(lwt), \
   package(tls), package(tls.lwt)
 
-<cli/cli_support.ml>: package(uutf), package(notty), package(lwt)
+<cli/cli_support.ml>: package(uutf), package(notty), package(lwt), package(astring)
 <cli/cli_client.ml>: package(lwt), \
   package(lwt.syntax), package(otr), package(react), package(tls), \
   package(tls.lwt), package(notty), package(erm_xmpp), \

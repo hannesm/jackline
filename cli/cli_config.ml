@@ -34,11 +34,11 @@ let configure term () =
   in
 
   (* Priority *)
-  read_line ~above ~prefix:"Enter priority (default 0): " term >>= fun prio ->
+  read_line ~above ~prefix:"Priority: " ~default:"0" term >>= fun prio ->
   (match prio with
    | "" -> Lwt.return None
    | x -> safe_int_of_string x >>= function
-          | prio when prio > 0 && prio < 127 -> Lwt.return (Some prio)
+          | prio when prio >= 0 && prio < 128 -> Lwt.return (Some prio)
           | _ -> Lwt.fail (Invalid_argument "Priority (between 0 and 127)")
   ) >>= fun priority ->
 
@@ -48,15 +48,10 @@ let configure term () =
   in
 
   (* Server name *)
-  let prefix =
-    let server = Printf.sprintf "Does connecting to server %s look ok to you?" dom in
-    server ^ "  If not, please specify servername: "
-  in
-  read_line ~above ~prefix term >>= fun hostname ->
-  let hostname = match hostname with
-    | "" -> None
-    | x -> Some x (* XXX: check that hostname is valid! *)
-  in
+  read_line ~above ~prefix:"Servername: " ~default:dom term >>= ( function
+  | "" -> Lwt.fail (Invalid_argument "Empty server name")
+  | x when x = dom -> Lwt.return None
+  | x -> Lwt.return (Some x) ) >>= fun hostname ->
 
   let above =
     let servername = "Servername: " ^ Utils.option dom (fun x -> x) hostname in
@@ -64,12 +59,11 @@ let configure term () =
   in
 
   (* Port *)
-  read_line ~above ~prefix:"Enter port (default 5222): " term >>= fun port ->
-  ( match port with
-    | "" -> Lwt.return None
-    | x -> safe_int_of_string x >>= function
-           | x when x > 0 && x < 65536 -> Lwt.return (Some x)
-           | _ -> Lwt.fail (Invalid_argument "Port number (between 1 and 65535)")
+  read_line ~above ~prefix:"Port: " ~default:"5222" term >>= ( function
+      | x when x = "5222" -> Lwt.return None
+      | x -> safe_int_of_string x >>= function
+        | x when x > 0 && x < 65536 -> Lwt.return (Some x)
+        | _ -> Lwt.fail (Invalid_argument "Port number (between 1 and 65535)")
   ) >>= fun port ->
 
   let above =
@@ -78,7 +72,7 @@ let configure term () =
   in
 
   (* Password *)
-  (let prefix = "Enter password (if empty, will be asked at every startup): " in
+  (let prefix = "Password (if empty, will be asked at every startup): " in
    read_password ~above ~prefix term >|= function
    | "" -> None
    | x -> Some x) >>= fun password ->
@@ -86,7 +80,7 @@ let configure term () =
   let above =
     let pw = "Password: " in
     let chars = match password with
-      | None -> I.string A.empty "none provided, will be asked at startup"
+      | None -> I.string A.empty "will be asked at startup"
       | Some _ -> I.uchar A.empty (`Uchar 0x2605) 5 1
     in
     above @ [I.(string A.empty pw <|> chars)]
@@ -145,9 +139,9 @@ let configure term () =
   in
 
   (* SubjectAlternativeName *)
-  let prefix = "Server name in certificate (defaults to " ^ dom ^ "): " in
-  read_line ~above ~prefix term >|= (function
-    | "" -> None
+  let prefix = "Server name in certificate: " in
+  read_line ~above ~prefix ~default:dom term >|= (function
+    | x when x = dom -> None
     | x -> Some x) >>= fun certificate_hostname ->
 
   let above =
@@ -157,7 +151,7 @@ let configure term () =
   in
 
   (* otr config *)
-  let prefix = "OTR protocol version 3 support (default: yes)? " in
+  let prefix = "OTR protocol version 3 support? " in
   read_yes_no ~above ~prefix true term >>= fun v3 ->
   let above' versions =
     let text = "OTR versions: " in
@@ -165,7 +159,7 @@ let configure term () =
     above @ [I.string A.empty (text ^ v)]
   in
   let versions = if v3 then [ `V3 ] else [] in
-  let prefix = "OTR protocol version 2 support (default: yes)? " in
+  let prefix = "OTR protocol version 2 support? " in
   read_yes_no ~above:(above' versions) ~prefix true term >>= fun v2 ->
 
   let versions = versions @ if v2 then [ `V2 ] else [] in
@@ -181,29 +175,29 @@ let configure term () =
     above @ [I.string A.empty (txt ^ p)]
   in
 
-  let prefix = "Require encryption (default: yes)? " in
+  let prefix = "Require encryption? " in
   read_yes_no ~above ~prefix true term >>= fun require ->
 
   let pols = if require then [ `REQUIRE_ENCRYPTION ] else [] in
-  let prefix = "Send whitespace tag (default: yes)? " in
+  let prefix = "Send whitespace tag? " in
   read_yes_no ~above:(above' pols) ~prefix true term >>= fun ws_tag ->
 
   let pols =
     pols @ if ws_tag then [ `SEND_WHITESPACE_TAG ] else []
   in
-  let prefix = "Whitespace tag starts key exchange (default: yes)? " in
+  let prefix = "Whitespace tag starts key exchange? " in
   read_yes_no ~above:(above' pols) ~prefix true term >>= fun ws_start ->
 
   let pols =
     pols @ if ws_start then [ `WHITESPACE_START_AKE ] else []
   in
-  let prefix = "Error starts key exchange (default: yes)? " in
+  let prefix = "Error starts key exchange? " in
   read_yes_no ~above:(above' pols) ~prefix true term >>= fun err_start ->
 
   let pols =
     pols @ if err_start then [ `ERROR_START_AKE ] else []
   in
-  let prefix = "Reveal MAC after usage (default: no)? " in
+  let prefix = "Reveal MAC after usage? " in
   read_yes_no ~above:(above' pols) ~prefix false term >>= fun reveal ->
 
   let policies =
@@ -215,10 +209,10 @@ let configure term () =
 
   let above =
     let fp = User.pp_binary_fingerprint (Otr.Utils.own_fingerprint dsa) in
-    above' pols @ [I.string A.empty ("Your newly generated OTR fingerprint: " ^ fp)]
+    above' pols @ [I.string A.empty ("Your OTR fingerprint is " ^ fp)]
   in
 
-  (read_line ~above ~prefix:"Program to execute on notification: " term >|= function
+  (read_line ~above ~prefix:"Path to notification callback: " term >|= function
    | "" -> None
    | x -> Some x) >|= fun notification_callback ->
 

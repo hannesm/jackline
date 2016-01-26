@@ -37,7 +37,10 @@ let rewrap term above (prefix, inp, inp2) (width, _) =
   in
   T.cursor term (Some (col, row))
 
-let read_line ?(above = []) ?(prefix = "") term =
+let str_to_char_list str =
+  Astring.String.fold_right (fun ch acc -> int_of_char ch :: acc) str []
+
+let read_line ?(above = []) ?(prefix = "") ?default term =
   let rec go pre post =
     let inp = Array.of_list pre in
     let inp2 = Array.of_list post in
@@ -73,7 +76,8 @@ let read_line ?(above = []) ?(prefix = "") term =
       | `Key _ -> go pre post
       | `Uchar chr -> go (pre @ [chr]) post
   in
-  go [] []
+  let pre = Utils.option [] str_to_char_list default in
+  go pre []
 
 let read_password ?(above = []) ?(prefix = "") term =
   let rec go pre =
@@ -96,7 +100,8 @@ let read_password ?(above = []) ?(prefix = "") term =
   go []
 
 let rec read_yes_no ?above ?prefix default term =
-  read_line ?above ?prefix term >>= function
+  let def = if default then "yes" else "no" in
+  read_line ?above ?prefix ~default:def term >>= function
     | "" -> Lwt.return default
     | "y" | "Y" | "yes" | "Yes" | "YES" -> Lwt.return true
     | "n" | "N" | "no" | "No" | "NO" -> Lwt.return false
