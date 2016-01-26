@@ -174,18 +174,19 @@ let send_msg t ?(kind=Chat) jid id body failure =
     return_unit
 
 let validate_utf8 txt =
-  let open CamomileLibrary.UPervasives in
-  let check_uchar c = match int_of_uchar c with
-    | 0x09 | 0x0a -> Some c (* allow tab (0x09) and newline (0x0a) *)
-    | 0x0d -> None (* ignore carriage return *)
-    | c when c < 0x20 -> Some (uchar_of_int 0xFFFD)
-    (* replace characters < 0x20 with unicode replacement character (0xFFFD) *)
-    | _ -> Some c
+  let rec loop d buf = match Uutf.decode d with
+    | `Await -> assert false
+    | `End -> Buffer.contents buf
+    | `Malformed _ -> Uutf.Buffer.add_utf_8 buf 0xFFFD ; loop d buf
+    | `Uchar x when x = 0x0009 || x = 0x000A -> (* accept tab and newline *)
+       Uutf.Buffer.add_utf_8 buf x ; loop d buf
+    | `Uchar 0x000D -> loop d buf (* ignore carriage return *)
+    | `Uchar x when x < 0x20 -> Uutf.Buffer.add_utf_8 buf 0xFFFD ; loop d buf (* replace other control characters *)
+    (* clearly: DEL 0x7F, vertical tabs, bom, left-to-right, ... *)
+    | `Uchar x -> Uutf.Buffer.add_utf_8 buf x ; loop d buf
   in
-  try
-    Zed_utf8.filter_map check_uchar txt
-  with
-  | Zed_utf8.Invalid (err, esc) -> err ^ ": " ^ esc
+  let nln = `Readline 0x000A in
+  loop (Uutf.decoder ~nln ~encoding:`UTF_8 (`String txt)) (Buffer.create (String.length txt))
 
 let delayed_timestamp = function
   | None -> None
