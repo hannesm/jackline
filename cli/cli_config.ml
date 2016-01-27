@@ -3,29 +3,40 @@ open Lwt.Infix
 open Notty
 
 let safe_int_of_string x =
-  try Lwt.return (int_of_string x) with
-  | Failure _ -> Lwt.fail (Invalid_argument "int_of_string")
+  try int_of_string x with Failure _ -> -1
 
 let string_of_int_option default = function
   | None -> default
   | Some x -> string_of_int x
 
+let ask above ?(below = []) prefix ?default transform valid term =
+  let rec doit diderror above below prefix ?default transform valid term =
+    read_line ~above ~below ~prefix ?default term >>= fun data ->
+    match valid (transform data) with
+    | `Ok f -> Lwt.return f
+    | `Invalid ->
+      let below =
+        if diderror then
+          below
+        else
+          let im = I.string A.(fg red) "invalid data, try again" in
+          im :: below
+      in
+      doit true above below prefix ?default transform valid term
+  in
+  doit false above below prefix ?default transform valid term
+
 let configure term () =
   let above =
     let greet =
-      "Welcome to Jackline configuration. You will be guided through the setup. \
-       Input format will be explained by example in square brackets. \
-       You can accept a default value by pressing enter."
+      "Welcome to Jackline configuration. You will be guided through the setup."
     in
     [I.string A.empty greet]
   in
 
   (* JID *)
-  let prefix = "Enter your jabber ID [user@server/resource]: " in
-  read_line ~above ~prefix term >>= fun jid ->
-  ( match Xjid.string_to_jid jid with
-    | Some (`Full f) -> Lwt.return f
-    | _ -> Lwt.fail (Invalid_argument "Jabber ID") ) >>= fun jid ->
+  let prefix = "Jabber ID [user@server/resource]: " in
+  ask above prefix Xjid.string_to_jid (function Some (`Full f) -> `Ok f | _ -> `Invalid) term >>= fun jid ->
 
   let ((_, dom), _) = jid in
   let above =
@@ -34,13 +45,13 @@ let configure term () =
   in
 
   (* Priority *)
-  read_line ~above ~prefix:"Priority: " ~default:"0" term >>= fun prio ->
-  (match prio with
-   | "" -> Lwt.return None
-   | x -> safe_int_of_string x >>= function
-          | prio when prio >= 0 && prio < 128 -> Lwt.return (Some prio)
-          | _ -> Lwt.fail (Invalid_argument "Priority (between 0 and 127)")
-  ) >>= fun priority ->
+  ask above "Priority: " ~default:"0"
+    safe_int_of_string
+    (function
+      | p when p = 0 -> `Ok None
+      | p when p >= 0 && p < 128 -> `Ok (Some p)
+      | _ -> `Invalid)
+    term >>= fun priority ->
 
   let above =
     let txt = "Priority: " ^ string_of_int_option "0 (default)" priority in
@@ -48,10 +59,13 @@ let configure term () =
   in
 
   (* Server name *)
-  read_line ~above ~prefix:"Servername: " ~default:dom term >>= ( function
-  | "" -> Lwt.fail (Invalid_argument "Empty server name")
-  | x when x = dom -> Lwt.return None
-  | x -> Lwt.return (Some x) ) >>= fun hostname ->
+  ask above "Servername: " ~default:dom
+    (fun x -> x)
+    (function
+      | "" -> `Invalid
+      | x when x = dom -> `Ok None
+      | x -> `Ok (Some x))
+    term >>= fun hostname ->
 
   let above =
     let servername = "Servername: " ^ Utils.option dom (fun x -> x) hostname in
@@ -59,12 +73,13 @@ let configure term () =
   in
 
   (* Port *)
-  read_line ~above ~prefix:"Port: " ~default:"5222" term >>= ( function
-      | x when x = "5222" -> Lwt.return None
-      | x -> safe_int_of_string x >>= function
-        | x when x > 0 && x < 65536 -> Lwt.return (Some x)
-        | _ -> Lwt.fail (Invalid_argument "Port number (between 1 and 65535)")
-  ) >>= fun port ->
+  ask above "Port: " ~default:"5222"
+    safe_int_of_string
+    (function
+      | x when x = 5222 -> `Ok None
+      | x when x > 0 && x < 65536 -> `Ok (Some x)
+      | _ -> `Invalid)
+    term >>= fun port ->
 
   let above =
     let port = "Port: " ^ string_of_int_option "5222 (default)" port in
@@ -86,48 +101,42 @@ let configure term () =
     above @ [I.(string A.empty pw <|> chars)]
   in
 
-  (* trust anchor *)
+  (* Fingerprint authenticator *)
   let prefix =
-    "Jackline has two distinct ways to authenticate a Jabber server: either a \
-     X.509 chain of trust where you provide the anchor OR the SHA256 fingerprint \
-     of the X.509 certificate.  If you like to provide a trust anchor, specify \
-     the path to the trust anchor file (otherwise leave this empty): "
-  in
-
-  read_line ~above ~prefix term >>= (function
-   | "" ->
-      (* XXX: actually ASK whether we should try to connect now *)
-      let prefix =
-        let pre = " (run `openssl s_client -connect "
-        and post = " -starttls xmpp | openssl x509 -sha256 -fingerprint -noout`): "
-        in
-        let hostport =
-          Utils.option dom (fun x -> x) hostname ^ ":" ^
-            string_of_int (Utils.option 5222 (fun x -> x) port)
-        in
-        "Enter fingerprint " ^ pre ^ hostport ^ post
+    "Certificate fingerprint (leave empty to instead specify CA file): "
+  and below =
+    let str =
+      let hostport =
+        Utils.option dom (fun x -> x) hostname ^ ":" ^
+        string_of_int (Utils.option 5222 (fun x -> x) port)
       in
-      read_line ~above ~prefix term >>= fun fp ->
-      (try
-          let dotted_hex_to_cs hex =
-            Nocrypto.Uncommon.Cs.of_hex
-              (String.map (function ':' -> ' ' | x -> x) hex)
-          in
-          let binary = dotted_hex_to_cs fp in
-          if Cstruct.len binary <> 32 then
-            Lwt.fail (Invalid_argument "fingerprint is either too short or too long")
-          else
-            Lwt.return fp
-        with _ ->
-          Lwt.fail (Invalid_argument "please provide only hex characters (or whitespace or colon)") ) >|= fun fp ->
-      `Fingerprint fp
-   | trust_anchor ->
-      Lwt_unix.access trust_anchor [ Unix.F_OK ; Unix.R_OK ] >>= fun () ->
-      X509_lwt.certs_of_pem trust_anchor >>= fun tas ->
-      match X509.Validation.valid_cas ~time:(Unix.time ()) tas with
-      | [] -> Lwt.fail (Invalid_argument "trust anchor file is empty!")
-      | _ -> Lwt.return (`Trust_anchor trust_anchor)
-   ) >>= fun authenticator ->
+      "run `openssl s_client -connect " ^ hostport ^
+      " -starttls xmpp | openssl x509 -sha256 -fingerprint -noout`"
+    in
+    [I.string A.empty str]
+  and transform fp =
+    let dotted_hex_to_cs hex =
+      try
+        Nocrypto.Uncommon.Cs.of_hex
+          (String.map (function ':' -> ' ' | x -> x) hex)
+      with _ -> Cstruct.create 0
+    in
+    (fp, dotted_hex_to_cs fp)
+  and valid = function
+    | ("", _) -> `Ok None
+    | (fp, x) when Cstruct.len x = 32 -> `Ok (Some fp)
+    | _ -> `Invalid
+  in
+  ask above ~below prefix transform valid term >>= (function
+  | None ->
+    (* do sth smart here... ask doesn't allow valid to have lwt.t.. -- maybe it should!? *)
+    ask above "CA file: " (fun x -> x) (fun x -> `Ok x) term >>= fun trust_anchor ->
+    Lwt_unix.access trust_anchor [ Unix.F_OK ; Unix.R_OK ] >>= fun () ->
+    X509_lwt.certs_of_pem trust_anchor >>= fun tas ->
+    (match X509.Validation.valid_cas ~time:(Unix.time ()) tas with
+     | [] -> Lwt.fail (Invalid_argument "trust anchor file is empty!")
+     | _ -> Lwt.return (`Trust_anchor trust_anchor))
+  | Some fp -> Lwt.return (`Fingerprint fp) ) >>= fun authenticator ->
 
   let above =
     let txt =

@@ -22,10 +22,11 @@ let wrap ?width ?height image =
     I.hcat is
   | None, None | Some _, Some _ -> assert false
 
-let rewrap term above (prefix, inp, inp2) (width, _) =
+let rewrap term above below (prefix, inp, inp2) (width, _) =
   let content = wrap ~width I.(prefix <|> inp <|> inp2) in
   let above = I.vcat (List.map (wrap ~width) above) in
-  let image = I.(above <-> content) in
+  let below = I.vcat (List.map (wrap ~width) below) in
+  let image = I.(above <-> content <-> below) in
   T.image term image >>= fun () ->
   let col, row =
     let col = I.width prefix + I.width inp in
@@ -40,7 +41,7 @@ let rewrap term above (prefix, inp, inp2) (width, _) =
 let str_to_char_list str =
   Astring.String.fold_right (fun ch acc -> int_of_char ch :: acc) str []
 
-let read_line ?(above = []) ?(prefix = "") ?default term =
+let read_line ?(above = []) ?(prefix = "") ?default ?(below = []) term =
   let rec go pre post =
     let inp = Array.of_list pre in
     let inp2 = Array.of_list post in
@@ -48,7 +49,7 @@ let read_line ?(above = []) ?(prefix = "") ?default term =
     and iinp = I.uchars A.(st reverse) inp
     and iinp2 = I.uchars A.(st reverse) inp2
     in
-    rewrap term above (iprefix, iinp, iinp2) (T.size term) >>= fun () ->
+    rewrap term above below (iprefix, iinp, iinp2) (T.size term) >>= fun () ->
     Lwt_stream.next (T.input term) >>= function
       | `Key `Enter ->
          let buf = Buffer.create (Array.length inp + Array.length inp2) in
@@ -79,12 +80,12 @@ let read_line ?(above = []) ?(prefix = "") ?default term =
   let pre = Utils.option [] str_to_char_list default in
   go pre []
 
-let read_password ?(above = []) ?(prefix = "") term =
+let read_password ?(above = []) ?(prefix = "") ?(below = []) term =
   let rec go pre =
     let w = I.(width (uchars A.empty (Array.of_list pre))) in
     let input = I.uchar A.(st reverse) (`Uchar 0x2605) w 1 in
     let prefix = I.string A.empty prefix in
-    rewrap term above (prefix, input, I.empty) (T.size term) >>= fun () ->
+    rewrap term above below (prefix, input, I.empty) (T.size term) >>= fun () ->
     Lwt_stream.next (T.input term) >>= function
       | `Key `Enter ->
          let buf = Buffer.create w in
@@ -99,11 +100,11 @@ let read_password ?(above = []) ?(prefix = "") term =
   in
   go []
 
-let rec read_yes_no ?above ?prefix default term =
+let rec read_yes_no ?above ?prefix ?below default term =
   let def = if default then "yes" else "no" in
-  read_line ?above ?prefix ~default:def term >>= function
+  read_line ?above ?below ?prefix ~default:def term >>= function
     | "" -> Lwt.return default
     | "y" | "Y" | "yes" | "Yes" | "YES" -> Lwt.return true
     | "n" | "N" | "no" | "No" | "NO" -> Lwt.return false
-    | _ -> read_yes_no ?above ?prefix default term
+    | _ -> read_yes_no ?above ?prefix ?below default term
 
