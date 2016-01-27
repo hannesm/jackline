@@ -35,8 +35,12 @@ let configure term () =
   in
 
   (* JID *)
-  let prefix = "Jabber ID [user@server/resource]: " in
-  ask above prefix Xjid.string_to_jid (function Some (`Full f) -> `Ok f | _ -> `Invalid) term >>= fun jid ->
+  let prefix = "Jabber ID: " in
+  let below = [I.string A.empty "format is 'user@server/resource'"] in
+  ask above ~below prefix
+    Xjid.string_to_jid
+    (function Some (`Full f) -> `Ok f | _ -> `Invalid)
+    term >>= fun jid ->
 
   let ((_, dom), _) = jid in
   let above =
@@ -45,7 +49,8 @@ let configure term () =
   in
 
   (* Priority *)
-  ask above "Priority: " ~default:"0"
+  let below = [I.string A.empty "between 0 and 128"] in
+  ask above ~below "Priority: " ~default:"0"
     safe_int_of_string
     (function
       | p when p = 0 -> `Ok None
@@ -73,7 +78,7 @@ let configure term () =
   in
 
   (* Port *)
-  ask above "Port: " ~default:"5222"
+  ask above "TCP Port: " ~default:"5222"
     safe_int_of_string
     (function
       | x when x = 5222 -> `Ok None
