@@ -12,4 +12,10 @@ let rec find_index id i = function
   | x::_ when Xjid.jid_matches id x -> i
   | _::xs                           -> find_index id (succ i) xs
 
+let rec drop x l =
+  match x, l with
+  | 0, xs      -> xs
+  | n, _ :: xs -> drop (pred n) xs
+  | _, []      -> []
+
 let version = "%%VERSION%%"
