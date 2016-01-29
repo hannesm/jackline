@@ -74,7 +74,7 @@ let buddy_to_color = function
   | `Good -> A.(fg green)
   | `Bad -> A.(fg red)
 
-let format_buddy state contact =
+let format_buddy state width contact =
   (* XXX: pass resource *)
   let jid = Contact.jid contact None in
   let a =
@@ -87,7 +87,12 @@ let format_buddy state contact =
   in
   let a = A.(buddy_to_color (Contact.color contact None) & a) in
   let first_char = if isnotified state jid then "*" else " " in
-  I.string a (first_char ^ Contact.oneline contact None)
+  let buddy = I.string a (first_char ^ Contact.oneline contact None) in
+  let len = width - I.width buddy in
+  if len > 0 then
+    I.(buddy <|> char a ' ' len 1)
+  else
+    I.hpad 0 len buddy
 
 let render_buddy_list (w, h) state =
   (* XXX: actually a treeview, resources and whether to expand contact / potential children *)
@@ -106,8 +111,8 @@ let render_buddy_list (w, h) state =
     | false, _ -> 0
   in
   let to_draw = Utils.drop start buddies in
-  let formatted = I.vcat (List.map (format_buddy state) to_draw) in
-  I.vframe ~align:`Top h (I.hframe ~align:`Left w formatted)
+  let formatted = I.vcat (List.map (format_buddy state w) to_draw) in
+  I.vframe ~align:`Top h formatted
 
 let horizontal_line buddy resource a scrollback width =
   let pre = I.string a "── "
