@@ -107,6 +107,7 @@ let start_client cfgdir debug () =
 
   let mvar = Lwt_mvar.create_empty () in
   Lwt.async (Cli_client.read_terminal term mvar) ;
+  Lwt.async (Cli_client.winch term mvar) ;
   (* main loop *)
   Cli_client.loop term mvar state n (log ?step:None) >>= fun state ->
 

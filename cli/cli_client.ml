@@ -498,6 +498,11 @@ let init_system log myjid connect_mvar =
   )
 
 
+let rec winch term mvar () =
+  T.next_resize term >>= fun _ ->
+  Lwt_mvar.put mvar (fun s -> Lwt.return s) >>= fun () ->
+  winch term mvar ()
+
 type direction = Up | Down
 
 let navigate_message_buffer state direction =
