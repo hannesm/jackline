@@ -396,7 +396,11 @@ let send_msg t state active_user failure message =
 (* stream reader *)
 (*  processes xml stream fragments, puts resulting action [message received, buddy list updates] into mvar *)
 
-(* disconnect and quit -- exceptions!? *)
+(* disconnect and quit -- exceptions!? --> for now deliver to mvar as well *)
+
+(* XXX: attention: state updates for disconnect have been removed for now (were in make_prompt) *)
+
+(* XXX: remove mutable (and hashtbl) from cli_state, rewrite code to conform *)
 
 module T = Notty_lwt.Terminal
 
@@ -404,6 +408,7 @@ module T = Notty_lwt.Terminal
 let rec loop term mvar state network log =
   (*  let history = Contact.readline_history (active state) in (* for keyup.down *) *)
   let input, cursorc =
+    (* XXX: needs a proper renderer with sideways scrolling, should maybe move into render_state!? *)
     let pre, post = state.input in
     let inp = Array.of_list pre
     and inp2 = Array.of_list post
@@ -419,67 +424,10 @@ let rec loop term mvar state network log =
   let image = render_state size input state in
   T.image term image >>= fun () ->
   T.cursor term (Some (cursorc, snd size)) >>= fun () ->
-  (* read mvar , process action *)
   Lwt_mvar.take mvar >>= fun action ->
   action state >>= fun state ->
   loop term mvar state network log
-(*
-  match_lwt
-    try_lwt
-      (new read_line ~term ~history ~state ~network ~input_buffer)#run >>= fun message ->
-      if List.length state.notifications = 0 then
-        Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) ;
-      return (Some message)
-    with
-      | Sys.Break -> return None
-      | LTerm_read_line.Interrupt -> return (Some "/quit")
-  with
-    | None -> loop term state network log
-    | Some message ->
-       let active =
-         let b = active state in
-         let b = Contact.add_readline_history b message in
-         let b = Contact.set_saved_input_buffer b "" in
-         Contact.replace_contact state.contacts b ;
-         b
-       in
-       let failure reason =
-         Connect.disconnect () >>= fun () ->
-         log (`Local (state.active_contact, "session error"), Printexc.to_string reason) ;
-         ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async (fun () ->
-                   Lwt_mvar.put state.connect_mvar Reconnect))) ;
-         Lwt.return_unit
-       and self = Xjid.jid_matches (`Bare (fst state.config.Xconfig.jid)) state.active_contact
-       and err data = log (`Local (state.active_contact, "error"), data) ; return_unit
-       in
-       let fst =
-         if String.length message = 0 then
-           None
-         else
-           Some (String.get message 0)
-       in
-       match String.length message, fst with
-       | 0, _ ->
-          if Contact.expanded active || potentially_visible_resource state active then
-            (Contact.replace_contact state.contacts (Contact.expand active) ;
-             if Contact.expanded active then
-               (state.active_contact <- `Bare (Contact.bare active))) ;
-          loop term state network log
-       | _, Some '/' ->
-          if String.trim message = "/quit" then
-            quit state >|= fun () -> state
-          else
-            Cli_commands.exec message state term active session self failure log force_redraw >>= fun () ->
-            loop term state network log
-       | _, _ when self ->
-          err "try `M-x doctor` in emacs instead" >>= fun () ->
-          loop term state network log
-       | _, _ ->
-          (match !xmpp_session with
-           | None -> err "no active session, try to connect first"
-           | Some t -> send_msg t state active failure message) >>= fun () ->
-          loop term state network log
-*)
+
 let init_system log myjid connect_mvar =
   let err r m =
     Lwt.async (fun () ->
@@ -583,8 +531,50 @@ let read_terminal term mvar () =
       let buf = Buffer.create (Array.length inp + Array.length inp2) in
       Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
       Array.iter (Uutf.Buffer.add_utf_8 buf) inp2 ;
-      Lwt.return (Buffer.contents buf)
-  XXX: handle command or send message here
+      Lwt.return (Buffer.contents buf) *)
+(*
+XXX: elsewhere: if List.length state.notifications = 0 then Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear)
+
+    | Some message ->
+       let active =
+         let b = active state in
+         let b = Contact.add_readline_history b message in
+         let b = Contact.set_saved_input_buffer b "" in
+         Contact.replace_contact state.contacts b ;
+         b
+       in
+       let failure reason =
+         Connect.disconnect () >>= fun () ->
+         log (`Local (state.active_contact, "session error"), Printexc.to_string reason) ;
+         ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async (fun () ->
+                   Lwt_mvar.put state.connect_mvar Reconnect))) ;
+         Lwt.return_unit
+       and self = Xjid.jid_matches (`Bare (fst state.config.Xconfig.jid)) state.active_contact
+       and err data = log (`Local (state.active_contact, "error"), data) ; return_unit
+       in
+       let fst =
+         if String.length message = 0 then
+           None
+         else
+           Some (String.get message 0)
+       in
+       match String.length message, fst with
+       | 0, _ ->
+          if Contact.expanded active || potentially_visible_resource state active then
+            (Contact.replace_contact state.contacts (Contact.expand active) ;
+             if Contact.expanded active then
+               (state.active_contact <- `Bare (Contact.bare active))) ;
+       | _, Some '/' ->
+          if String.trim message = "/quit" then
+            quit state >|= fun () -> state
+          else
+            Cli_commands.exec message state term active session self failure log force_redraw >>= fun () ->
+       | _, _ when self ->
+          err "try `M-x doctor` in emacs instead" >>= fun () ->
+       | _, _ ->
+          (match !xmpp_session with
+           | None -> err "no active session, try to connect first"
+           | Some t -> send_msg t state active failure message) >>= fun () ->
 *)
 
     (* UI navigation and toggles *)
