@@ -110,12 +110,9 @@ let format_log tz_offset_s now log =
   in
   I.string A.empty (time ^ from ^ " " ^ message)
 
-let draw_logs (w, h) tz_offset_s now entries =
-  (* we want to wrap! *)
-  if List.length entries > 0 then
-    listview (w, h) (pred (List.length entries)) (format_log tz_offset_s now) entries
-  else
-    I.void w h
+let draw_logs width tz_offset_s now entries =
+  let formatted = List.map (format_log tz_offset_s now) entries in
+  I.vcat (List.map (wrap ~width) formatted)
 
 (*
 let format_buddies state buddies width =
@@ -155,46 +152,51 @@ let format_buddies state buddies width =
        acc)
     buddies []
 *)
-(*
-let format_messages tz_offset_s now buddy resource jid msgs =
-  let printmsg { User.direction ; encrypted ; received ; timestamp ; message ; _ } =
-    let time = print_time ~now ~tz_offset_s timestamp in
-    let msg_color, pre =
-      match buddy with
-      | `Room _ ->
-         (match direction with
-          | `From (`Full (_, nick)) -> (`Highlight, nick ^ ": ")
-          | `From (`Bare _) -> (`Highlight, " ")
-          | `Local (_, x) -> (`Default, "***" ^ x ^ " ")
-          | `To _ -> (`Default, if received then "-> " else "?> ")
-         )
-      | `User _ ->
-         let en = if encrypted then "O" else "-" in
-         let msg_color, pre = match direction with
-           | `From _ -> (`Highlight, "<" ^ en ^ "- ")
-           | `To _   -> let f = if received then "-" else "?" in
-                        (`Default, f ^ en ^ "> ")
-           | `Local (_, x) when x = "" -> (`Default, "*** ")
-           | `Local (_, x) -> (`Default, "***" ^ x ^ "*** ")
-         in
-         let r =
-           let show_res =
-             let other = User.jid_of_direction direction in
-             let other_resource s = match Xjid.resource other with
-               | None -> None
-               | Some x when x = s.User.resource -> None
-               | Some x -> Some x
-             in
-             match resource with
-             | Some (`Session s) -> other_resource s
-             | _ -> Xjid.resource other
-           in
-           Utils.option "" (fun x -> "(" ^ x ^ ") ") show_res
-         in
-         (msg_color, r ^ pre)
-    in
-    (msg_color, time ^ pre ^ message)
+
+let to_style = function
+  | `Default -> A.empty
+  | `Highlight -> A.(st bold)
+
+let format_message tz_offset_s now buddy resource
+    { User.direction ; encrypted ; received ; timestamp ; message ; _ } =
+  let time = print_time ~now ~tz_offset_s timestamp in
+  let style, pre =
+    match buddy with
+    | `Room _ ->
+      (match direction with
+       | `From (`Full (_, nick)) -> (`Highlight, nick ^ ": ")
+       | `From (`Bare _) -> (`Highlight, " ")
+       | `Local (_, x) -> (`Default, "***" ^ x ^ " ")
+       | `To _ -> (`Default, if received then "-> " else "?> ")
+      )
+    | `User _ ->
+      let en = if encrypted then "O" else "-" in
+      let msg_color, pre = match direction with
+        | `From _ -> (`Highlight, "<" ^ en ^ "- ")
+        | `To _   -> let f = if received then "-" else "?" in
+          (`Default, f ^ en ^ "> ")
+        | `Local (_, x) when x = "" -> (`Default, "*** ")
+        | `Local (_, x) -> (`Default, "***" ^ x ^ "*** ")
+      in
+      let r =
+        let show_res =
+          let other = User.jid_of_direction direction in
+          let other_resource s = match Xjid.resource other with
+            | None -> None
+            | Some x when x = s.User.resource -> None
+            | Some x -> Some x
+          in
+          match resource with
+          | Some (`Session s) -> other_resource s
+          | _ -> Xjid.resource other
+        in
+        Utils.option "" (fun x -> "(" ^ x ^ ") ") show_res
+      in
+      (msg_color, r ^ pre)
   in
+  I.string (to_style style) (time ^ pre ^ message)
+
+let draw_messages width tz_offset_s now buddy resource jid msgs =
   let tst o =
     if Contact.expanded buddy then
       match buddy, jid with
@@ -204,9 +206,10 @@ let format_messages tz_offset_s now buddy resource jid msgs =
     else
       true
   in
-  List.map printmsg
-    (List.filter (fun m -> tst (User.jid_of_direction m.User.direction)) msgs)
-*)
+  let msgs = List.map (format_message tz_offset_s now buddy resource)
+      (List.filter (fun m -> tst (User.jid_of_direction m.User.direction)) msgs)
+  in
+  I.vcat (List.map (wrap ~width) msgs)
 
 let buddy_to_color = function
   | `Default -> A.empty
@@ -214,6 +217,7 @@ let buddy_to_color = function
   | `Bad -> A.(fg red)
 
 let format_buddy state contact =
+  (* missing: resource / tree *)
   let jid = Contact.jid contact None in
   let a =
     if isactive state jid then
@@ -232,14 +236,25 @@ let format_buddy state contact =
   in
   I.string a (first_char ^ Contact.oneline contact None)
 
-let draw_buddy_list size state =
+let draw_buddy_list (w, h) state =
   (* todo: actually a treeview, resources and whether to expand contact / potential children *)
   let buddies = active_contacts state in
-  let active_idx =
-    let jids = List.map (fun c -> Contact.jid c None) buddies in
-    Utils.find_index state.active_contact 0 jids
+  let start =
+    let focus =
+      let jids = List.map (fun c -> Contact.jid c None) buddies in
+      Utils.find_index state.active_contact 0 jids
+    in
+    let l = List.length buddies in
+    assert (focus >= 0 && focus < l) ;
+    let up, down = (h / 2, (h + 1) / 2) in
+    match focus - up >= 0, focus + down > l with
+    | true, true -> l - h
+    | true, false -> focus - up
+    | false, _ -> 0
   in
-  listview size active_idx (format_buddy state) buddies
+  let to_draw = Utils.drop start buddies in
+  let formatted = I.vcat (List.map (format_buddy state) to_draw) in
+  I.vframe ~align:`Top h (I.hframe ~align:`Left w formatted)
 
 let horizontal_line buddy resource a scrollback width =
   (* 'buddy|group|scroll:' jid - otr status - presence status *)
@@ -355,7 +370,7 @@ let draw_state (width, height) input state =
   let buddy_width, chat_width =
     let b = state.buddy_width in
     match state.window_mode with
-    | BuddyList        -> (b, width - b - 1)
+    | BuddyList -> (b, width - b - 1)
     | FullScreen | Raw -> (0, width)
   in
 
@@ -370,7 +385,6 @@ let draw_state (width, height) input state =
     let a = buddy_to_color (Contact.color active resource) in
 
     let buddies = draw_buddy_list (buddy_width, main_height) state
-    and messages = I.vcat (List.map (I.string A.empty) [ "hallo" ; "abc" ])
     and vline = I.uchar a (`Uchar 0x2502) 1 main_height
     and hline = horizontal_line active resource a state.scrollback width
     in
@@ -387,32 +401,24 @@ let draw_state (width, height) input state =
     and tz_offset_s = tz_offset_s ()
     in
     let logs =
-      draw_logs (width, log_height) tz_offset_s now (self.User.message_history)
+      let l = draw_logs width tz_offset_s now self.User.message_history in
+      I.vframe ~align:`Bottom log_height l
     in
-(*
-    let messages =
-      let msg_colors, data =
-        let msgs =
-          if isself then
-            List.map (fun s -> `Default, s) (format_log tz_offset_s now statusses)
-          else
-            format_messages tz_offset_s now active resource state.active_contact (Contact.messages active)
-        in
-        List.split msgs
-      in
-      let scroll default lines =
-        (* data is already in right order -- but we need to strip scrollback *)
-        let elements = drop (state.scrollback * main_size) (List.rev lines) in
-        pad_l_rev default main_size (List.rev elements)
-      in
-      let render_msg (color, line) =
-        let data = S (line ^ "\n") in
-        match color with
-        | `Default   -> [ data ]
-        | `Highlight -> [ B_bold true ; data ; E_bold ]
-      in
-      *)
 
+    let messages =
+      let isself = Xjid.jid_matches (`Bare (fst state.config.Xconfig.jid)) state.active_contact in
+      let scroll image =
+        let bottom = state.scrollback * main_height in
+        I.vframe ~align:`Bottom main_height (I.vcrop 0 bottom image)
+      in
+      let data =
+        if isself then
+          draw_logs chat_width tz_offset_s now self.User.message_history
+        else
+          draw_messages chat_width tz_offset_s now active resource state.active_contact (Contact.messages active)
+      in
+      scroll data
+    in
 
     I.(vcat [ buddies <|> vline <|> messages ;
               hline ;
