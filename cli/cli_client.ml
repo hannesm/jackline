@@ -110,8 +110,8 @@ let format_log tz_offset_s now log =
   in
   I.string A.empty (time ^ from ^ " " ^ message)
 
-let draw_logs width tz_offset_s now entries =
-  let formatted = List.map (format_log tz_offset_s now) entries in
+let render_wrapped_list width fmt entries =
+  let formatted = List.map fmt entries in
   I.vcat (List.map (wrap ~width) formatted)
 
 (*
@@ -196,21 +196,6 @@ let format_message tz_offset_s now buddy resource
   in
   I.string (to_style style) (time ^ pre ^ message)
 
-let draw_messages width tz_offset_s now buddy resource jid msgs =
-  let tst o =
-    if Contact.expanded buddy then
-      match buddy, jid with
-      | `Room _, _ -> true
-      | `User _, `Bare _ -> true
-      | `User _, `Full _ -> Xjid.jid_matches o jid
-    else
-      true
-  in
-  let msgs = List.map (format_message tz_offset_s now buddy resource)
-      (List.filter (fun m -> tst (User.jid_of_direction m.User.direction)) msgs)
-  in
-  I.vcat (List.map (wrap ~width) msgs)
-
 let buddy_to_color = function
   | `Default -> A.empty
   | `Good -> A.(fg green)
@@ -236,7 +221,7 @@ let format_buddy state contact =
   in
   I.string a (first_char ^ Contact.oneline contact None)
 
-let draw_buddy_list (w, h) state =
+let render_buddy_list (w, h) state =
   (* todo: actually a treeview, resources and whether to expand contact / potential children *)
   let buddies = active_contacts state in
   let start =
@@ -357,7 +342,7 @@ let tz_offset_s () =
   | None -> 0 (* XXX: report error *)
   | Some x -> x
 
-let draw_state (width, height) input state =
+let render_state (width, height) input state =
 
   let log_height, main_height =
     let s = state.log_height in
@@ -365,9 +350,7 @@ let draw_state (width, height) input state =
       (0, height - 2)
     else
       (s, height - s - 3)
-  in
-
-  let buddy_width, chat_width =
+  and buddy_width, chat_width =
     let b = state.buddy_width in
     match state.window_mode with
     | BuddyList -> (b, width - b - 1)
@@ -380,104 +363,78 @@ let draw_state (width, height) input state =
 
     let active = active state
     and resource = resource state
+    and self = self state
     in
 
     let a = buddy_to_color (Contact.color active resource) in
 
-    let buddies = draw_buddy_list (buddy_width, main_height) state
-    and vline = I.uchar a (`Uchar 0x2502) 1 main_height
-    and hline = horizontal_line active resource a state.scrollback width
-    in
-
-    let self = self state in
     let status =
-      let notify = List.length state.notifications > 0 in
-      let log = Contact.preserve_messages active in
-      let mysession = selfsession state in
+      let notify = List.length state.notifications > 0
+      and log = Contact.preserve_messages active
+      and mysession = selfsession state
+      in
       status_line self mysession notify log a width
     in
 
     let now = Ptime_clock.now ()
     and tz_offset_s = tz_offset_s ()
     in
-    let logs =
-      let l = draw_logs width tz_offset_s now self.User.message_history in
-      I.vframe ~align:`Bottom log_height l
-    in
 
-    let messages =
-      let isself = Xjid.jid_matches (`Bare (fst state.config.Xconfig.jid)) state.active_contact in
+    let logfmt = format_log tz_offset_s now in
+
+    let hline_log =
+      if log_height = 0 then
+        I.empty
+      else
+        let logs =
+          let l = render_wrapped_list width logfmt self.User.message_history in
+          I.vframe ~align:`Bottom log_height l
+        and hline = horizontal_line active resource a state.scrollback width
+        in
+        I.(hline <-> logs)
+    and messages p msgfmt =
       let scroll image =
         let bottom = state.scrollback * main_height in
         I.vframe ~align:`Bottom main_height (I.vcrop 0 bottom image)
-      in
-      let data =
-        if isself then
-          draw_logs chat_width tz_offset_s now self.User.message_history
+      and data =
+        if Xjid.jid_matches (`Bare (fst state.config.Xconfig.jid)) state.active_contact then
+          render_wrapped_list chat_width logfmt self.User.message_history
         else
-          draw_messages chat_width tz_offset_s now active resource state.active_contact (Contact.messages active)
+          render_wrapped_list chat_width msgfmt (List.filter p (Contact.messages active))
       in
       scroll data
     in
 
-    I.(vcat [ buddies <|> vline <|> messages ;
-              hline ;
-              logs ;
-              status ;
-              input ])
-
-(* XXX: logic TBI
-    - window mode (buddy_width / chat_width already good)
-    - no log / log display
-
-    let main_window =
-      match state.window_mode with
-        | BuddyList ->
-          let chat = line_wrap_with_tags ~max_length:chat_width ~tags:msg_colors data in
-          let chat = scroll (`Default, "") chat in
-          let buddies = buddy_list state main_size buddy_width in
-          let comb = List.combine buddies chat in
-          let pipe = S (Zed_utf8.singleton (UChar.of_int 0x2502)) in
-          List.map
-            (fun (buddy, chat) ->
-               buddy @ [ B_fg fg_color ; pipe ; E_fg ] @ (render_msg chat))
-            comb
-
-        | FullScreen ->
-          let chat = line_wrap_with_tags ~max_length:chat_width ~tags:msg_colors data in
-          let chat = scroll (`Default, "") chat in
-          List.map render_msg chat
-
-        | Raw ->
-          let data =
-            List.map
-              (fun x -> x.User.message)
-              (List.filter
-                 (fun x -> match x.User.direction with
-                    | `Local _ -> false
-                    | `From _ -> true
-                    | `To _ -> false)
-                 (Contact.messages active))
-          in
-          let wrapped = line_wrap ~raw:() ~max_length:chat_width data in
-          let chat = scroll "" wrapped in
-          List.map (fun x -> [ S x ; S "\n" ]) chat
-    in
-
-    let showing_buddies = match state.window_mode with
-      | BuddyList -> true
-      | FullScreen | Raw -> false
-    in
-    let main = List.flatten main_window in
-
-    try
-      if log_size = 0 then
-        eval ( main @ status @ [ S "\n" ] )
+    let msgfmt = format_message tz_offset_s now active resource
+    and msgfilter m =
+      let o = User.jid_of_direction m.User.direction in
+      if Contact.expanded active then
+        match active, state.active_contact with
+        | `Room _, _ -> true
+        | `User _, `Bare _ -> true
+        | `User _, `Full _ -> Xjid.jid_matches o state.active_contact
       else
-        eval ( main @ hline @ [ S "\n" ; S logs ; S "\n" ] @ status @ [ S "\n" ] )
-    with
-      _ -> eval ([ S "error during evaluating layout"])
-*)
+        true
+    in
+
+    match state.window_mode with
+    | BuddyList ->
+      let buddies = render_buddy_list (buddy_width, main_height) state
+      and vline = I.uchar a (`Uchar 0x2502) 1 main_height
+      in
+      I.(vcat [ buddies <|> vline <|> messages msgfilter msgfmt ; hline_log ; status ; input ])
+
+    | FullScreen ->
+      I.(vcat [ messages msgfilter msgfmt ; hline_log ; status ; input ])
+
+    | Raw ->
+      let p m = match m.User.direction with
+        | `From _ -> true
+        | _ -> false
+      and msgfmt x = I.string A.empty x.User.message
+      in
+      I.(vcat [ messages p msgfmt ; hline_log ; status ; input ])
+
 
 (*
 let up = UChar.of_int 0x2500
@@ -750,7 +707,7 @@ let rec loop term state network log =
   (* render things *)
   let (w, h) = T.size term in
   let input = I.string A.empty input_buffer in
-  let image = draw_state (w, h) input state in
+  let image = render_state (w, h) input state in
   T.image term image >>= fun () ->
   T.cursor term (Some (succ (I.width input), h)) >>= fun () ->
   Lwt_unix.sleep(5.) >>= fun () ->
