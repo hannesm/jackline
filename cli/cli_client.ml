@@ -276,10 +276,9 @@ let render_state (width, height) input state =
     in
     I.(main <-> bottom)
 
-(*
 let quit state =
   match !xmpp_session with
-  | None -> return_unit
+  | None -> Lwt.return_unit
   | Some x ->
      let otr_sessions =
        Contact.fold
@@ -300,11 +299,12 @@ let quit state =
        match Otr.Engine.end_otr session.User.otr with
        | _, Some body ->
           let jid = `Full (user.User.bare_jid, session.User.resource) in
-          send x jid None body (fun _ -> return_unit)
-       | _ -> return_unit
+          send x jid None body (fun _ -> Lwt.return_unit)
+       | _ -> Lwt.return_unit
      in
      Lwt_list.iter_s send_out otr_sessions
 
+(*
 let warn jid user add_msg =
   let last_msg =
     try Some (List.find
@@ -425,8 +425,9 @@ let rec loop term mvar state network log =
   T.image term image >>= fun () ->
   T.cursor term (Some (cursorc, snd size)) >>= fun () ->
   Lwt_mvar.take mvar >>= fun action ->
-  action state >>= fun state ->
-  loop term mvar state network log
+  action state >>= function
+  | `Ok state -> loop term mvar state network log
+  | `Quit state -> Lwt.return state
 
 let init_system log myjid connect_mvar =
   let err r m =
@@ -448,7 +449,7 @@ let init_system log myjid connect_mvar =
 
 let rec winch term mvar () =
   T.next_resize term >>= fun _ ->
-  Lwt_mvar.put mvar (fun s -> Lwt.return s) >>= fun () ->
+  Lwt_mvar.put mvar (fun s -> Lwt.return (`Ok s)) >>= fun () ->
   winch term mvar ()
 
 type direction = Up | Down
@@ -484,11 +485,12 @@ let read_terminal term mvar () =
     let pre, post = s.input in
     let input = f pre post in
     { s with input }
+  and ok s = Lwt.return (`Ok s)
   in
   let rec loop () =
     Lwt_stream.next (T.input term) >>= function
     | `Uchar chr ->
-      p (fun s -> Lwt.return (input s (fun pre post -> pre @ [chr], post))) >>= fun () ->
+      p (fun s -> ok (input s (fun pre post -> pre @ [chr], post))) >>= fun () ->
       loop ()
 
     (* navigation / readline stuff *)
@@ -497,41 +499,51 @@ let read_terminal term mvar () =
         | [] -> (pre, post)
         | _::tl -> (List.rev tl, post)
       in
-      p (fun s -> Lwt.return (input s f)) >>= fun () ->
+      p (fun s -> ok (input s f)) >>= fun () ->
       loop ()
     | `Key `Del ->
       let f pre post = match post with
         | [] -> (pre, post)
         | _::tl -> (pre, tl)
       in
-      p (fun s -> Lwt.return (input s f)) >>= fun () ->
+      p (fun s -> ok (input s f)) >>= fun () ->
       loop ()
     | `Key `Home ->
-      p (fun s -> Lwt.return (input s (fun pre post -> [], pre @ post))) >>= fun () ->
+      p (fun s -> ok (input s (fun pre post -> [], pre @ post))) >>= fun () ->
       loop ()
     | `Key `End ->
-      p (fun s -> Lwt.return (input s (fun pre post -> pre @ post, []))) >>= fun () ->
+      p (fun s -> ok (input s (fun pre post -> pre @ post, []))) >>= fun () ->
       loop ()
     | `Key `Right ->
       let f pre post = match post with
         | [] -> (pre, post)
         | hd::tl -> (pre @ [hd], tl)
       in
-      p (fun s -> Lwt.return (input s f)) >>= fun () ->
+      p (fun s -> ok (input s f)) >>= fun () ->
       loop ()
     | `Key `Left ->
       let f pre post = match List.rev pre with
         | [] -> ([], post)
         | hd::tl -> (List.rev tl, hd :: post)
       in
-      p (fun s -> Lwt.return (input s f)) >>= fun () ->
+      p (fun s -> ok (input s f)) >>= fun () ->
       loop ()
 
-(*    | `Key `Enter ->
-      let buf = Buffer.create (Array.length inp + Array.length inp2) in
-      Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
-      Array.iter (Uutf.Buffer.add_utf_8 buf) inp2 ;
-      Lwt.return (Buffer.contents buf) *)
+    | `Key `Enter ->
+      let handler s =
+        let pre, post = s.input in
+        let inp = Array.of_list pre
+        and inp2 = Array.of_list post
+        in
+        let buf = Buffer.create (Array.length inp + Array.length inp2) in
+        Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
+        Array.iter (Uutf.Buffer.add_utf_8 buf) inp2 ;
+        match Buffer.contents buf with
+        | "/quit" -> quit s >|= fun () -> `Quit s
+        | x -> add_status s (`Local (`Full s.config.Xconfig.jid, "XXX")) x ; ok s
+      in
+      p handler >>= fun () ->
+      loop ()
 (*
 XXX: elsewhere: if List.length state.notifications = 0 then Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear)
 
@@ -580,29 +592,29 @@ XXX: elsewhere: if List.length state.notifications = 0 then Lwt.async (fun () ->
     (* UI navigation and toggles *)
     | `Key `Pg_up ->
       (* XXX: preserve input buffer for current user *)
-      p (fun s -> navigate_buddy_list s Up ; Lwt.return s) >>= fun () ->
+      p (fun s -> navigate_buddy_list s Up ; ok s) >>= fun () ->
       loop ()
     | `Key `Pg_dn ->
       (* XXX: preserve input buffer for current user *)
-      p (fun s -> navigate_buddy_list s Down ; Lwt.return s) >>= fun () ->
+      p (fun s -> navigate_buddy_list s Down ; ok s) >>= fun () ->
       loop ()
     | `Key (`Fn 5) ->
-      p (fun s -> Lwt.return { s with show_offline = not s.show_offline }) >>= fun () ->
+      p (fun s -> ok { s with show_offline = not s.show_offline }) >>= fun () ->
       loop ()
     | `Key (`Fn 10) ->
-      p (fun s -> Lwt.return { s with log_height = succ s.log_height }) >>= fun () ->
+      p (fun s -> ok { s with log_height = succ s.log_height }) >>= fun () ->
       loop ()
 (*    | `Key `Shift (`Fn 10) ->
-      p (fun s -> Lwt.return { s with log_height = max 0 (pred s.log_height) }) >>= fun () ->
+      p (fun s -> ok { s with log_height = max 0 (pred s.log_height) }) >>= fun () ->
       loop () *)
     | `Key (`Fn 11) ->
-      p (fun s -> Lwt.return { s with buddy_width = succ s.buddy_width }) >>= fun () ->
+      p (fun s -> ok { s with buddy_width = succ s.buddy_width }) >>= fun () ->
       loop ()
 (*    | `Key `Shift (`Fn 11) ->
-      p (fun s -> Lwt.return { s with buddy_width = max 0 (pred s.buddy_width) }) >>= fun () ->
+      p (fun s -> ok { s with buddy_width = max 0 (pred s.buddy_width) }) >>= fun () ->
       loop () *)
     | `Key (`Fn 12) ->
-      p (fun s -> Lwt.return { s with window_mode = next_display_mode s.window_mode }) >>= fun () ->
+      p (fun s -> ok { s with window_mode = next_display_mode s.window_mode }) >>= fun () ->
       loop ()
 
     | _ -> loop ()
