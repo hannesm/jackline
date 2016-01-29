@@ -216,7 +216,7 @@ let render_state (width, height) input state =
   in
 
   if main_height <= 4 || chat_width <= 20 then
-    (I.string A.empty "need more space", 1)
+    I.string A.empty "need more space"
   else
     let active = active state
     and resource = resource state
@@ -274,29 +274,7 @@ let render_state (width, height) input state =
       in
       I.vcat [ hline_log ; status ; input ]
     in
-    (I.(main <-> bottom), I.width input)
-
-
-(*
-  method! send_action = function
-    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrldown ->
-      navigate_message_buffer state Down
-    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrlup ->
-      navigate_message_buffer state Up
-    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrlq ->
-      if List.length state.notifications > 0 then
-        (self#save_input_buffer ;
-         activate_contact state (List.hd (List.rev state.notifications)) ;
-         force_redraw () ;
-         super#send_action LTerm_read_line.Break )
-    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrlx ->
-      self#save_input_buffer ;
-      activate_contact state state.last_active_contact ;
-      force_redraw () ;
-      super#send_action LTerm_read_line.Break
-    | action ->
-      super#send_action action
-*)
+    I.(main <-> bottom)
 
 (*
 let quit state =
@@ -425,19 +403,26 @@ module T = Notty_lwt.Terminal
 (* this is rendering and drawing stuff, waiting for change on mvar... *)
 let rec loop term mvar state network log =
   (*  let history = Contact.readline_history (active state) in (* for keyup.down *) *)
-  (* XXX: input handling (sideways scrolling, two lists) *)
-  let input_buffer = "foobar" in (* Contact.saved_input_buffer (active state) in*)
+  let input, cursorc =
+    let pre, post = state.input in
+    let inp = Array.of_list pre
+    and inp2 = Array.of_list post
+    in
+
+    let iinp = I.uchars A.empty inp
+    and iinp2 = I.uchars A.empty inp2
+    in
+    (I.(iinp <|> iinp2), succ (I.width iinp))
+  in
   (* render things *)
   let size = T.size term in
-  let input = I.string A.empty input_buffer in
-  let image, cursorc = render_state size input state in
+  let image = render_state size input state in
   T.image term image >>= fun () ->
   T.cursor term (Some (cursorc, snd size)) >>= fun () ->
   (* read mvar , process action *)
   Lwt_mvar.take mvar >>= fun action ->
   action state >>= fun state ->
   loop term mvar state network log
-  (* handle specific keypresses (pgup/down etc) *)
 (*
   match_lwt
     try_lwt
@@ -536,70 +521,95 @@ let navigate_buddy_list state direction =
   | Up -> set_active ((l + pred active_idx) mod l)
 
 let read_terminal term mvar () =
+  (* XXX: message scrolling C-up / C-down *)
+  (* XXX: notifications C-q / C-x *)
+  (* XXX: emacs key bindings: C-ae C-ku C-fb C-left/right [word forward/backward] C- wy[mark, kill, yank] C-_-[undo/redo] *)
+  (* XXX: handle history (up/down) *)
+  (* XXX: handle tab completion -- maybe suggestions in grey as well *)
+  let p = Lwt_mvar.put mvar
+  and input s f =
+    let pre, post = s.input in
+    let input = f pre post in
+    { s with input }
+  in
   let rec loop () =
     Lwt_stream.next (T.input term) >>= function
-(*    | `Uchar chr ->
-      go (pre @ [chr]) post *)
+    | `Uchar chr ->
+      p (fun s -> Lwt.return (input s (fun pre post -> pre @ [chr], post))) >>= fun () ->
+      loop ()
+
+    (* navigation / readline stuff *)
+    | `Key `Bs ->
+      let f pre post = match List.rev pre with
+        | [] -> (pre, post)
+        | _::tl -> (List.rev tl, post)
+      in
+      p (fun s -> Lwt.return (input s f)) >>= fun () ->
+      loop ()
+    | `Key `Del ->
+      let f pre post = match post with
+        | [] -> (pre, post)
+        | _::tl -> (pre, tl)
+      in
+      p (fun s -> Lwt.return (input s f)) >>= fun () ->
+      loop ()
+    | `Key `Home ->
+      p (fun s -> Lwt.return (input s (fun pre post -> [], pre @ post))) >>= fun () ->
+      loop ()
+    | `Key `End ->
+      p (fun s -> Lwt.return (input s (fun pre post -> pre @ post, []))) >>= fun () ->
+      loop ()
+    | `Key `Right ->
+      let f pre post = match post with
+        | [] -> (pre, post)
+        | hd::tl -> (pre @ [hd], tl)
+      in
+      p (fun s -> Lwt.return (input s f)) >>= fun () ->
+      loop ()
+    | `Key `Left ->
+      let f pre post = match List.rev pre with
+        | [] -> ([], post)
+        | hd::tl -> (List.rev tl, hd :: post)
+      in
+      p (fun s -> Lwt.return (input s f)) >>= fun () ->
+      loop ()
+
 (*    | `Key `Enter ->
       let buf = Buffer.create (Array.length inp + Array.length inp2) in
       Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
       Array.iter (Uutf.Buffer.add_utf_8 buf) inp2 ;
       Lwt.return (Buffer.contents buf)
-    | `Key `Bs ->
-      (match List.rev pre with
-       | [] -> go pre post
-       | _::tl -> go (List.rev tl) post)
-    | `Key `Del ->
-      (match post with
-       | [] -> go pre post
-       | _::tl -> go pre tl)
-    | `Key `Home -> go [] (pre @ post)
-    | `Key `End -> go (pre @ post) []
-    | `Key `Right ->
-      (match post with
-       | [] -> go pre post
-       | hd::tl -> go (pre @ [hd]) tl)
-    | `Key `Left ->
-      (match List.rev pre with
-       | [] -> go [] post
-       | hd::tl -> go (List.rev tl) (hd :: post))
+  XXX: handle command or send message here
 *)
 
+    (* UI navigation and toggles *)
     | `Key `Pg_up ->
       (* XXX: preserve input buffer for current user *)
-      let modify state =
-        navigate_buddy_list state Up ;
-        Lwt.return state
-      in
-      Lwt_mvar.put mvar modify >>= fun () ->
+      p (fun s -> navigate_buddy_list s Up ; Lwt.return s) >>= fun () ->
       loop ()
     | `Key `Pg_dn ->
       (* XXX: preserve input buffer for current user *)
-      let modify state =
-        navigate_buddy_list state Down ;
-        Lwt.return state
-      in
-      Lwt_mvar.put mvar modify >>= fun () ->
+      p (fun s -> navigate_buddy_list s Down ; Lwt.return s) >>= fun () ->
       loop ()
     | `Key (`Fn 5) ->
-      Lwt_mvar.put mvar (fun s -> Lwt.return { s with show_offline = not s.show_offline }) >>= fun () ->
+      p (fun s -> Lwt.return { s with show_offline = not s.show_offline }) >>= fun () ->
       loop ()
     | `Key (`Fn 10) ->
-      Lwt_mvar.put mvar (fun s -> Lwt.return { s with log_height = succ s.log_height }) >>= fun () ->
+      p (fun s -> Lwt.return { s with log_height = succ s.log_height }) >>= fun () ->
       loop ()
 (*    | `Key `Shift (`Fn 10) ->
-      Lwt_mvar.put mvar (fun s -> Lwt.return { s with log_height = max 0 (pred s.log_height) }) >>= fun () ->
+      p (fun s -> Lwt.return { s with log_height = max 0 (pred s.log_height) }) >>= fun () ->
       loop () *)
     | `Key (`Fn 11) ->
-      Lwt_mvar.put mvar (fun s -> Lwt.return { s with buddy_width = succ s.buddy_width }) >>= fun () ->
+      p (fun s -> Lwt.return { s with buddy_width = succ s.buddy_width }) >>= fun () ->
       loop ()
-(*    | `Key (`Fn 11) ->
-      Lwt_mvar.put mvar (fun s -> Lwt.return { s with buddy_width = max 0 (pred s.buddy_width) }) >>= fun () ->
+(*    | `Key `Shift (`Fn 11) ->
+      p (fun s -> Lwt.return { s with buddy_width = max 0 (pred s.buddy_width) }) >>= fun () ->
       loop () *)
     | `Key (`Fn 12) ->
-      Lwt_mvar.put mvar
-        (fun s -> Lwt.return { s with window_mode = next_display_mode s.window_mode }) >>= fun () ->
+      p (fun s -> Lwt.return { s with window_mode = next_display_mode s.window_mode }) >>= fun () ->
       loop ()
+
     | _ -> loop ()
   in
   loop ()

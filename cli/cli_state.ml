@@ -23,6 +23,8 @@ type connect_v =
   | Reconnect
   | Presence of (User.presence * string option * int option)
 
+type input = int list * int list
+
 type state = {
   config_directory            : string                     ; (* set initially *)
   config                      : Xconfig.t                  ; (* set initially *)
@@ -46,6 +48,7 @@ type state = {
 
   log_height          : int                        ;
   buddy_width         : int                        ;
+  input               : input ;
 }
 
 module Notify = struct
@@ -232,6 +235,7 @@ let empty_state config_directory config contacts connect_mvar state_mvar =
 
     log_height          = 6         ;
     buddy_width         = 24        ;
+    input               = ([], [])
 }
 
 
