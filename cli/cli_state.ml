@@ -38,14 +38,14 @@ type state = {
 
   mutable notifications       : Xjid.t list                ; (* list to blink *)
 
-  mutable show_offline        : bool                       ; (* F5 stuff *)
+  show_offline        : bool                       ; (* F5 stuff *)
   mutable window_mode         : display_mode               ; (* F12 stuff *)
   mutable scrollback          : int                        ; (* scroll-pgup/down state *)
 
   mutable last_status         : (User.direction * string)  ; (* internal use only *)
 
-  mutable log_height          : int                        ;
-  mutable buddy_width         : int                        ;
+  log_height          : int                        ;
+  buddy_width         : int                        ;
 }
 
 module Notify = struct

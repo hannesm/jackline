@@ -1,96 +1,10 @@
 open Lwt.Infix
 
 open Notty
-(* open React *)
 
 open Cli_state
 open Cli_support
 
-let rec take x l acc =
-  match x, l with
-  | 0, _       -> List.rev acc
-  | n, x :: xs -> take (pred n) xs (x :: acc)
-  | _, _       -> assert false
-
-(*
-let pad_l_rev neutral x l =
-  let rec doit xs =
-      match x - (List.length xs) with
-      | 0            -> xs
-      | d when d > 0 -> doit (neutral :: xs)
-      | _            -> drop (List.length xs - x) xs
-  in
-  doit l
-
-let pad_l neutral len xs =
-  List.rev (pad_l_rev neutral len (List.rev xs))
-
-let pad x s =
-  match x - (Zed_utf8.length s) with
-  | 0                  -> s
-  | d when d > 0       -> s ^ (String.make d ' ')
-  | _ (* when d < 0 *) -> Zed_utf8.sub s 0 x
-
-let buddy_to_color = function
-  | `Default -> default
-  | `Good -> green
-  | `Bad -> red
-
-let line_wrap_with_tags ?raw ~(tags : 'a list) ~max_length entries : ('a * Zed_utf8.t) list =
-  let pre = match raw with
-    | None   -> "  "
-    | Some _ -> ""
-  in
-  let rec worker (acc : ('a * Zed_utf8.t) list) = function
-    | (tag, entry) :: remaining when String.contains entry '\n' ->
-       let remaining = match Astring.String.cut ~sep:"\n" entry with
-         | None -> assert false (* this can never happen *)
-         | Some (part1, part2) ->
-            let part2 = pre ^ part2 in
-            match raw with
-            | Some _ -> (tag, part2) :: (tag, part1) :: remaining
-            | None   ->
-               match String.trim part1 = "", String.trim part2 = "" with
-               | true , true  -> remaining
-               | false, true  -> (tag, part1) :: remaining
-               | true , false -> (tag, part2) :: remaining
-               | false, false -> (tag, part2) :: (tag, part1) :: remaining
-       in
-       worker acc remaining
-    | (tag, entry) :: remaining when (Zed_utf8.length entry) > max_length ->
-      let part1, part2 =
-        let p1, p2 = Zed_utf8.break entry max_length in
-        match raw with
-        | None ->
-          let n = 10 in
-          let last_10 = Zed_utf8.sub p1 (max_length - n) n in
-          let rec find_space idx =
-            match Zed_utf8.get last_10 idx with
-            | x when x = UChar.of_int 0x20 -> Some idx
-            | _ when idx = 0               -> None
-            | _                            -> find_space (pred idx)
-          in
-          (match find_space 10 with
-           | None   -> (p1, pre ^ String.trim p2)
-           | Some x ->
-              let p1, p2 = Zed_utf8.break entry (x + (max_length - n)) in
-              (p1, pre ^ String.trim p2))
-        | Some _ -> (p1, p2)
-      in
-      worker acc ((tag, part2) :: (tag, part1) :: remaining)
-    | (tag, entry) :: remaining ->
-      worker ((tag, entry) :: acc) remaining
-    | [] -> acc
-  in
-  worker [] (List.combine tags entries)
-
-let line_wrap ?raw ~max_length entries : Zed_utf8.t list =
-  let data =
-    let tags = List.map (fun _ -> `Default) entries in
-    List.split (line_wrap_with_tags ?raw ~tags ~max_length entries)
-  in
-  snd data
-*)
 let print_time ~now ~tz_offset_s timestamp =
   let daydiff, _ = Ptime.Span.to_d_ps (Ptime.diff now timestamp) in
   let (_, m, d), ((hh, mm, ss), _) = Ptime.to_date_time ~tz_offset_s timestamp in
@@ -114,66 +28,22 @@ let render_wrapped_list width fmt entries =
   let formatted = List.map fmt entries in
   I.vcat (List.map (wrap ~width) formatted)
 
-(*
-let format_buddies state buddies width =
-  let env jid =
-    if isactive state jid then
-      ([ B_reverse true ], [ E_reverse ])
-    else if isnotified state jid then
-      ([ B_blink true ], [ E_blink ])
-    else
-      ([], [])
-  and notify_char buddy jid =
-    match isnotified state jid, Contact.expanded buddy with
-    | true, true -> "*"
-    | false, false ->
-       if potentially_visible_resource state buddy then "+" else " "
-    | true, false -> Zed_utf8.singleton (UChar.of_int 0x2600)
-    | false, true -> " "
-  and color buddy resource =
-    buddy_to_color (Contact.color buddy resource)
-  in
-
-  let draw (print : string) (b : Contact.contact) (r : Contact.resource option) =
-    let jid = Contact.jid b r in
-    let pr, po = env jid
-    and fst = notify_char b jid
-    and color = color b r
-    in
-    let data = pad width (fst ^ print) in
-    pr @ [ B_fg color ; S data ; E_fg ] @ po
-  in
-
-  List.fold_right
-    (fun (c, res) acc ->
-     let r = if Contact.expanded c then None else Contact.active c in
-     draw (Contact.oneline c None) c r ::
-       List.map (fun r -> draw (Contact.oneline c (Some r)) c (Some r)) res @
-       acc)
-    buddies []
-*)
-
-let to_style = function
-  | `Default -> A.empty
-  | `Highlight -> A.(st bold)
-
-let format_message tz_offset_s now buddy resource
-    { User.direction ; encrypted ; received ; timestamp ; message ; _ } =
-  let time = print_time ~now ~tz_offset_s timestamp in
-  let style, pre =
+let format_message tz_offset_s now buddy resource { User.direction ; encrypted ; received ; timestamp ; message ; _ } =
+  let time = print_time ~now ~tz_offset_s timestamp
+  and style, pre =
     match buddy with
     | `Room _ ->
-      (match direction with
-       | `From (`Full (_, nick)) -> (`Highlight, nick ^ ": ")
-       | `From (`Bare _) -> (`Highlight, " ")
-       | `Local (_, x) -> (`Default, "***" ^ x ^ " ")
-       | `To _ -> (`Default, if received then "-> " else "?> ")
-      )
+      ( match direction with
+        | `From (`Full (_, nick)) -> (`Highlight, nick ^ ": ")
+        | `From (`Bare _) -> (`Highlight, " ")
+        | `Local (_, x) -> (`Default, "***" ^ x ^ " ")
+        | `To _ -> (`Default, if received then "-> " else "?> ") )
     | `User _ ->
       let en = if encrypted then "O" else "-" in
-      let msg_color, pre = match direction with
+      let style, pre = match direction with
         | `From _ -> (`Highlight, "<" ^ en ^ "- ")
-        | `To _   -> let f = if received then "-" else "?" in
+        | `To _   ->
+          let f = if received then "-" else "?" in
           (`Default, f ^ en ^ "> ")
         | `Local (_, x) when x = "" -> (`Default, "*** ")
         | `Local (_, x) -> (`Default, "***" ^ x ^ "*** ")
@@ -192,7 +62,10 @@ let format_message tz_offset_s now buddy resource
         in
         Utils.option "" (fun x -> "(" ^ x ^ ") ") show_res
       in
-      (msg_color, r ^ pre)
+      (style, r ^ pre)
+  and to_style = function
+    | `Default -> A.empty
+    | `Highlight -> A.(st bold)
   in
   I.string (to_style style) (time ^ pre ^ message)
 
@@ -202,7 +75,7 @@ let buddy_to_color = function
   | `Bad -> A.(fg red)
 
 let format_buddy state contact =
-  (* missing: resource / tree *)
+  (* XXX: pass resource *)
   let jid = Contact.jid contact None in
   let a =
     if isactive state jid then
@@ -212,17 +85,12 @@ let format_buddy state contact =
     else
       A.empty
   in
-  let a = A.(a & buddy_to_color (Contact.color contact None)) in
-  let first_char =
-    if isnotified state jid then
-      "*"
-    else
-      " "
-  in
+  let a = A.(buddy_to_color (Contact.color contact None) & a) in
+  let first_char = if isnotified state jid then "*" else " " in
   I.string a (first_char ^ Contact.oneline contact None)
 
 let render_buddy_list (w, h) state =
-  (* todo: actually a treeview, resources and whether to expand contact / potential children *)
+  (* XXX: actually a treeview, resources and whether to expand contact / potential children *)
   let buddies = active_contacts state in
   let start =
     let focus =
@@ -242,100 +110,91 @@ let render_buddy_list (w, h) state =
   I.vframe ~align:`Top h (I.hframe ~align:`Left w formatted)
 
 let horizontal_line buddy resource a scrollback width =
-  (* 'buddy|group|scroll:' jid - otr status - presence status *)
-
-  let otr =
-    match buddy, resource with
-    | `User user, Some (`Session s) ->
-      let data =
-        Utils.option
-          (I.string (buddy_to_color `Bad) "no OTR")
-          (fun fp ->
-           let vs = User.verified_fp user fp in
-           I.string (buddy_to_color (User.verification_status_to_color vs)) (User.verification_status_to_string vs))
-          (User.otr_fingerprint s.User.otr)
-      in
-      I.(string a " " <|> data <|> string a " ─")
-    | _ -> I.empty
-  in
-
-  let presence_status =
-    let tr (p, s) =
-      let st x =
-        Utils.option
-          (x ^ " ")
-          (fun (a, _) -> a ^ " ")
-          (Astring.String.cut ~sep:"\n" x)
-      in
-      I.string a (" " ^ User.presence_to_string p ^ " " ^ Utils.option "" st s ^ "─")
-    in
-    Utils.option
-      (I.empty)
-      (function
-        | `Session s -> tr (s.User.presence, s.User.status)
-        | `Member m -> tr (m.Muc.presence, m.Muc.status))
-      resource
-  in
-
-  let scroll =
-    if scrollback = 0 then
-      I.empty
-    else
-      I.string a "*scrolling* "
-  in
-
-  let jid =
+  let pre = I.string a "── "
+  and scroll = if scrollback = 0 then I.empty else I.string a "*scrolling* "
+  and jid =
     let p = match buddy with
       | `User _ -> "buddy: "
       | `Room _ -> "room: "
     in
     let id = Contact.jid buddy resource in
     I.string a (p ^ Xjid.jid_to_string id ^ " ")
+  and otr =
+    match buddy, resource with
+    | `User user, Some (`Session s) ->
+      let col, data =
+        Utils.option
+          (`Bad, "no OTR")
+          (fun fp ->
+           let vs = User.verified_fp user fp in
+           (User.verification_status_to_color vs, User.verification_status_to_string vs))
+          (User.otr_fingerprint s.User.otr)
+      in
+      I.(string a " " <|> string A.(a & buddy_to_color col) data <|> string a " ─")
+    | _ -> I.empty
+  and presence_status =
+    let tr p s =
+      let status =
+        Utils.option
+          ""
+          (fun x -> Utils.option
+              (x ^ " ")
+              (fun (a, _) -> a ^ " ")
+              (Astring.String.cut ~sep:"\n" x))
+          s
+      in
+      I.string a (" " ^ User.presence_to_string p ^ " " ^ status ^ "─")
+    in
+    Utils.option
+      I.empty
+      (function
+        | `Session s -> tr s.User.presence s.User.status
+        | `Member m -> tr m.Muc.presence m.Muc.status)
+      resource
   in
-
-  let pre = I.string a "─ " in
-
   let fill =
     let len = width - I.(width pre + width scroll + width jid + width otr + width presence_status) in
-    if len <= 0 then
-      I.empty
-    else
-      I.uchar a (`Uchar 0x2015) len 1
+    if len <= 0 then I.empty else I.uchar a (`Uchar 0x2015) len 1
   in
-
   I.hcat [ pre ; scroll ; jid ; fill ; otr ; presence_status ]
 
 let status_line self mysession notify log a width =
-  let status = User.presence_to_string mysession.User.presence in
-  let jid = User.userid self mysession in
-
-  (* all bold: '#' (if notify: blink) '-<' JID (color: dependent on logging) '>--[' status (color depending on ownstatus) ']-' *)
   let a = A.(a & st bold) in
-
-  let notify = if notify then I.string A.(a & st blink) "##" else I.string a "──" in
-  let jid =
-    let a' = if log then A.(a & st reverse) else a in
-    I.(string a "< " <|> string a' jid <|> string a " >")
-  in
-
-  let status =
-    let color = if mysession.User.presence = `Offline then
-        A.red
-      else
-        A.green
+  let notify = if notify then I.string A.(a & st blink) "##" else I.string a "──"
+  and jid =
+    let data = User.userid self mysession
+    and a' = if log then A.(st reverse) else a
     in
-    I.(string a "[ " <|> string A.(color @/ a) status <|> string a " ]─")
+    I.(string a "< " <|> string a' data <|> string a " >")
+  and status =
+    let data = User.presence_to_string mysession.User.presence
+    and color = if mysession.User.presence = `Offline then `Bad else `Good
+    in
+    I.(string a "[ " <|> string A.(a & buddy_to_color color) data <|> string a " ]─")
   in
-
   let fill =
     let len = width - I.(width jid + width status + width notify) in
-    if len <= 0 then
-      I.empty
-    else
-      I.uchar a (`Uchar 0x2015) len 1
+    if len <= 0 then I.empty else I.uchar a (`Uchar 0x2015) len 1
   in
-
   I.(notify <|> jid <|> fill <|> status)
+
+let cut_scroll scrollback height image =
+  let bottom = scrollback * height in
+  I.vframe ~align:`Bottom height (I.vcrop 0 bottom image)
+
+let render_messages width p msgfmt data =
+  let data = List.filter p data in
+  render_wrapped_list width msgfmt data
+
+let msgfilter active jid m =
+  let o = User.jid_of_direction m.User.direction in
+  if Contact.expanded active then
+    match active, jid with
+    | `Room _, _ -> true
+    | `User _, `Bare _ -> true
+    | `User _, `Full _ -> Xjid.jid_matches o jid
+  else
+    true
 
 let tz_offset_s () =
   match Ptime_clock.current_tz_offset_s () with
@@ -343,7 +202,6 @@ let tz_offset_s () =
   | Some x -> x
 
 let render_state (width, height) input state =
-
   let log_height, main_height =
     let s = state.log_height in
     if s + 10 > height then
@@ -358,193 +216,73 @@ let render_state (width, height) input state =
   in
 
   if main_height <= 4 || chat_width <= 20 then
-    I.string A.empty "need more space"
+    (I.string A.empty "need more space", 1)
   else
-
     let active = active state
     and resource = resource state
-    and self = self state
-    in
-
-    let a = buddy_to_color (Contact.color active resource) in
-
-    let status =
-      let notify = List.length state.notifications > 0
-      and log = Contact.preserve_messages active
-      and mysession = selfsession state
-      in
-      status_line self mysession notify log a width
     in
 
     let now = Ptime_clock.now ()
     and tz_offset_s = tz_offset_s ()
     in
 
-    let logfmt = format_log tz_offset_s now in
+    let logfmt = format_log tz_offset_s now
+    and a = buddy_to_color (Contact.color active resource)
+    in
 
-    let hline_log =
-      if log_height = 0 then
-        I.empty
-      else
-        let logs =
-          let l = render_wrapped_list width logfmt self.User.message_history in
-          I.vframe ~align:`Bottom log_height l
-        and hline = horizontal_line active resource a state.scrollback width
+    let main =
+      let msgfmt = format_message tz_offset_s now active resource
+      and msgfilter = msgfilter active state.active_contact
+      and msgs msgfilter msgfmt =
+        let r = match active with
+          | `User x when x.User.self -> (fun x -> render_wrapped_list x logfmt)
+          | _ -> (fun x -> render_messages x msgfilter msgfmt)
         in
-        I.(hline <-> logs)
-    and messages p msgfmt =
-      let scroll image =
-        let bottom = state.scrollback * main_height in
-        I.vframe ~align:`Bottom main_height (I.vcrop 0 bottom image)
-      and data =
-        if Xjid.jid_matches (`Bare (fst state.config.Xconfig.jid)) state.active_contact then
-          render_wrapped_list chat_width logfmt self.User.message_history
+        let image = r chat_width (List.rev (Contact.messages active)) in
+        cut_scroll state.scrollback main_height image
+      in
+      match state.window_mode with
+      | BuddyList ->
+        let buddies = render_buddy_list (buddy_width, main_height) state
+        and vline = I.uchar a (`Uchar 0x2502) 1 main_height
+        in
+        I.(buddies <|> vline <|> msgs msgfilter msgfmt)
+      | FullScreen -> msgs msgfilter msgfmt
+      | Raw ->
+        let p m = match m.User.direction with `From _ -> true | _ -> false
+        and msgfmt x = I.string A.empty x.User.message
+        in
+        msgs p msgfmt
+    and bottom =
+      let self = self state in
+      let hline_log =
+        if log_height = 0 then
+          I.empty
         else
-          render_wrapped_list chat_width msgfmt (List.filter p (Contact.messages active))
+          let logs =
+            let l = render_wrapped_list width logfmt (List.rev self.User.message_history) in
+            I.vframe ~align:`Bottom log_height l
+          and hline = horizontal_line active resource a state.scrollback width
+          in
+          I.(hline <-> logs)
+      and status =
+        let notify = List.length state.notifications > 0
+        and log = Contact.preserve_messages active
+        and mysession = selfsession state
+        in
+        status_line self mysession notify log a width
       in
-      scroll data
+      I.vcat [ hline_log ; status ; input ]
     in
-
-    let msgfmt = format_message tz_offset_s now active resource
-    and msgfilter m =
-      let o = User.jid_of_direction m.User.direction in
-      if Contact.expanded active then
-        match active, state.active_contact with
-        | `Room _, _ -> true
-        | `User _, `Bare _ -> true
-        | `User _, `Full _ -> Xjid.jid_matches o state.active_contact
-      else
-        true
-    in
-
-    match state.window_mode with
-    | BuddyList ->
-      let buddies = render_buddy_list (buddy_width, main_height) state
-      and vline = I.uchar a (`Uchar 0x2502) 1 main_height
-      in
-      I.(vcat [ buddies <|> vline <|> messages msgfilter msgfmt ; hline_log ; status ; input ])
-
-    | FullScreen ->
-      I.(vcat [ messages msgfilter msgfmt ; hline_log ; status ; input ])
-
-    | Raw ->
-      let p m = match m.User.direction with
-        | `From _ -> true
-        | _ -> false
-      and msgfmt x = I.string A.empty x.User.message
-      in
-      I.(vcat [ messages p msgfmt ; hline_log ; status ; input ])
+    (I.(main <-> bottom), I.width input)
 
 
 (*
-let up = UChar.of_int 0x2500
-let down = UChar.of_int 0x2501
-let f5 = UChar.of_int 0x2502
-let f12 = UChar.of_int 0x2503
-let ctrlq = UChar.of_int 0x2504
-let ctrlx = UChar.of_int 0x2505
-let ctrlup = UChar.of_int 0x2506
-let ctrldown = UChar.of_int 0x2507
-let f11 = UChar.of_int 0x2508
-let shift_f11 = UChar.of_int 0x2509
-let f10 = UChar.of_int 0x2510
-let shift_f10 = UChar.of_int 0x2511
-
-
-let redraw, force_redraw =
-  (* this is just an ugly hack which should be removed *)
-  let a, b = S.create 0 in
-  (a, fun () -> b (Random.int 256) )
-
-type direction = Up | Down
-
-let navigate_message_buffer state direction =
-  match
-    direction,
-    state.scrollback
-  with
-  | Down, 0 -> ()
-  | Down, n ->
-    state.scrollback <- n - 1 ;
-    if state.scrollback = 0 then notified state ;
-    force_redraw ()
-  | Up, n -> state.scrollback <- n + 1; force_redraw ()
-
-let navigate_buddy_list state direction =
-  let userlist = all_jids state in
-  let set_active idx =
-    let user = List.nth userlist idx in
-    activate_contact state user ;
-    force_redraw ()
-  and active_idx = Utils.find_index state.active_contact 0 userlist
-  in
-  match
-    direction,
-    List.length userlist > succ active_idx,
-    pred active_idx >= 0
-  with
-  | Down, true , _     -> set_active (succ active_idx)
-  | Down, false, _     -> set_active 0
-  | Up  , _    , true  -> set_active (pred active_idx)
-  | Up  , _    , false -> set_active (pred (List.length userlist))
-
-class read_line ~term ~network ~history ~state ~input_buffer = object(self)
-  inherit LTerm_read_line.read_line ~history () as super
-  inherit [Zed_utf8.t] LTerm_read_line.term term
-
-  method! completion =
-    let prefix  = Zed_rope.to_string self#input_prev in
-    let completions = Cli_commands.completion prefix in
-    self#set_completion 0 completions
-
-  method! complete =
-    try super#complete with
-    | _ -> ()
-
-  method! show_box = false
-
-  method set_input_buffer s =
-    Zed_edit.goto_bot self#context ;
-    Zed_edit.delete_next_line self#context ;
-    Zed_edit.insert_no_erase self#context s
-
-  method save_input_buffer =
-    let saved_input_buffer = self#eval
-    and u = active state
-    in
-    Contact.replace_contact state.contacts (Contact.set_saved_input_buffer u saved_input_buffer)
-
   method! send_action = function
-    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = down ->
-      self#save_input_buffer ;
-      navigate_buddy_list state Down ;
-      super#send_action LTerm_read_line.Break
-    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = up ->
-      self#save_input_buffer ;
-      navigate_buddy_list state Up ;
-      super#send_action LTerm_read_line.Break
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrldown ->
       navigate_message_buffer state Down
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrlup ->
       navigate_message_buffer state Up
-    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = f5 ->
-      state.show_offline <- not state.show_offline ;
-      force_redraw ()
-    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = f12 ->
-      state.window_mode <- next_display_mode state.window_mode ;
-      force_redraw ()
-    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = f11 ->
-      state.buddy_width <- succ state.buddy_width ;
-      force_redraw ()
-    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = shift_f11 ->
-      state.buddy_width <- max (pred state.buddy_width) 0 ;
-      force_redraw ()
-    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = f10 ->
-      state.log_height <- succ state.log_height ;
-      force_redraw ()
-    | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = shift_f10 ->
-      state.log_height <- max (pred state.log_height) 0 ;
-      force_redraw ()
     | LTerm_read_line.Edit (LTerm_edit.Zed (Zed_edit.Insert k)) when k = ctrlq ->
       if List.length state.notifications > 0 then
         (self#save_input_buffer ;
@@ -558,25 +296,9 @@ class read_line ~term ~network ~history ~state ~input_buffer = object(self)
       super#send_action LTerm_read_line.Break
     | action ->
       super#send_action action
+*)
 
-  initializer
-    LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = false; code = Prev_page })] [Edit (LTerm_edit.Zed (Zed_edit.Insert up))]);
-    LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = false; code = Next_page })] [Edit (LTerm_edit.Zed (Zed_edit.Insert down))]);
-    LTerm_read_line.(bind [LTerm_key.({ control = true; meta = false; shift = false; code = Prev_page })] [Edit (LTerm_edit.Zed (Zed_edit.Insert ctrlup))]);
-    LTerm_read_line.(bind [LTerm_key.({ control = true; meta = false; shift = false; code = Next_page })] [Edit (LTerm_edit.Zed (Zed_edit.Insert ctrldown))]);
-    LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = false; code = F5 })] [Edit (LTerm_edit.Zed (Zed_edit.Insert f5))]);
-    LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = false; code = F12 })] [Edit (LTerm_edit.Zed (Zed_edit.Insert f12))]);
-    LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = false; code = F11 })] [Edit (LTerm_edit.Zed (Zed_edit.Insert f11))]);
-    LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = true; code = F11 })] [Edit (LTerm_edit.Zed (Zed_edit.Insert shift_f11))]);
-    LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = false; code = F10 })] [Edit (LTerm_edit.Zed (Zed_edit.Insert f10))]);
-    LTerm_read_line.(bind [LTerm_key.({ control = false; meta = false; shift = true; code = F10 })] [Edit (LTerm_edit.Zed (Zed_edit.Insert shift_f10))]);
-    LTerm_read_line.(bind [LTerm_key.({ control = true; meta = false; shift = false; code = Char (UChar.of_int 0x71) })] [Edit (LTerm_edit.Zed (Zed_edit.Insert ctrlq))]);
-    LTerm_read_line.(bind [LTerm_key.({ control = true; meta = false; shift = false; code = Char (UChar.of_int 0x78) })] [Edit (LTerm_edit.Zed (Zed_edit.Insert ctrlx))]);
-    self#set_input_buffer (Zed_rope.of_string input_buffer) ;
-    self#set_prompt (S.l3 (fun size network redraw -> make_prompt size network state redraw)
-                       self#size network redraw)
-end
-
+(*
 let quit state =
   match !xmpp_session with
   | None -> return_unit
@@ -696,22 +418,25 @@ let send_msg t state active_user failure message =
 (* stream reader *)
 (*  processes xml stream fragments, puts resulting action [message received, buddy list updates] into mvar *)
 
-(* disconnect and quit *)
+(* disconnect and quit -- exceptions!? *)
 
 module T = Notty_lwt.Terminal
 
-(* this is terminal stuff only... *)
-let rec loop term state network log =
+(* this is rendering and drawing stuff, waiting for change on mvar... *)
+let rec loop term mvar state network log =
   (*  let history = Contact.readline_history (active state) in (* for keyup.down *) *)
+  (* XXX: input handling (sideways scrolling, two lists) *)
   let input_buffer = "foobar" in (* Contact.saved_input_buffer (active state) in*)
   (* render things *)
-  let (w, h) = T.size term in
+  let size = T.size term in
   let input = I.string A.empty input_buffer in
-  let image = render_state (w, h) input state in
+  let image, cursorc = render_state size input state in
   T.image term image >>= fun () ->
-  T.cursor term (Some (succ (I.width input), h)) >>= fun () ->
-  Lwt_unix.sleep(5.) >>= fun () ->
-  loop term state network log
+  T.cursor term (Some (cursorc, snd size)) >>= fun () ->
+  (* read mvar , process action *)
+  Lwt_mvar.take mvar >>= fun action ->
+  action state >>= fun state ->
+  loop term mvar state network log
   (* handle specific keypresses (pgup/down etc) *)
 (*
   match_lwt
@@ -787,3 +512,94 @@ let init_system log myjid connect_mvar =
       | exn -> err true (Printexc.to_string exn)
   )
 
+
+type direction = Up | Down
+
+let navigate_message_buffer state direction =
+  match direction, state.scrollback with
+  | Down, 0 -> ()
+  | Down, n ->
+    state.scrollback <- n - 1 ;
+    if state.scrollback = 0 then notified state
+  | Up, n -> state.scrollback <- n + 1
+
+let navigate_buddy_list state direction =
+  let userlist = all_jids state in
+  let set_active idx =
+    let user = List.nth userlist idx in
+    activate_contact state user
+  and active_idx = Utils.find_index state.active_contact 0 userlist
+  in
+  let l = List.length userlist in
+  match direction with
+  | Down -> set_active (succ active_idx mod l)
+  | Up -> set_active ((l + pred active_idx) mod l)
+
+let read_terminal term mvar () =
+  let rec loop () =
+    Lwt_stream.next (T.input term) >>= function
+(*    | `Uchar chr ->
+      go (pre @ [chr]) post *)
+(*    | `Key `Enter ->
+      let buf = Buffer.create (Array.length inp + Array.length inp2) in
+      Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
+      Array.iter (Uutf.Buffer.add_utf_8 buf) inp2 ;
+      Lwt.return (Buffer.contents buf)
+    | `Key `Bs ->
+      (match List.rev pre with
+       | [] -> go pre post
+       | _::tl -> go (List.rev tl) post)
+    | `Key `Del ->
+      (match post with
+       | [] -> go pre post
+       | _::tl -> go pre tl)
+    | `Key `Home -> go [] (pre @ post)
+    | `Key `End -> go (pre @ post) []
+    | `Key `Right ->
+      (match post with
+       | [] -> go pre post
+       | hd::tl -> go (pre @ [hd]) tl)
+    | `Key `Left ->
+      (match List.rev pre with
+       | [] -> go [] post
+       | hd::tl -> go (List.rev tl) (hd :: post))
+*)
+
+    | `Key `Pg_up ->
+      (* XXX: preserve input buffer for current user *)
+      let modify state =
+        navigate_buddy_list state Up ;
+        Lwt.return state
+      in
+      Lwt_mvar.put mvar modify >>= fun () ->
+      loop ()
+    | `Key `Pg_dn ->
+      (* XXX: preserve input buffer for current user *)
+      let modify state =
+        navigate_buddy_list state Down ;
+        Lwt.return state
+      in
+      Lwt_mvar.put mvar modify >>= fun () ->
+      loop ()
+    | `Key (`Fn 5) ->
+      Lwt_mvar.put mvar (fun s -> Lwt.return { s with show_offline = not s.show_offline }) >>= fun () ->
+      loop ()
+    | `Key (`Fn 10) ->
+      Lwt_mvar.put mvar (fun s -> Lwt.return { s with log_height = succ s.log_height }) >>= fun () ->
+      loop ()
+(*    | `Key `Shift (`Fn 10) ->
+      Lwt_mvar.put mvar (fun s -> Lwt.return { s with log_height = max 0 (pred s.log_height) }) >>= fun () ->
+      loop () *)
+    | `Key (`Fn 11) ->
+      Lwt_mvar.put mvar (fun s -> Lwt.return { s with buddy_width = succ s.buddy_width }) >>= fun () ->
+      loop ()
+(*    | `Key (`Fn 11) ->
+      Lwt_mvar.put mvar (fun s -> Lwt.return { s with buddy_width = max 0 (pred s.buddy_width) }) >>= fun () ->
+      loop () *)
+    | `Key (`Fn 12) ->
+      Lwt_mvar.put mvar
+        (fun s -> Lwt.return { s with window_mode = next_display_mode s.window_mode }) >>= fun () ->
+      loop ()
+    | _ -> loop ()
+  in
+  loop ()

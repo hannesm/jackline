@@ -34,7 +34,7 @@ let start_client cfgdir debug () =
   ( match config.Xconfig.password with
     | None ->
        let jid = Xjid.full_jid_to_string config.Xconfig.jid in
-       Cli_support.read_password ~prefix:("password for " ^ jid ^ ": ") term >|= fun password ->
+       Cli_support.read_password ~prefix:("Password (" ^ jid ^ "): ") term >|= fun password ->
        Some password
     | Some x -> Lwt.return (Some x)) >>= fun password ->
   let config = { config with Xconfig.password = password } in
@@ -105,8 +105,10 @@ let start_client cfgdir debug () =
 
   Cli_client.init_system (log ?step:None) myjid connect_mvar ;
 
+  let mvar = Lwt_mvar.create_empty () in
+  Lwt.async (Cli_client.read_terminal term mvar) ;
   (* main loop *)
-  Cli_client.loop term state n (log ?step:None) >>= fun state ->
+  Cli_client.loop term mvar state n (log ?step:None) >>= fun state ->
 
   closing () >>= fun () ->
 
