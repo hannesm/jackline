@@ -27,6 +27,7 @@ let ask above ?(below = []) prefix ?default transform valid term =
   doit false above below prefix ?default transform valid term
 
 let configure term () =
+  (* TODO: sigwinch handler for the time configure is run.. *)
   let above =
     let greet =
       "Welcome to Jackline configuration. You will be guided through the setup."

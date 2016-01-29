@@ -22,6 +22,20 @@ let wrap ?width ?height image =
     I.hcat is
   | None, None | Some _, Some _ -> assert false
 
+let listview (width, height) focus formatter xs =
+  let start =
+    let l = List.length xs in
+    assert (focus >= 0 && focus < l) ;
+    let up, down = (height / 2, (height + 1) / 2) in
+    match focus - up >= 0, focus + down > l with
+    | true, true -> l - height
+    | true, false -> focus - up
+    | false, _ -> 0
+  in
+  let to_draw = Utils.drop start xs in
+  let fmted = I.vcat (List.map formatter to_draw) in
+  I.vframe ~align:`Top height (I.hframe ~align:`Left width fmted)
+
 let rewrap term above below (prefix, inp, inp2) (width, _) =
   let content = wrap ~width I.(prefix <|> inp <|> inp2) in
   let above = I.vcat (List.map (wrap ~width) above) in

@@ -26,6 +26,8 @@ let jid_to_string = function
 let string_to_jid_helper s =
   match Astring.String.cut ~sep:"@" s with
   | None -> None
+  | Some (user, _) when user = "" -> None
+  | Some (_, rest) when rest = "" -> None
   | Some (user, rest) ->
      match Astring.String.cut ~sep:"/" rest with
      | None -> Some (user, rest, None)

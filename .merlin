@@ -18,6 +18,7 @@ PKG hex
 PKG nocrypto
 PKG react
 PKG notty
+PKG ptime
 
 EXT sexplib
 EXT lwt

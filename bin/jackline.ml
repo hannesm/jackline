@@ -64,8 +64,9 @@ let start_client cfgdir debug () =
      type /help for help"
   in
 
-  let _n, log = S.create (`Local (`Full myjid, "welcome to jackline " ^ Utils.version), greeting)
-  in
+  let sender = `Local (`Full myjid, "welcome to jackline " ^ Utils.version) in
+
+  let n, log = S.create (sender, greeting) in
 
   (if debug then
      Persistency.open_append (Unix.getenv "PWD") "out.txt" >|= fun fd ->
@@ -80,6 +81,8 @@ let start_client cfgdir debug () =
   in
   let connect_mvar = Cli_state.Connect.connect_me config (log ?step:None) state_mvar users in
   let state = Cli_state.empty_state cfgdir config users connect_mvar state_mvar in
+
+  Cli_state.add_status state sender greeting ;
 
   let us = Contact.fold (fun _ v acc -> v :: acc) users [] in
 
@@ -103,7 +106,7 @@ let start_client cfgdir debug () =
   Cli_client.init_system (log ?step:None) myjid connect_mvar ;
 
   (* main loop *)
-  (*  Cli_client.loop term state n (log ?step:None) >>= fun state -> *)
+  Cli_client.loop term state n (log ?step:None) >>= fun state ->
 
   closing () >>= fun () ->
 

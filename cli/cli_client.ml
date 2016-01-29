@@ -1,22 +1,18 @@
 open Lwt.Infix
 
+open Notty
 (* open React *)
 
 open Cli_state
+open Cli_support
 
-(*
 let rec take x l acc =
   match x, l with
   | 0, _       -> List.rev acc
   | n, x :: xs -> take (pred n) xs (x :: acc)
   | _, _       -> assert false
 
-let rec drop x l =
-  match x, l with
-  | 0, xs      -> xs
-  | n, _ :: xs -> drop (pred n) xs
-  | _, []      -> []
-
+(*
 let pad_l_rev neutral x l =
   let rec doit xs =
       match x - (List.length xs) with
@@ -94,7 +90,7 @@ let line_wrap ?raw ~max_length entries : Zed_utf8.t list =
     List.split (line_wrap_with_tags ?raw ~tags ~max_length entries)
   in
   snd data
-
+*)
 let print_time ~now ~tz_offset_s timestamp =
   let daydiff, _ = Ptime.Span.to_d_ps (Ptime.diff now timestamp) in
   let (_, m, d), ((hh, mm, ss), _) = Ptime.to_date_time ~tz_offset_s timestamp in
@@ -104,18 +100,24 @@ let print_time ~now ~tz_offset_s timestamp =
     Printf.sprintf "%02d-%02d %02d:%02d " m d hh mm
 
 let format_log tz_offset_s now log =
-  let print_log { User.direction ; timestamp ; message ; _ } =
-    let time = print_time ~now ~tz_offset_s timestamp in
-    let from = match direction with
-      | `From jid -> Xjid.jid_to_string jid ^ ":"
-      | `Local (_, x) when x = "" -> "***"
-      | `Local (_, x) -> "*** " ^ x ^ " ***"
-      | `To _ -> ">>>"
-    in
-    time ^ from ^ " " ^ message
+  let { User.direction ; timestamp ; message ; _ } = log in
+  let time = print_time ~now ~tz_offset_s timestamp in
+  let from = match direction with
+    | `From jid -> Xjid.jid_to_string jid ^ ":"
+    | `Local (_, x) when x = "" -> "***"
+    | `Local (_, x) -> "*** " ^ x ^ " ***"
+    | `To _ -> ">>>"
   in
-  List.map print_log log
+  I.string A.empty (time ^ from ^ " " ^ message)
 
+let draw_logs (w, h) tz_offset_s now entries =
+  (* we want to wrap! *)
+  if List.length entries > 0 then
+    listview (w, h) (pred (List.length entries)) (format_log tz_offset_s now) entries
+  else
+    I.void w h
+
+(*
 let format_buddies state buddies width =
   let env jid =
     if isactive state jid then
@@ -152,7 +154,8 @@ let format_buddies state buddies width =
        List.map (fun r -> draw (Contact.oneline c (Some r)) c (Some r)) res @
        acc)
     buddies []
-
+*)
+(*
 let format_messages tz_offset_s now buddy resource jid msgs =
   let printmsg { User.direction ; encrypted ; received ; timestamp ; message ; _ } =
     let time = print_time ~now ~tz_offset_s timestamp in
@@ -203,175 +206,241 @@ let format_messages tz_offset_s now buddy resource jid msgs =
   in
   List.map printmsg
     (List.filter (fun m -> tst (User.jid_of_direction m.User.direction)) msgs)
+*)
 
-let buddy_list state length width =
-  let buddies = active_contacts_resources state in
-  let formatted_buddies = format_buddies state buddies width in
+let buddy_to_color = function
+  | `Default -> A.empty
+  | `Good -> A.(fg green)
+  | `Bad -> A.(fg red)
 
-  let flattened = show_resources buddies in
-  let bs = List.length flattened
-  and up, down = (length / 2, (length + 1) / 2)
-  and active_idx = Utils.find_index state.active_contact 0 flattened
-  in
-  match length >= bs with
-  | true  -> let pad = [ S (String.make width ' ') ] in
-             pad_l pad length formatted_buddies
-  | false ->
-    let from =
-      match
-        active_idx - up >= 0,
-        active_idx + down > bs
-      with
-      | true , true  -> bs - length
-      | true , false -> active_idx - up
-      | false, _     -> 0
-    in
-    take length (drop from formatted_buddies) []
-
-let maybe_trim str left =
-  if left > 0 then
-    if Zed_utf8.length str < left then
-      ([ S str ], left - Zed_utf8.length str)
+let format_buddy state contact =
+  let jid = Contact.jid contact None in
+  let a =
+    if isactive state jid then
+      A.(st reverse)
+    else if isnotified state jid then
+      A.(st blink)
     else
-      ([ S (Zed_utf8.sub str 0 left) ], 0)
-  else
-    ([], 0)
+      A.empty
+  in
+  let a = A.(a & buddy_to_color (Contact.color contact None)) in
+  let first_char =
+    if isnotified state jid then
+      "*"
+    else
+      " "
+  in
+  I.string a (first_char ^ Contact.oneline contact None)
 
-let horizontal_line buddy resource fg_color buddy_width scrollback show_buddy_list width =
-  let otrcolor, otr =
+let draw_buddy_list size state =
+  (* todo: actually a treeview, resources and whether to expand contact / potential children *)
+  let buddies = active_contacts state in
+  let active_idx =
+    let jids = List.map (fun c -> Contact.jid c None) buddies in
+    Utils.find_index state.active_contact 0 jids
+  in
+  listview size active_idx (format_buddy state) buddies
+
+let horizontal_line buddy resource a scrollback width =
+  (* 'buddy|group|scroll:' jid - otr status - presence status *)
+
+  let otr =
     match buddy, resource with
-     | `User user, Some (`Session s) ->
+    | `User user, Some (`Session s) ->
+      let data =
         Utils.option
-          (`Bad, " - no OTR - ")
+          (I.string (buddy_to_color `Bad) "no OTR")
           (fun fp ->
            let vs = User.verified_fp user fp in
-           (User.verification_status_to_color vs,
-            " - " ^ User.verification_status_to_string vs ^ " - "))
+           I.string (buddy_to_color (User.verification_status_to_color vs)) (User.verification_status_to_string vs))
           (User.otr_fingerprint s.User.otr)
-    | _ -> (Contact.color buddy resource, " ")
-  in
-  let pre =
-    if show_buddy_list then
-      (Zed_utf8.make buddy_width (UChar.of_int 0x2500)) ^
-      (Zed_utf8.singleton (UChar.of_int 0x2534))
-    else
-      (Zed_utf8.singleton (UChar.of_int 0x2500))
+      in
+      I.(string a " " <|> data <|> string a " ─")
+    | _ -> I.empty
   in
 
-  let presence, status =
+  let presence_status =
     let tr (p, s) =
-      let st x = Utils.option (" - " ^ x) (fun (a, _) -> " - " ^ a) (Astring.String.cut ~sep:"\n" x) in
-      (User.presence_to_string p, Utils.option "" st s)
+      let st x =
+        Utils.option
+          (x ^ " ")
+          (fun (a, _) -> a ^ " ")
+          (Astring.String.cut ~sep:"\n" x)
+      in
+      I.string a (" " ^ User.presence_to_string p ^ " " ^ Utils.option "" st s ^ "─")
     in
     Utils.option
-      ("", "")
+      (I.empty)
       (function
         | `Session s -> tr (s.User.presence, s.User.status)
         | `Member m -> tr (m.Muc.presence, m.Muc.status))
       resource
   in
-  let txt =
-    let jid =
-      let id = Contact.jid buddy resource in
-      Xjid.jid_to_string id
-    in
-    match scrollback, buddy with
-    | 0, `User _ -> " buddy: " ^ jid
-    | 0, `Room _ -> " room: " ^ jid
-    | _, _ -> "*scroll*" ^ jid
-  in
-  (* now we have the building blocks and might need to cut some of them down *)
-  let buddy, left = maybe_trim txt width in
-  let otr, left = maybe_trim otr left in
-  let presence, left = maybe_trim presence left in
-  let status, left = maybe_trim status left in
-  let pre, left = maybe_trim pre left in
-  let post = if left > 0 then [S (Zed_utf8.make left (UChar.of_int 0x2500))] else [] in
-  B_fg fg_color :: pre @ buddy @ [ E_fg ; B_fg (buddy_to_color otrcolor) ] @ otr @ [ E_fg ; B_fg fg_color ] @ presence @ status @ post @ [ E_fg ]
 
-let status_line self mysession notify log redraw fg_color width =
+  let scroll =
+    if scrollback = 0 then
+      I.empty
+    else
+      I.string a "*scrolling* "
+  in
+
+  let jid =
+    let p = match buddy with
+      | `User _ -> "buddy: "
+      | `Room _ -> "room: "
+    in
+    let id = Contact.jid buddy resource in
+    I.string a (p ^ Xjid.jid_to_string id ^ " ")
+  in
+
+  let pre = I.string a "─ " in
+
+  let fill =
+    let len = width - I.(width pre + width scroll + width jid + width otr + width presence_status) in
+    if len <= 0 then
+      I.empty
+    else
+      I.uchar a (`Uchar 0x2015) len 1
+  in
+
+  I.hcat [ pre ; scroll ; jid ; fill ; otr ; presence_status ]
+
+let status_line self mysession notify log a width =
   let status = User.presence_to_string mysession.User.presence in
   let jid = User.userid self mysession in
 
-  let status_color =
-    if mysession.User.presence = `Offline then
-      lred
-    else
-      lgreen
+  (* all bold: '#' (if notify: blink) '-<' JID (color: dependent on logging) '>--[' status (color depending on ownstatus) ']-' *)
+  let a = A.(a & st bold) in
+
+  let notify = if notify then I.string A.(a & st blink) "##" else I.string a "──" in
+  let jid =
+    let a' = if log then A.(a & st reverse) else a in
+    I.(string a "< " <|> string a' jid <|> string a " >")
   in
 
-  let jid, left = maybe_trim jid (width - 2) in
-  let jid_pre, left = maybe_trim "< " left in
-  let jid_post, left = maybe_trim " >─" left in
-
-  let styled_jid = if log then B_reverse true :: jid @ [ E_reverse ] else jid in
-
-  let status, left = maybe_trim status left in
-  let status_pre, left = maybe_trim "[ " left in
-  let status_post, left = maybe_trim " ]─" left in
-
-  let redraw, left = maybe_trim (Printf.sprintf "%02x" redraw) left in
-
-  let fill = if left > 0 then [S (Zed_utf8.make left (UChar.of_int 0x2500))] else [] in
-
-  let first =
-    let dash = S (Zed_utf8.make 1 (UChar.of_int 0x2500)) in
-    if notify then
-      [ B_bold true ; B_blink true ; B_fg cyan ; S "#" ] @ redraw @ [ dash ; E_fg ; E_blink ]
-    else
-      [ B_bold true ; B_fg fg_color ; dash ] @ redraw @ [ dash ; E_fg ]
+  let status =
+    let color = if mysession.User.presence = `Offline then
+        A.red
+      else
+        A.green
+    in
+    I.(string a "[ " <|> string A.(color @/ a) status <|> string a " ]─")
   in
 
-  first @
-  [ B_fg fg_color ] @ jid_pre @ styled_jid @ jid_post @
-  fill @
-  status_pre @ [ E_fg ; B_fg status_color ] @ status @ [ E_fg ; B_fg fg_color ] @ status_post @
-  [ E_fg ; E_bold ]
+  let fill =
+    let len = width - I.(width jid + width status + width notify) in
+    if len <= 0 then
+      I.empty
+    else
+      I.uchar a (`Uchar 0x2015) len 1
+  in
+
+  I.(notify <|> jid <|> fill <|> status)
 
 let tz_offset_s () =
   match Ptime_clock.current_tz_offset_s () with
   | None -> 0 (* XXX: report error *)
   | Some x -> x
 
-let make_prompt size network state redraw =
-  (* network should be an event, then I wouldn't need a check here *)
-  (if state.last_status <> network then
-     (add_status state (fst network) (snd network) ;
-      state.last_status <- network)) ;
+let draw_state (width, height) input state =
 
-  (* we might have gotten a connection termination - if so mark everything offline *)
-  (match fst network with
-   | `Local (_, err) ->
-     let err_prefix = try String.sub err 0 11 with Invalid_argument _ -> "" in
-     (match err_prefix, !xmpp_session with
-      | (x, None) when x = "async error" || x = "session err" ->
-         let buddies = Contact.fold (fun _ b acc -> Contact.reset b :: acc) state.contacts [] in
-         List.iter (Contact.replace_contact state.contacts) buddies ;
-         Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Disconnected)
-      | _ -> ())
-   | _ -> ()) ;
+  let log_height, main_height =
+    let s = state.log_height in
+    if s + 10 > height then
+      (0, height - 2)
+    else
+      (s, height - s - 3)
+  in
 
+  let buddy_width, chat_width =
+    let b = state.buddy_width in
+    match state.window_mode with
+    | BuddyList        -> (b, width - b - 1)
+    | FullScreen | Raw -> (0, width)
+  in
+
+  if main_height <= 4 || chat_width <= 20 then
+    I.string A.empty "need more space"
+  else
+
+    let active = active state
+    and resource = resource state
+    in
+
+    let a = buddy_to_color (Contact.color active resource) in
+
+    let buddies = draw_buddy_list (buddy_width, main_height) state
+    and messages = I.vcat (List.map (I.string A.empty) [ "hallo" ; "abc" ])
+    and vline = I.uchar a (`Uchar 0x2502) 1 main_height
+    and hline = horizontal_line active resource a state.scrollback width
+    in
+
+    let self = self state in
+    let status =
+      let notify = List.length state.notifications > 0 in
+      let log = Contact.preserve_messages active in
+      let mysession = selfsession state in
+      status_line self mysession notify log a width
+    in
+
+    let now = Ptime_clock.now ()
+    and tz_offset_s = tz_offset_s ()
+    in
+    let logs =
+      draw_logs (width, log_height) tz_offset_s now (self.User.message_history)
+    in
+(*
+    let messages =
+      let msg_colors, data =
+        let msgs =
+          if isself then
+            List.map (fun s -> `Default, s) (format_log tz_offset_s now statusses)
+          else
+            format_messages tz_offset_s now active resource state.active_contact (Contact.messages active)
+        in
+        List.split msgs
+      in
+      let scroll default lines =
+        (* data is already in right order -- but we need to strip scrollback *)
+        let elements = drop (state.scrollback * main_size) (List.rev lines) in
+        pad_l_rev default main_size (List.rev elements)
+      in
+      let render_msg (color, line) =
+        let data = S (line ^ "\n") in
+        match color with
+        | `Default   -> [ data ]
+        | `Highlight -> [ B_bold true ; data ; E_bold ]
+      in
+      *)
+
+
+    I.(vcat [ buddies <|> vline <|> messages ;
+              hline ;
+              logs ;
+              status ;
+              input ])
+(*
   let log_size =
-    if state.log_height + 10 > size.rows then
+    if state.log_height + 10 > height then
       0
     else
       state.log_height
   in
   let main_size =
     if log_size = 0 then
-      size.rows - 2
+      height - 2
     else
-      size.rows - log_size - 3 (* status + hline + readline *)
+      height - log_size - 3 (* status + hline + readline *)
   in
   let buddy_width = state.buddy_width in
   let chat_width =
     match state.window_mode with
-    | BuddyList        -> size.cols - buddy_width - 1
-    | FullScreen | Raw -> size.cols
+    | BuddyList        -> width - buddy_width - 1
+    | FullScreen | Raw -> width
   in
 
   if main_size <= 4 || chat_width <= 20 then
-    eval [S "need more space"]
+    I.string A.empty "need more space"
   else
     let now = Ptime_clock.now ()
     and tz_offset_s = tz_offset_s ()
@@ -476,7 +545,9 @@ let make_prompt size network state redraw =
              eval ( main @ hline @ [ S "\n" ; S logs ; S "\n" ] @ status @ [ S "\n" ] )
          with
            _ -> eval ([ S "error during evaluating layout"])
+*)
 
+(*
 let up = UChar.of_int 0x2500
 let down = UChar.of_int 0x2501
 let f5 = UChar.of_int 0x2502
@@ -723,12 +794,39 @@ let send_msg t state active_user failure message =
           (`Full (bare, session.User.resource), out, user_out, None)
   in
   maybe_send ?kind jid out user_out
+*)
 
+(* main thingy: *)
+(* draw ; read mvar ; process : might do network output, modify user hash table (state -> state lwt.t) ; goto 10 *)
+
+(* terminal reader *)
+(*  waits for terminal input, processes it [commands, special keys, messages], puts result into mvar *)
+
+(* sigwinch -- rerender *)
+
+(* stream reader *)
+(*  processes xml stream fragments, puts resulting action [message received, buddy list updates] into mvar *)
+
+(* disconnect and quit *)
+
+module T = Notty_lwt.Terminal
+
+(* this is terminal stuff only... *)
 let rec loop term state network log =
-  let history = Contact.readline_history (active state) in
+  (*  let history = Contact.readline_history (active state) in (* for keyup.down *) *)
+  let input_buffer = "foobar" in (* Contact.saved_input_buffer (active state) in*)
+  (* render things *)
+  let (w, h) = T.size term in
+  let input = I.string A.empty input_buffer in
+  let image = draw_state (w, h) input state in
+  T.image term image >>= fun () ->
+  T.cursor term (Some (succ (I.width input), h)) >>= fun () ->
+  Lwt_unix.sleep(5.) >>= fun () ->
+  loop term state network log
+  (* handle specific keypresses (pgup/down etc) *)
+(*
   match_lwt
     try_lwt
-      let input_buffer = Contact.saved_input_buffer (active state) in
       (new read_line ~term ~history ~state ~network ~input_buffer)#run >>= fun message ->
       if List.length state.notifications = 0 then
         Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) ;
