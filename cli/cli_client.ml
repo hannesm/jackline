@@ -425,132 +425,58 @@ let draw_state (width, height) input state =
               logs ;
               status ;
               input ])
-(*
-  let log_size =
-    if state.log_height + 10 > height then
-      0
-    else
-      state.log_height
-  in
-  let main_size =
-    if log_size = 0 then
-      height - 2
-    else
-      height - log_size - 3 (* status + hline + readline *)
-  in
-  let buddy_width = state.buddy_width in
-  let chat_width =
-    match state.window_mode with
-    | BuddyList        -> width - buddy_width - 1
-    | FullScreen | Raw -> width
-  in
 
-  if main_size <= 4 || chat_width <= 20 then
-    I.string A.empty "need more space"
-  else
-    let now = Ptime_clock.now ()
-    and tz_offset_s = tz_offset_s ()
-    and self = self state
-    and mysession = selfsession state
-    in
-    let isself = Xjid.jid_matches (`Bare (fst state.config.Xconfig.jid)) state.active_contact in
-    let statusses = self.User.message_history in
-    let logs =
-      let entries =
-        if List.length statusses > log_size then
-          take log_size statusses []
-        else
-          statusses
-      in
-      let entries =
-        let entries = format_log tz_offset_s now entries in
-        line_wrap ~max_length:size.cols entries
-      in
-      let data = pad_l_rev "" log_size entries in
-      String.concat "\n" data
-    in
-
-    let active = active state in
-    let resource = resource state in
-
-    let fg_color = buddy_to_color (Contact.color active resource) in
+(* XXX: logic TBI
+    - window mode (buddy_width / chat_width already good)
+    - no log / log display
 
     let main_window =
-      let msg_colors, data =
-        let msgs =
-          if isself then
-            List.map (fun s -> `Default, s) (format_log tz_offset_s now statusses)
-          else
-            format_messages tz_offset_s now active resource state.active_contact (Contact.messages active)
-        in
-        List.split msgs
-      in
-      let scroll default lines =
-        (* data is already in right order -- but we need to strip scrollback *)
-        let elements = drop (state.scrollback * main_size) (List.rev lines) in
-        pad_l_rev default main_size (List.rev elements)
-      in
-      let render_msg (color, line) =
-        let data = S (line ^ "\n") in
-        match color with
-        | `Default   -> [ data ]
-        | `Highlight -> [ B_bold true ; data ; E_bold ]
-      in
       match state.window_mode with
-      | BuddyList ->
-         let chat = line_wrap_with_tags ~max_length:chat_width ~tags:msg_colors data in
-         let chat = scroll (`Default, "") chat in
-         let buddies = buddy_list state main_size buddy_width in
-              let comb = List.combine buddies chat in
-              let pipe = S (Zed_utf8.singleton (UChar.of_int 0x2502)) in
-              List.map
-                (fun (buddy, chat) ->
-                 buddy @ [ B_fg fg_color ; pipe ; E_fg ] @ (render_msg chat))
-                comb
+        | BuddyList ->
+          let chat = line_wrap_with_tags ~max_length:chat_width ~tags:msg_colors data in
+          let chat = scroll (`Default, "") chat in
+          let buddies = buddy_list state main_size buddy_width in
+          let comb = List.combine buddies chat in
+          let pipe = S (Zed_utf8.singleton (UChar.of_int 0x2502)) in
+          List.map
+            (fun (buddy, chat) ->
+               buddy @ [ B_fg fg_color ; pipe ; E_fg ] @ (render_msg chat))
+            comb
 
-           | FullScreen ->
-              let chat = line_wrap_with_tags ~max_length:chat_width ~tags:msg_colors data in
-              let chat = scroll (`Default, "") chat in
-              List.map render_msg chat
+        | FullScreen ->
+          let chat = line_wrap_with_tags ~max_length:chat_width ~tags:msg_colors data in
+          let chat = scroll (`Default, "") chat in
+          List.map render_msg chat
 
-           | Raw ->
-              let data =
-                List.map
-                  (fun x -> x.User.message)
-                  (List.filter
-                     (fun x -> match x.User.direction with
-                               | `Local _ -> false
-                               | `From _ -> true
-                               | `To _ -> false)
-                     (Contact.messages active))
-              in
-              let wrapped = line_wrap ~raw:() ~max_length:chat_width data in
-              let chat = scroll "" wrapped in
-              List.map (fun x -> [ S x ; S "\n" ]) chat
-         in
+        | Raw ->
+          let data =
+            List.map
+              (fun x -> x.User.message)
+              (List.filter
+                 (fun x -> match x.User.direction with
+                    | `Local _ -> false
+                    | `From _ -> true
+                    | `To _ -> false)
+                 (Contact.messages active))
+          in
+          let wrapped = line_wrap ~raw:() ~max_length:chat_width data in
+          let chat = scroll "" wrapped in
+          List.map (fun x -> [ S x ; S "\n" ]) chat
+    in
 
-         let showing_buddies = match state.window_mode with
-           | BuddyList -> true
-           | FullScreen | Raw -> false
-         in
-         let hline =
-           horizontal_line
-             active resource fg_color buddy_width
-             state.scrollback showing_buddies size.cols
-         in
+    let showing_buddies = match state.window_mode with
+      | BuddyList -> true
+      | FullScreen | Raw -> false
+    in
+    let main = List.flatten main_window in
 
-         let notify = List.length state.notifications > 0 in
-         let log = Contact.preserve_messages active in
-         let status = status_line self mysession notify log redraw fg_color size.cols in
-         let main = List.flatten main_window in
-
-         try
-           if log_size = 0 then
-             eval ( main @ status @ [ S "\n" ] )
-           else
-             eval ( main @ hline @ [ S "\n" ; S logs ; S "\n" ] @ status @ [ S "\n" ] )
-         with
-           _ -> eval ([ S "error during evaluating layout"])
+    try
+      if log_size = 0 then
+        eval ( main @ status @ [ S "\n" ] )
+      else
+        eval ( main @ hline @ [ S "\n" ; S logs ; S "\n" ] @ status @ [ S "\n" ] )
+    with
+      _ -> eval ([ S "error during evaluating layout"])
 *)
 
 (*
