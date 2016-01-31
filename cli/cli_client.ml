@@ -206,7 +206,7 @@ let tz_offset_s () =
   | None -> 0 (* XXX: report error *)
   | Some x -> x
 
-let render_state (width, height) input state =
+let render_state (width, height) state =
   let log_height, main_height =
     let s = state.log_height in
     if s + 10 > height then
@@ -221,7 +221,7 @@ let render_state (width, height) input state =
   in
 
   if main_height <= 4 || chat_width <= 20 then
-    I.string A.empty "need more space"
+    (I.string A.empty "need more space", 1)
   else
     let active = active state
     and resource = resource state
@@ -235,6 +235,18 @@ let render_state (width, height) input state =
     and a = buddy_to_color (Contact.color active resource)
     in
 
+    let input, cursorc =
+      (* XXX: needs a proper renderer with sideways scrolling *)
+      let pre, post = state.input in
+      let inp = Array.of_list pre
+      and inp2 = Array.of_list post
+      in
+
+      let iinp = I.uchars A.empty inp
+      and iinp2 = I.uchars A.empty inp2
+      in
+      (I.(iinp <|> iinp2), succ (I.width iinp))
+    in
     let main =
       let msgfmt = format_message tz_offset_s now active resource
       and msgfilter = msgfilter active state.active_contact
@@ -279,7 +291,7 @@ let render_state (width, height) input state =
       in
       I.vcat [ hline_log ; status ; input ]
     in
-    I.(main <-> bottom)
+    (I.(main <-> bottom), cursorc)
 
 let quit state =
   match !xmpp_session with
@@ -412,21 +424,9 @@ module T = Notty_lwt.Terminal
 (* this is rendering and drawing stuff, waiting for change on mvar... *)
 let rec loop term mvar state =
   (*  let history = Contact.readline_history (active state) in (* for keyup.down *) *)
-  let input, cursorc =
-    (* XXX: needs a proper renderer with sideways scrolling, should maybe move into render_state!? *)
-    let pre, post = state.input in
-    let inp = Array.of_list pre
-    and inp2 = Array.of_list post
-    in
-
-    let iinp = I.uchars A.empty inp
-    and iinp2 = I.uchars A.empty inp2
-    in
-    (I.(iinp <|> iinp2), succ (I.width iinp))
-  in
   (* render things *)
   let size = T.size term in
-  let image = render_state size input state in
+  let image, cursorc = render_state size state in
   T.image term image >>= fun () ->
   T.cursor term (Some (cursorc, snd size)) >>= fun () ->
   Lwt_mvar.take mvar >>= fun action ->
