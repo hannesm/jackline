@@ -559,7 +559,7 @@ XXX: elsewhere: if List.length state.notifications = 0 then Lwt.async (fun () ->
        let active =
          let b = active state in
          let b = Contact.add_readline_history b message in
-         let b = Contact.set_saved_input_buffer b "" in
+         let b = Contact.set_saved_input_buffer b ([], []) in
          Contact.replace_contact state.contacts b ;
          b
        in
@@ -599,11 +599,9 @@ XXX: elsewhere: if List.length state.notifications = 0 then Lwt.async (fun () ->
 
     (* UI navigation and toggles *)
     | `Key (`Pg_up, []) ->
-      (* XXX: preserve input buffer for current user *)
       p (fun s -> ok (navigate_buddy_list s Up)) >>= fun () ->
       loop ()
     | `Key (`Pg_dn, []) ->
-      (* XXX: preserve input buffer for current user *)
       p (fun s -> ok (navigate_buddy_list s Down)) >>= fun () ->
       loop ()
 

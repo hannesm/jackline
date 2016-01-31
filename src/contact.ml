@@ -86,14 +86,14 @@ let clear_messages = function
   | `User u -> `User { u with User.message_history = [] }
   | `Room r -> `Room { r with Muc.message_history = [] }
 
-let saved_input_buffer = function
-  | `User u -> u.User.saved_input_buffer
-  | `Room r -> r.Muc.saved_input_buffer
+let input_buffer = function
+  | `User u -> u.User.input_buffer
+  | `Room r -> r.Muc.input_buffer
 
-let set_saved_input_buffer contact str =
+let set_input_buffer contact data =
   match contact with
-  | `User u -> `User { u with User.saved_input_buffer = str }
-  | `Room r -> `Room { r with Muc.saved_input_buffer = str }
+  | `User u -> `User { u with User.input_buffer = data }
+  | `Room r -> `Room { r with Muc.input_buffer = data }
 
 let new_message contact message =
   match contact with

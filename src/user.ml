@@ -221,7 +221,7 @@ type user = {
   properties        : property list ;
   preserve_messages : bool ;
   message_history   : message list ; (* persistent if preserve_messages is true *)
-  saved_input_buffer: string ; (* not persistent *)
+  input_buffer: (int list * int list) ; (* not persistent *)
   readline_history  : string list ; (* not persistent *)
   otr_fingerprints  : fingerprint list ;
   otr_custom_config : Otr.State.config option ;
@@ -268,10 +268,10 @@ let new_user ~jid ?(name=None) ?(groups=[]) ?(subscription=`None) ?(otr_fingerpr
   let message_history = []
   and expand = false
   and self = false
-  and saved_input_buffer = ""
+  and input_buffer = ([], [])
   and readline_history = []
   in
-  { bare_jid = jid ; name ; groups ; subscription ; properties ; otr_fingerprints ; preserve_messages ; active_sessions ; message_history ; saved_input_buffer ; readline_history ; otr_custom_config ; expand ; self }
+  { bare_jid = jid ; name ; groups ; subscription ; properties ; otr_fingerprints ; preserve_messages ; active_sessions ; message_history ; input_buffer ; readline_history ; otr_custom_config ; expand ; self }
 
 let active_session user =
   let sorted = List.sort compare_session user.active_sessions

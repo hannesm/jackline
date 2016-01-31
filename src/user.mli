@@ -104,7 +104,7 @@ type user = {
   properties        : property list ;
   preserve_messages : bool ;
   message_history   : message list ; (* persistent if preserve_messages is true *)
-  saved_input_buffer: string ; (* not persistent *)
+  input_buffer: (int list * int list) ; (* not persistent *)
   readline_history  : string list ; (* not persistent *)
   otr_fingerprints  : fingerprint list ;
   otr_custom_config : Otr.State.config option ;
