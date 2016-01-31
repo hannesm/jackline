@@ -116,7 +116,7 @@ let render_buddy_list (w, h) state =
 
 let horizontal_line buddy resource a scrollback width =
   let pre = I.string a "── "
-  and scroll = if scrollback = 0 then I.empty else I.string a "*scrolling* "
+  and scroll = if scrollback = 0 then I.empty else I.string a ("*scrolling " ^ string_of_int scrollback ^ "* ")
   and jid =
     let p = match buddy with
       | `User _ -> "buddy: "
@@ -464,8 +464,7 @@ let navigate_message_buffer state direction =
   | Down, 0 -> state
   | Down, n ->
     let s = { state with scrollback = pred n } in
-    if s.scrollback = 0 then notified s ;
-    s
+    if s.scrollback = 0 then notified s else s
   | Up, n -> { state with scrollback = succ n }
 
 let navigate_buddy_list state direction =

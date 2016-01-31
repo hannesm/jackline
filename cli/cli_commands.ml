@@ -198,7 +198,7 @@ let handle_connect state log redraw failure =
        Contact.replace_user state.contacts user ;
        (match dir with
         | `Local (_, s) when Astring.String.is_prefix ~affix:"OTR" s -> ()
-        | _ -> notify state jid) ;
+        | _ -> ignore (notify state jid)) ; (* XXX *)
        redraw ()
     | Some (`Room _) -> () (* XXX is a private message *)
     | None ->
@@ -207,7 +207,7 @@ let handle_connect state log redraw failure =
          User.insert_message ?timestamp u dir enc true txt
        in
        Contact.replace_user state.contacts user ;
-       notify state jid ;
+       ignore (notify state jid) ;
        redraw ()
   and receipt jid id =
     match Contact.find_user state.contacts (Xjid.t_to_bare jid) with
@@ -240,7 +240,7 @@ let handle_connect state log redraw failure =
          let u, removed = User.replace_session user similar in
          let u, removed' = User.replace_session u new_session in
          (if removed || removed' then
-            update_notifications state u similar.User.resource new_session.User.resource) ;
+            ignore (update_notifications state u similar.User.resource new_session.User.resource)) ;
          u
        in
        Contact.replace_user state.contacts u ;
@@ -266,7 +266,7 @@ let handle_connect state log redraw failure =
           let r = session.User.resource in
           match User.find_similar_session user r with
           | None -> ()
-          | Some x -> update_notifications state user x.User.resource r) ;
+          | Some x -> ignore (update_notifications state user x.User.resource r)) ;
        Contact.replace_user state.contacts user
   and update_receipt_state jid receipt =
     match Contact.find_user state.contacts (Xjid.t_to_bare jid) with
@@ -284,7 +284,7 @@ let handle_connect state log redraw failure =
   and update_user user alert =
     Contact.replace_user state.contacts user ;
     Lwt.async (fun () -> Lwt_mvar.put state.contact_mvar (`User user)) ;
-    if alert then notify state (`Bare user.User.bare_jid) ;
+    if alert then ignore (notify state (`Bare user.User.bare_jid)) ;
     redraw ()
   and reset_users () =
     let all_users =
@@ -340,7 +340,7 @@ let handle_connect state log redraw failure =
                 | `Room r -> r
                 | _ -> assert false)
             | _ ->
-               notify state (`Bare r.Muc.room_jid) ;
+               ignore (notify state (`Bare r.Muc.room_jid)) ;
                let msg = User.message ?timestamp ~kind:`GroupChat (`From jid) false true msg in
                Muc.new_message room msg
        in

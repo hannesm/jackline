@@ -26,27 +26,33 @@ type connect_v =
 type input = int list * int list
 
 type state = {
-  config_directory            : string                     ; (* set initially *)
-  config                      : Xconfig.t                  ; (* set initially *)
+  (* set only initially *)
+  config_directory : string ;
+  config : Xconfig.t ;
 
-  state_mvar                  : notify_v Lwt_mvar.t        ; (* set initially *)
-  contact_mvar                : Contact.contact Lwt_mvar.t ; (* set initially *)
-  connect_mvar                : connect_v Lwt_mvar.t       ; (* set initially *)
+  state_mvar : notify_v Lwt_mvar.t ;
+  contact_mvar : Contact.contact Lwt_mvar.t ;
+  connect_mvar : connect_v Lwt_mvar.t ;
 
-  contacts                    : Contact.contacts           ; (* read from disk, extended by xmpp callbacks *)
+  (* initially filled by on-disk-data, modified by xmpp callbacks *)
+  contacts : Contact.contacts ;
 
-  active_contact      : Xjid.t                     ; (* modified by scrolling *)
-  last_active_contact : Xjid.t                     ; (* modified by scrolling *)
+  (* list of jid to blink *)
+  notifications : Xjid.t list ;
 
-  mutable notifications       : Xjid.t list                ; (* list to blink *)
+  (* initially yourself, modified by key presses (page up/page down/C-x/C-q) *)
+  active_contact : Xjid.t ;
+  last_active_contact : Xjid.t ;
 
-  show_offline        : bool                       ; (* F5 stuff *)
-  window_mode         : display_mode               ; (* F12 stuff *)
-  scrollback          : int                        ; (* scroll-pgup/down state *)
+  (* UI toggles, modified by keys *)
+  show_offline : bool ;
+  window_mode : display_mode ;
+  scrollback : int ;
+  log_height : int ;
+  buddy_width : int ;
 
-  log_height          : int                        ;
-  buddy_width         : int                        ;
-  input               : input ;
+  (* current input buffer *)
+  input : input ;
 }
 
 module Notify = struct
@@ -255,9 +261,9 @@ let notify state jid =
     List.exists (Xjid.jid_matches jid) state.notifications ||
       (Xjid.jid_matches state.active_contact jid && state.scrollback = 0)
   then
-    ()
+    state
   else
-    state.notifications <- jid :: state.notifications
+    { state with notifications = jid :: state.notifications }
 
 let active state =
   match Contact.find_contact state.contacts (Xjid.t_to_bare state.active_contact) with
@@ -274,10 +280,10 @@ let isnotified state jid =
   List.exists (Xjid.jid_matches jid) state.notifications
 
 let notified state =
-  let leftover = List.filter (fun x -> not (isactive state x)) state.notifications in
-  state.notifications <- leftover ;
-  if List.length state.notifications = 0 then
-    Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear)
+  let notifications = List.filter (fun x -> not (isactive state x)) state.notifications in
+  if List.length notifications = 0 then
+    Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) ;
+  { state with notifications }
 
 let active_contacts state =
   let active jid =
@@ -370,8 +376,7 @@ let activate_contact state active =
         scrollback          = 0 ;
         window_mode         = BuddyList }
     in
-    notified state ;
-    state
+    notified state
   in
   match find state.active_contact, find active with
   | Some cur, Some now ->
@@ -395,5 +400,5 @@ let update_notifications state user oldr newr =
     | `Full (jid, r) when bare = jid && r = oldr -> `Full (jid, newr)
     | `Full _ as x -> x
   in
-  let nots = List.map update state.notifications in
-  state.notifications <- nots
+  let notifications = List.map update state.notifications in
+  { state with notifications }

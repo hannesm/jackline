@@ -37,7 +37,7 @@ let configure term () =
 
   (* JID *)
   let prefix = "Jabber ID: " in
-  let below = [I.string A.empty "format is 'user@server/resource'"] in
+  let below = [I.string A.empty "format must be 'user@server/resource'"] in
   ask above ~below prefix
     Xjid.string_to_jid
     (function Some (`Full f) -> `Ok f | _ -> `Invalid)
