@@ -461,11 +461,12 @@ type direction = Up | Down
 
 let navigate_message_buffer state direction =
   match direction, state.scrollback with
-  | Down, 0 -> ()
+  | Down, 0 -> state
   | Down, n ->
-    state.scrollback <- n - 1 ;
-    if state.scrollback = 0 then notified state
-  | Up, n -> state.scrollback <- n + 1
+    let s = { state with scrollback = pred n } in
+    if s.scrollback = 0 then notified s ;
+    s
+  | Up, n -> { state with scrollback = succ n }
 
 let navigate_buddy_list state direction =
   let userlist = all_jids state in
@@ -480,7 +481,6 @@ let navigate_buddy_list state direction =
   | Up -> set_active ((l + pred active_idx) mod l)
 
 let read_terminal term mvar () =
-  (* XXX: message scrolling C-up / C-down *)
   (* XXX: notifications C-q / C-x *)
   (* XXX: emacs key bindings: C-ae C-ku C-fb C-left/right [word forward/backward] C- wy[mark, kill, yank] C-_-[undo/redo] *)
   (* XXX: handle history (up/down) *)
@@ -597,12 +597,20 @@ XXX: elsewhere: if List.length state.notifications = 0 then Lwt.async (fun () ->
     (* UI navigation and toggles *)
     | `Key (`Pg_up, []) ->
       (* XXX: preserve input buffer for current user *)
-      p (fun s -> navigate_buddy_list s Up ; ok s) >>= fun () ->
+      p (fun s -> ok (navigate_buddy_list s Up)) >>= fun () ->
       loop ()
     | `Key (`Pg_dn, []) ->
       (* XXX: preserve input buffer for current user *)
-      p (fun s -> navigate_buddy_list s Down ; ok s) >>= fun () ->
+      p (fun s -> ok (navigate_buddy_list s Down)) >>= fun () ->
       loop ()
+
+    | `Key (`Pg_up, [`Ctrl]) ->
+      p (fun s -> ok (navigate_message_buffer s Up)) >>= fun () ->
+      loop ()
+    | `Key (`Pg_dn, [`Ctrl]) ->
+      p (fun s -> ok (navigate_message_buffer s Down)) >>= fun () ->
+      loop ()
+
     | `Key ((`Fn 5), []) ->
       p (fun s -> ok { s with show_offline = not s.show_offline }) >>= fun () ->
       loop ()

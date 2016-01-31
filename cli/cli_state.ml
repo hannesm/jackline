@@ -35,16 +35,14 @@ type state = {
 
   contacts                    : Contact.contacts           ; (* read from disk, extended by xmpp callbacks *)
 
-  mutable active_contact      : Xjid.t                     ; (* modified by scrolling *)
-  mutable last_active_contact : Xjid.t                     ; (* modified by scrolling *)
+  active_contact      : Xjid.t                     ; (* modified by scrolling *)
+  last_active_contact : Xjid.t                     ; (* modified by scrolling *)
 
   mutable notifications       : Xjid.t list                ; (* list to blink *)
 
   show_offline        : bool                       ; (* F5 stuff *)
-  mutable window_mode         : display_mode               ; (* F12 stuff *)
-  mutable scrollback          : int                        ; (* scroll-pgup/down state *)
-
-  mutable last_status         : (User.direction * string)  ; (* internal use only *)
+  window_mode         : display_mode               ; (* F12 stuff *)
+  scrollback          : int                        ; (* scroll-pgup/down state *)
 
   log_height          : int                        ;
   buddy_width         : int                        ;
@@ -209,7 +207,6 @@ end
 
 let empty_state config_directory config contacts connect_mvar state_mvar =
   let contact_mvar = Persistency.notify_user config_directory
-  and last_status = (`Local (`Full config.Xconfig.jid, ""), "")
   and active = `Bare (fst config.Xconfig.jid)
   in
   {
@@ -230,8 +227,6 @@ let empty_state config_directory config contacts connect_mvar state_mvar =
     show_offline        = true      ;
     window_mode         = BuddyList ;
     scrollback          = 0         ;
-
-    last_status                     ;
 
     log_height          = 6         ;
     buddy_width         = 24        ;
@@ -368,18 +363,22 @@ let activate_contact state active =
   let find x = Contact.find_contact state.contacts (Xjid.t_to_bare x)
   and r_jid c id = if Contact.expanded c then id else `Bare (Contact.bare c)
   and update ojid njid =
-    state.last_active_contact <- ojid ;
-    state.active_contact      <- njid ;
-    state.scrollback          <- 0 ;
-    state.window_mode         <- BuddyList ;
-    notified state
+    let state =
+      { state with
+        last_active_contact = ojid ;
+        active_contact      = njid ;
+        scrollback          = 0 ;
+        window_mode         = BuddyList }
+    in
+    notified state ;
+    state
   in
   match find state.active_contact, find active with
   | Some cur, Some now ->
      let ojid = r_jid cur state.active_contact
      and njid = r_jid now active
      in
-     if ojid <> njid then update state.active_contact njid
+     if ojid <> njid then update state.active_contact njid else state
   | None, Some now ->
      let old = match find state.last_active_contact with
        | Some c -> r_jid c state.last_active_contact

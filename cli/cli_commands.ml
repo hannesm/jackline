@@ -180,9 +180,10 @@ let handle_connect state log redraw failure =
     (if Xjid.jid_matches (`Bare bare) state.active_contact then
        let idx = Utils.find_index state.active_contact 0 userlist in
        let new_idx = if idx > 0 then pred idx else succ idx in
-       activate_contact state (List.nth userlist new_idx) ) ;
-    if Xjid.jid_matches (`Bare bare) state.last_active_contact then
-      state.last_active_contact <- `Bare (fst state.config.Xconfig.jid) ;
+       (* XXX FIXME *)
+       ignore (activate_contact state (List.nth userlist new_idx)) ) ;
+    (* if Xjid.jid_matches (`Bare bare) state.last_active_contact then
+       state.last_active_contact <- `Bare (fst state.config.Xconfig.jid) ; *)
     redraw ()
   and log dir txt =
     log (dir, txt)
