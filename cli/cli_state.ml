@@ -55,6 +55,20 @@ type state = {
   input : input ;
 }
 
+let add_status state dir msg =
+  match Contact.find_user state.contacts (fst state.config.Xconfig.jid) with
+  | None -> assert false
+  | Some self ->
+     let self = User.insert_message self dir false true msg in
+     Contact.replace_user state.contacts self
+
+let selflog mvar from message =
+  let c s =
+    add_status s (`Local ((`Full s.config.Xconfig.jid), from)) message ;
+    Lwt.return (`Ok s)
+  in
+  Lwt_mvar.put mvar c
+
 module Notify = struct
   type notify_writer_s = Q | D | C | D_N | C_N
 
@@ -123,7 +137,7 @@ module Connect = struct
     | None   ->
        Lwt.return_unit
 
-  let resolve config log =
+  let resolve config ui_mvar =
     let domain = JID.to_idn (Xjid.jid_to_xmpp_jid (`Full config.Xconfig.jid))
     and hostname = config.Xconfig.hostname
     and port = config.Xconfig.port
@@ -134,17 +148,17 @@ module Connect = struct
            Unix.string_of_inet_addr inet_addr ^ " on port " ^ string_of_int port
         | Unix.ADDR_UNIX str -> str
       in
-      log (`Local (`Full config.Xconfig.jid, "connecting"), "to " ^ domain ^ " (" ^ addr ^ ")") ;
+      selflog ui_mvar "connecting" ("to " ^ domain ^ " (" ^ addr ^ ")")
     in
-    Xmpp_callbacks.resolve hostname port domain >|= fun sa ->
-    report sa ;
+    Xmpp_callbacks.resolve hostname port domain >>= fun sa ->
+    report sa >|= fun () ->
     sa
 
-  let connect_me config log state_mvar users =
+  let connect_me config ui_mvar state_mvar users =
     let mvar = Lwt_mvar.create Cancel in
     let failure reason =
       disconnect () >>= fun () ->
-      log (`Local (`Full config.Xconfig.jid, "session error"), Printexc.to_string reason) ;
+      selflog ui_mvar "session error" (Printexc.to_string reason) >>= fun () ->
       let conn = fun () -> Lwt_mvar.put mvar Reconnect in
       ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async conn)) ;
       Lwt.return_unit
@@ -154,7 +168,7 @@ module Connect = struct
       | None -> failure (Invalid_argument "no password provided, please restart")
       | Some password ->
          try_lwt
-           (resolve config log >>= fun sockaddr ->
+           (resolve config ui_mvar >>= fun sockaddr ->
             let certname = match config.Xconfig.certificate_hostname with
               | None -> JID.to_idn (Xjid.jid_to_xmpp_jid (`Full config.Xconfig.jid))
               | Some x -> x
@@ -239,13 +253,6 @@ let empty_state config_directory config contacts connect_mvar state_mvar =
     input               = ([], [])
 }
 
-
-let add_status state dir msg =
-  match Contact.find_user state.contacts (fst state.config.Xconfig.jid) with
-  | None -> assert false
-  | Some self ->
-     let self = User.insert_message self dir false true msg in
-     Contact.replace_user state.contacts self
 
 let send s ?kind jid id body fail =
   Xmpp_callbacks.send_msg s ?kind jid id body fail

@@ -410,7 +410,7 @@ let send_msg t state active_user failure message =
 module T = Notty_lwt.Terminal
 
 (* this is rendering and drawing stuff, waiting for change on mvar... *)
-let rec loop term mvar state network log =
+let rec loop term mvar state =
   (*  let history = Contact.readline_history (active state) in (* for keyup.down *) *)
   let input, cursorc =
     (* XXX: needs a proper renderer with sideways scrolling, should maybe move into render_state!? *)
@@ -431,23 +431,26 @@ let rec loop term mvar state network log =
   T.cursor term (Some (cursorc, snd size)) >>= fun () ->
   Lwt_mvar.take mvar >>= fun action ->
   action state >>= function
-  | `Ok state -> loop term mvar state network log
+    (* XXX: should we treat disconnect here as well? someone needs to! (so far, make_prompt did this... could also do the reconnect dance.. and adjust xmpp_session) *)
+  | `Ok state -> loop term mvar state
   | `Quit state -> Lwt.return state
 
-let init_system log myjid connect_mvar =
+let init_system ui_mvar connect_mvar =
   let err r m =
     Lwt.async (fun () ->
-      Connect.disconnect () >|= fun () ->
-      log (`Local (`Full myjid, "async error"), m) ;
-      if r then
-        ignore (Lwt_engine.on_timer 10. false (fun _ ->
-                  Lwt.async (fun () -> Lwt_mvar.put connect_mvar Reconnect))))
+        Connect.disconnect () >>= fun () ->
+        selflog ui_mvar "async error" m >|= fun () ->
+        if r then
+          ignore (Lwt_engine.on_timer 10. false (fun _ ->
+              Lwt.async (fun () -> Lwt_mvar.put connect_mvar Reconnect))))
   in
   Lwt.async_exception_hook := (function
       | Tls_lwt.Tls_failure `Error (`AuthenticationFailure _) as exn ->
          err false (Printexc.to_string exn)
       | Unix.Unix_error (Unix.EBADF, _, _ ) as exn ->
-         xmpp_session := None ; err false (Printexc.to_string exn)
+         xmpp_session := None ; err true (Printexc.to_string exn)
+      | Unix.Unix_error (Unix.EINVAL, "select", _ ) as exn ->
+         xmpp_session := None ; err true (Printexc.to_string exn)
       | exn -> err true (Printexc.to_string exn)
   )
 

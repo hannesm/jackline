@@ -1,5 +1,4 @@
 open Lwt.Infix
-open React
 
 let start_client cfgdir debug () =
   Sys.(set_signal sigpipe Signal_ignore) ;
@@ -59,15 +58,6 @@ let start_client cfgdir debug () =
     Contact.replace_user users u
   in
 
-  let greeting =
-    "multi user chat support: see you at /join jackline@conference.jabber.ccc.de (use ArrowUp key); \
-     type /help for help"
-  in
-
-  let sender = `Local (`Full myjid, "welcome to jackline " ^ Utils.version) in
-
-  let n, log = S.create (sender, greeting) in
-
   (if debug then
      Persistency.open_append (Unix.getenv "PWD") "out.txt" >|= fun fd ->
      Xmpp_connection.debug_out := Some fd ;
@@ -75,13 +65,19 @@ let start_client cfgdir debug () =
    else
      Lwt.return (fun () -> Lwt.return_unit)) >>= fun closing ->
 
+  let ui_mvar = Lwt_mvar.create_empty () in
+
   let state_mvar =
     let file = Filename.concat cfgdir "notification.state" in
     Cli_state.Notify.notify_writer myjid config.Xconfig.notification_callback file
   in
-  let connect_mvar = Cli_state.Connect.connect_me config (log ?step:None) state_mvar users in
+  let connect_mvar = Cli_state.Connect.connect_me config ui_mvar state_mvar users in
   let state = Cli_state.empty_state cfgdir config users connect_mvar state_mvar in
 
+  let greeting =
+    "multi user chat support: see you at /join jackline@conference.jabber.ccc.de (use ArrowUp key); \
+     type /help for help"
+  and sender = `Local (`Full myjid, "welcome to jackline " ^ Utils.version) in
   Cli_state.add_status state sender greeting ;
 
   let us = Contact.fold (fun _ v acc -> v :: acc) users [] in
@@ -103,13 +99,11 @@ let start_client cfgdir debug () =
     Lwt_engine.on_timer 600. true (fun _ -> Lwt.async dump)
   in
 
-  Cli_client.init_system (log ?step:None) myjid connect_mvar ;
-
-  let mvar = Lwt_mvar.create_empty () in
-  Lwt.async (Cli_client.read_terminal term mvar) ;
-  Lwt.async (Cli_client.winch term mvar) ;
+  Cli_client.init_system ui_mvar connect_mvar ;
+  Lwt.async (Cli_client.read_terminal term ui_mvar) ;
+  Lwt.async (Cli_client.winch term ui_mvar) ;
   (* main loop *)
-  Cli_client.loop term mvar state n (log ?step:None) >>= fun state ->
+  Cli_client.loop term ui_mvar state >>= fun state ->
 
   closing () >>= fun () ->
 
