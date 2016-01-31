@@ -51,31 +51,31 @@ let read_line ?(above = []) ?(prefix = "") ?default ?(below = []) term =
     in
     rewrap term above below (iprefix, iinp, iinp2) (T.size term) >>= fun () ->
     Lwt_stream.next (T.input term) >>= function
-      | `Key `Enter ->
+      | `Key (`Enter, []) ->
          let buf = Buffer.create (Array.length inp + Array.length inp2) in
          Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
          Array.iter (Uutf.Buffer.add_utf_8 buf) inp2 ;
          Lwt.return (Buffer.contents buf)
-      | `Key `Bs ->
+      | `Key (`Backspace, []) ->
          (match List.rev pre with
           | [] -> go pre post
           | _::tl -> go (List.rev tl) post)
-      | `Key `Del ->
+      | `Key (`Delete, []) ->
          (match post with
           | [] -> go pre post
           | _::tl -> go pre tl)
-      | `Key `Home -> go [] (pre @ post)
-      | `Key `End -> go (pre @ post) []
-      | `Key `Right ->
+      | `Key (`Home, []) -> go [] (pre @ post)
+      | `Key (`End, []) -> go (pre @ post) []
+      | `Key (`Right, []) ->
          (match post with
           | [] -> go pre post
           | hd::tl -> go (pre @ [hd]) tl)
-      | `Key `Left ->
+      | `Key (`Left, []) ->
          (match List.rev pre with
           | [] -> go [] post
           | hd::tl -> go (List.rev tl) (hd :: post))
-      | `Key _ -> go pre post
-      | `Uchar chr -> go (pre @ [chr]) post
+      | `Key (`Uchar chr, []) -> go (pre @ [chr]) post
+      | _ -> go pre post
   in
   let pre = Utils.option [] str_to_char_list default in
   go pre []
@@ -87,16 +87,16 @@ let read_password ?(above = []) ?(prefix = "") ?(below = []) term =
     let prefix = I.string A.empty prefix in
     rewrap term above below (prefix, input, I.empty) (T.size term) >>= fun () ->
     Lwt_stream.next (T.input term) >>= function
-      | `Key `Enter ->
+      | `Key (`Enter, []) ->
          let buf = Buffer.create w in
          Array.iter (Uutf.Buffer.add_utf_8 buf) (Array.of_list pre) ;
          Lwt.return (Buffer.contents buf)
-      | `Key `Bs ->
+      | `Key (`Backspace, []) ->
          (match List.rev pre with
           | [] -> go pre
           | _::tl -> go (List.rev tl))
-      | `Key _ -> go pre
-      | `Uchar chr -> go (pre @ [chr])
+      | `Key (`Uchar chr, []) -> go (pre @ [chr])
+      | _ -> go pre
   in
   go []
 

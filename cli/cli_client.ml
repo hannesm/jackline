@@ -494,39 +494,39 @@ let read_terminal term mvar () =
   in
   let rec loop () =
     Lwt_stream.next (T.input term) >>= function
-    | `Uchar chr ->
+    | `Key (`Uchar chr, []) ->
       p (fun s -> ok (input s (fun pre post -> pre @ [chr], post))) >>= fun () ->
       loop ()
 
     (* navigation / readline stuff *)
-    | `Key `Bs ->
+    | `Key (`Backspace, []) ->
       let f pre post = match List.rev pre with
         | [] -> (pre, post)
         | _::tl -> (List.rev tl, post)
       in
       p (fun s -> ok (input s f)) >>= fun () ->
       loop ()
-    | `Key `Del ->
+    | `Key (`Delete, []) ->
       let f pre post = match post with
         | [] -> (pre, post)
         | _::tl -> (pre, tl)
       in
       p (fun s -> ok (input s f)) >>= fun () ->
       loop ()
-    | `Key `Home ->
+    | `Key (`Home, []) ->
       p (fun s -> ok (input s (fun pre post -> [], pre @ post))) >>= fun () ->
       loop ()
-    | `Key `End ->
+    | `Key (`End, []) ->
       p (fun s -> ok (input s (fun pre post -> pre @ post, []))) >>= fun () ->
       loop ()
-    | `Key `Right ->
+    | `Key (`Right, []) ->
       let f pre post = match post with
         | [] -> (pre, post)
         | hd::tl -> (pre @ [hd], tl)
       in
       p (fun s -> ok (input s f)) >>= fun () ->
       loop ()
-    | `Key `Left ->
+    | `Key (`Left, []) ->
       let f pre post = match List.rev pre with
         | [] -> ([], post)
         | hd::tl -> (List.rev tl, hd :: post)
@@ -534,7 +534,7 @@ let read_terminal term mvar () =
       p (fun s -> ok (input s f)) >>= fun () ->
       loop ()
 
-    | `Key `Enter ->
+    | `Key (`Enter, []) ->
       let handler s =
         let pre, post = s.input in
         let inp = Array.of_list pre
@@ -595,30 +595,30 @@ XXX: elsewhere: if List.length state.notifications = 0 then Lwt.async (fun () ->
 *)
 
     (* UI navigation and toggles *)
-    | `Key `Pg_up ->
+    | `Key (`Pg_up, []) ->
       (* XXX: preserve input buffer for current user *)
       p (fun s -> navigate_buddy_list s Up ; ok s) >>= fun () ->
       loop ()
-    | `Key `Pg_dn ->
+    | `Key (`Pg_dn, []) ->
       (* XXX: preserve input buffer for current user *)
       p (fun s -> navigate_buddy_list s Down ; ok s) >>= fun () ->
       loop ()
-    | `Key (`Fn 5) ->
+    | `Key ((`Fn 5), []) ->
       p (fun s -> ok { s with show_offline = not s.show_offline }) >>= fun () ->
       loop ()
-    | `Key (`Fn 10) ->
+    | `Key ((`Fn 10), []) ->
       p (fun s -> ok { s with log_height = succ s.log_height }) >>= fun () ->
       loop ()
 (*    | `Key `Shift (`Fn 10) ->
       p (fun s -> ok { s with log_height = max 0 (pred s.log_height) }) >>= fun () ->
       loop () *)
-    | `Key (`Fn 11) ->
+    | `Key ((`Fn 11), []) ->
       p (fun s -> ok { s with buddy_width = succ s.buddy_width }) >>= fun () ->
       loop ()
 (*    | `Key `Shift (`Fn 11) ->
       p (fun s -> ok { s with buddy_width = max 0 (pred s.buddy_width) }) >>= fun () ->
       loop () *)
-    | `Key (`Fn 12) ->
+    | `Key ((`Fn 12), []) ->
       p (fun s -> ok { s with window_mode = next_display_mode s.window_mode }) >>= fun () ->
       loop ()
 
