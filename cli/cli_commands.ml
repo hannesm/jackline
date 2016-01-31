@@ -161,7 +161,7 @@ let handle_help msg = function
     let cmds = String.concat " " (keys ()) in
     msg "available commands (try [/help cmd])" cmds
 
-let handle_connect state log redraw failure =
+let handle_connect state log failure =
   let remove jid =
     let bare = Xjid.t_to_bare jid
     and userlist = all_jids state
@@ -181,10 +181,9 @@ let handle_connect state log redraw failure =
        let idx = Utils.find_index state.active_contact 0 userlist in
        let new_idx = if idx > 0 then pred idx else succ idx in
        (* XXX FIXME *)
-       ignore (activate_contact state (List.nth userlist new_idx)) ) ;
+       ignore (activate_contact state (List.nth userlist new_idx)) )
     (* if Xjid.jid_matches (`Bare bare) state.last_active_contact then
        state.last_active_contact <- `Bare (fst state.config.Xconfig.jid) ; *)
-    redraw ()
   and log dir txt =
     log (dir, txt)
   and locallog str txt =
@@ -198,8 +197,7 @@ let handle_connect state log redraw failure =
        Contact.replace_user state.contacts user ;
        (match dir with
         | `Local (_, s) when Astring.String.is_prefix ~affix:"OTR" s -> ()
-        | _ -> ignore (notify state jid)) ; (* XXX *)
-       redraw ()
+        | _ -> ignore (notify state jid)) (* XXX *)
     | Some (`Room _) -> () (* XXX is a private message *)
     | None ->
        let user =
@@ -207,15 +205,13 @@ let handle_connect state log redraw failure =
          User.insert_message ?timestamp u dir enc true txt
        in
        Contact.replace_user state.contacts user ;
-       ignore (notify state jid) ;
-       redraw ()
+       ignore (notify state jid)
   and receipt jid id =
     match Contact.find_user state.contacts (Xjid.t_to_bare jid) with
     | None -> ()
     | Some user ->
        let buddy = Contact.received (`User user) id in
-       Contact.replace_contact state.contacts buddy ;
-       redraw ()
+       Contact.replace_contact state.contacts buddy
   and user jid =
     let bare = Xjid.t_to_bare jid in
     match Contact.find_user state.contacts bare with
@@ -284,8 +280,7 @@ let handle_connect state log redraw failure =
   and update_user user alert =
     Contact.replace_user state.contacts user ;
     Lwt.async (fun () -> Lwt_mvar.put state.contact_mvar (`User user)) ;
-    if alert then ignore (notify state (`Bare user.User.bare_jid)) ;
-    redraw ()
+    if alert then ignore (notify state (`Bare user.User.bare_jid))
   and reset_users () =
     let all_users =
       Contact.fold (fun _ c acc ->
@@ -344,8 +339,7 @@ let handle_connect state log redraw failure =
                let msg = User.message ?timestamp ~kind:`GroupChat (`From jid) false true msg in
                Muc.new_message room msg
        in
-       Contact.replace_room state.contacts room ;
-       redraw ()
+       Contact.replace_room state.contacts room
   and group_presence jid presence status data =
     match jid with
     | `Bare _ -> ()
@@ -760,18 +754,16 @@ let adjust_otr_policy default_cfg cfg contact data =
     _ -> (["unable to parse argument"], None, None)
 
 let tell_user (log:(User.direction * string) -> unit) jid ?(prefix:string option) (from:string) (msg:string) =
-  let f = match prefix with
-    | None -> from
-    | Some x -> x ^ "; " ^ from
-  in
+  let f = Utils.option from (fun x -> x ^ "; " ^ from) prefix in
   log (`Local (jid, f), msg)
 
-let handle_join s my_nick buddies room err =
+let handle_join state s my_nick buddies room err =
   match Xjid.string_to_jid room with
   | Some (`Bare room_jid) ->
      let room = Muc.new_room ~jid:room_jid ~my_nick () in
      Contact.replace_room buddies room ;
-     Xmpp_callbacks.Xep_muc.enter_room s (Xjid.jid_to_xmpp_jid (`Bare room_jid))
+     Xmpp_callbacks.Xep_muc.enter_room s (Xjid.jid_to_xmpp_jid (`Bare room_jid)) >>= fun () ->
+     Lwt.return (`Ok state)
   | _ -> err "not a bare jid"
 
 let handle_leave buddy reason =
@@ -787,7 +779,8 @@ let handle_leave buddy reason =
      (["leaving room"], Some r, Some clos)
   | _ -> (["not a chatroom"], None, None)
 
-let exec input state term contact session isself failure log redraw =
+let exec input state term contact isself failure : ([ `Ok of Cli_state.state | `Quit of Cli_state.state ] Lwt.t) =
+  let log (direction, msg) = add_status state direction msg in
   let msg = tell_user log state.active_contact in
   let err = msg "error" in
   let own_session = selfsession state in
@@ -796,50 +789,54 @@ let exec input state term contact session isself failure log redraw =
     | _ -> None
   in
 
+  let ok s = Lwt.return (`Ok s) in
+
   let global_things = ["add";"status";"priority";"join"] in
   match cmd_arg input with
   (* completely independent *)
-  | ("help" , x) -> handle_help (msg ?prefix:None) x ; Lwt.return_unit
+  | ("help" , x) -> handle_help (msg ?prefix:None) x ; ok state
 
   | other ->
-     let err msg = err msg ; Lwt.return_unit in
+     let err msg = err msg ; ok state in
      match other, !xmpp_session with
      (* connect *)
-     | ("connect", _), None   -> handle_connect state log redraw failure
+     | ("connect", _), None   -> handle_connect state log failure >>= fun () -> ok state
      | ("connect", _), Some _ -> err "already connected"
 
      (* disconnect *)
-     | ("disconnect", _), Some _ -> handle_disconnect (msg ?prefix:None)
+     | ("disconnect", _), Some _ -> handle_disconnect (msg ?prefix:None) >>= fun () -> ok state
      | ("disconnect", _), None   -> err "not connected"
 
      (* commands not using active_contact *)
      | (x, _), None when List.mem x global_things -> err "not connected"
      | (x, None), _ when List.mem x global_things ->
-        handle_help (msg ~prefix:"argument required") (Some x) ; Lwt.return_unit
+        handle_help (msg ~prefix:"argument required") (Some x) ; ok state
 
      (* add *)
-     | ("add", Some a), Some s -> handle_add s a (msg ?prefix:None) failure
+     | ("add", Some a), Some s -> handle_add s a (msg ?prefix:None) failure >>= fun () -> ok state
 
      (* status *)
      | ("status", Some arg), Some s ->
         (match handle_status own_session arg with
-         | None -> handle_help (msg ~prefix:"unknown argument") (Some "status") ; Lwt.return_unit
+         | None -> handle_help (msg ~prefix:"unknown argument") (Some "status") ; ok state
          | Some p ->
             Lwt_mvar.put state.connect_mvar (Presence p) >>= fun () ->
-            send_status s p failure)
+            send_status s p failure >>= fun () ->
+            ok state)
 
      (* priority *)
      | ("priority", Some p), Some s ->
         (match handle_priority own_session p with
-         | None   -> handle_help (msg ~prefix:"unknown argument") (Some "priority") ; Lwt.return_unit
+         | None   -> handle_help (msg ~prefix:"unknown argument") (Some "priority") ; ok state
          | Some p ->
             Lwt_mvar.put state.connect_mvar (Presence p) >>= fun () ->
-            send_status s p failure)
+            send_status s p failure >>= fun () ->
+            ok state)
 
      (* multi user chat *)
      | ("join", Some a), Some s ->
         let my_nick = fst (fst state.config.Xconfig.jid) in
-        handle_join s my_nick state.contacts a err
+        handle_join state s my_nick state.contacts a err
 
 
      (* commands using active_contact as context *)
@@ -994,6 +991,6 @@ let exec input state term contact session isself failure log redraw =
             (* TODO: this is slightly too eager (too many writes) *)
             Lwt_mvar.put state.contact_mvar u) >>= fun () ->
         match clos, !xmpp_session with
-        | Some x, Some s -> x s failure
-        | Some _, None -> msg "error" "not connected" ; Lwt.return_unit
-        | None, _ -> Lwt.return_unit
+        | Some x, Some s -> x s failure >|= fun () -> `Ok state
+        | Some _, None -> msg "error" "not connected" ; Lwt.return (`Ok state)
+        | None, _ -> Lwt.return (`Ok state)

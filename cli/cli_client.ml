@@ -414,25 +414,22 @@ let send_msg t state active_user failure message =
 (* stream reader *)
 (*  processes xml stream fragments, puts resulting action [message received, buddy list updates] into mvar *)
 
-(* disconnect and quit -- exceptions!? --> for now deliver to mvar as well *)
-
-(* XXX: attention: state updates for disconnect have been removed for now (were in make_prompt) *)
-
 (* XXX: remove mutable (and hashtbl) from cli_state, rewrite code to conform *)
 
 module T = Notty_lwt.Terminal
 
-(* this is rendering and drawing stuff, waiting for change on mvar... *)
+(* this is rendering and drawing stuff to terminal, waiting for updates of the ui_mvar... *)
 let rec loop term mvar state =
-  (*  let history = Contact.readline_history (active state) in (* for keyup.down *) *)
-  (* render things *)
   let size = T.size term in
   let image, cursorc = render_state size state in
   T.image term image >>= fun () ->
   T.cursor term (Some (cursorc, snd size)) >>= fun () ->
   Lwt_mvar.take mvar >>= fun action ->
   action state >>= function
-    (* XXX: should we treat disconnect here as well? someone needs to! (so far, make_prompt did this... could also do the reconnect dance.. and adjust xmpp_session) *)
+    (* XXX: should we treat disconnect here as well? someone needs to!
+       (so far, make_prompt did this...
+       could also do the reconnect dance (currently in several handlers (connect), and init_system)..
+       and adjust xmpp_session) *)
   | `Ok state -> loop term mvar state
   | `Quit state -> Lwt.return state
 
@@ -447,11 +444,11 @@ let init_system ui_mvar connect_mvar =
   in
   Lwt.async_exception_hook := (function
       | Tls_lwt.Tls_failure `Error (`AuthenticationFailure _) as exn ->
-         err false (Printexc.to_string exn)
+        err false (Printexc.to_string exn)
       | Unix.Unix_error (Unix.EBADF, _, _ ) as exn ->
-         xmpp_session := None ; err true (Printexc.to_string exn)
+        xmpp_session := None ; err false (Printexc.to_string exn) (* happens on /disconnect *)
       | Unix.Unix_error (Unix.EINVAL, "select", _ ) as exn ->
-         xmpp_session := None ; err true (Printexc.to_string exn)
+        xmpp_session := None ; err true (Printexc.to_string exn) (* not sure whether true should be false *)
       | exn -> err true (Printexc.to_string exn)
   )
 
@@ -501,7 +498,7 @@ let read_terminal term mvar () =
       p (fun s -> ok (input s (fun pre post -> pre @ [chr], post))) >>= fun () ->
       loop ()
 
-    (* navigation / readline stuff *)
+    (* readline stuff *)
     | `Key (`Backspace, []) ->
       let f pre post = match List.rev pre with
         | [] -> (pre, post)
@@ -537,6 +534,7 @@ let read_terminal term mvar () =
       p (fun s -> ok (input s f)) >>= fun () ->
       loop ()
 
+    (* command and message processing *)
     | `Key (`Enter, []) ->
       let handler s =
         let pre, post = s.input in
@@ -546,56 +544,52 @@ let read_terminal term mvar () =
         let buf = Buffer.create (Array.length inp + Array.length inp2) in
         Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
         Array.iter (Uutf.Buffer.add_utf_8 buf) inp2 ;
+        let clear_input b message =
+          let b = Contact.add_readline_history b message in
+          let b = Contact.set_input_buffer b ([], []) in
+          Contact.replace_contact s.contacts b ;
+          b
+        and self = Xjid.jid_matches (`Bare (fst s.config.Xconfig.jid)) s.active_contact
+        and s = { s with input = ([], []) }
+        in
         match Buffer.contents buf with
         | "/quit" -> quit s >|= fun () -> `Quit s
-        | x -> add_status s (`Local (`Full s.config.Xconfig.jid, "XXX")) x ; ok s
-      in
-      p handler >>= fun () ->
-      loop ()
-(*
-XXX: elsewhere: if List.length state.notifications = 0 then Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear)
-
-    | Some message ->
-       let active =
-         let b = active state in
-         let b = Contact.add_readline_history b message in
-         let b = Contact.set_saved_input_buffer b ([], []) in
-         Contact.replace_contact state.contacts b ;
-         b
-       in
-       let failure reason =
-         Connect.disconnect () >>= fun () ->
-         log (`Local (state.active_contact, "session error"), Printexc.to_string reason) ;
-         ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async (fun () ->
-                   Lwt_mvar.put state.connect_mvar Reconnect))) ;
-         Lwt.return_unit
-       and self = Xjid.jid_matches (`Bare (fst state.config.Xconfig.jid)) state.active_contact
-       and err data = log (`Local (state.active_contact, "error"), data) ; return_unit
-       in
-       let fst =
-         if String.length message = 0 then
-           None
-         else
-           Some (String.get message 0)
-       in
-       match String.length message, fst with
-       | 0, _ ->
+        | "" -> (* XXX: expand/unexpand:
           if Contact.expanded active || potentially_visible_resource state active then
             (Contact.replace_contact state.contacts (Contact.expand active) ;
              if Contact.expanded active then
                (state.active_contact <- `Bare (Contact.bare active))) ;
-       | _, Some '/' ->
-          if String.trim message = "/quit" then
-            quit state >|= fun () -> state
-          else
-            Cli_commands.exec message state term active session self failure log force_redraw >>= fun () ->
-       | _, _ when self ->
-          err "try `M-x doctor` in emacs instead" >>= fun () ->
-       | _, _ ->
-          (match !xmpp_session with
+                *)
+          ok s
+        | cmd when String.get cmd 0 = '/' ->
+          let active = clear_input (active s) cmd in
+          let failure reason =
+            Connect.disconnect () >>= fun () ->
+            add_status s (`Local (s.active_contact, "session error")) (Printexc.to_string reason) ;
+            ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async (fun () ->
+                Lwt_mvar.put s.connect_mvar Reconnect))) ;
+            Lwt.return_unit (* XXX: disconnected? *)
+          in
+          Cli_commands.exec cmd s term active self failure
+        | _ when self ->
+          add_status s (`Local ((`Full s.config.Xconfig.jid), "error")) "try `M-x doctor` in emacs instead" ;
+          ok s
+        | message ->
+          let active = clear_input (active s) message in
+          (* slightly too early *)
+          let id = random_string () in
+          let msg = User.message (`To (`Full s.config.Xconfig.jid, id)) false false message in
+          Contact.replace_contact s.contacts (Contact.new_message active msg) ;
+          (* XXX: actually send something out! *)
+          (* (match !xmpp_session with
            | None -> err "no active session, try to connect first"
            | Some t -> send_msg t state active failure message) >>= fun () ->
-*)
+          *)
+          ok s
+      in
+      p handler >>= fun () ->
+      loop ()
+    (* XXX: elsewhere: if List.length state.notifications = 0 then Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) *)
 
     (* UI navigation and toggles *)
     | `Key (`Pg_up, []) ->
