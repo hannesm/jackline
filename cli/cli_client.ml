@@ -322,7 +322,6 @@ let quit state =
     !xmpp_session
 
 
-(*
 let warn jid user add_msg =
   let last_msg =
     try Some (List.find
@@ -401,7 +400,6 @@ let send_msg t state active_user failure message =
           (`Full (bare, session.User.resource), out, user_out, None)
   in
   maybe_send ?kind jid out user_out
-*)
 
 (* main thingy: *)
 (* draw ; read mvar ; process : might do network output, modify user hash table (state -> state lwt.t) ; goto 10 *)
@@ -552,6 +550,14 @@ let read_terminal term mvar () =
         and self = Xjid.jid_matches (`Bare (fst s.config.Xconfig.jid)) s.active_contact
         and s = { s with input = ([], []) }
         in
+        let err msg = add_status s (`Local ((`Full s.config.Xconfig.jid), "error")) msg
+        and failure reason =
+          Connect.disconnect () >>= fun () ->
+          add_status s (`Local (s.active_contact, "session error")) (Printexc.to_string reason) ;
+          ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async (fun () ->
+              Lwt_mvar.put s.connect_mvar Reconnect))) ;
+          Lwt.return_unit (* XXX: disconnected? *)
+        in
         match Buffer.contents buf with
         | "/quit" -> quit s >|= fun () -> `Quit s
         | "" -> (* XXX: expand/unexpand:
@@ -563,28 +569,15 @@ let read_terminal term mvar () =
           ok s
         | cmd when String.get cmd 0 = '/' ->
           let active = clear_input (active s) cmd in
-          let failure reason =
-            Connect.disconnect () >>= fun () ->
-            add_status s (`Local (s.active_contact, "session error")) (Printexc.to_string reason) ;
-            ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async (fun () ->
-                Lwt_mvar.put s.connect_mvar Reconnect))) ;
-            Lwt.return_unit (* XXX: disconnected? *)
-          in
           Cli_commands.exec cmd s term active self failure
         | _ when self ->
-          add_status s (`Local ((`Full s.config.Xconfig.jid), "error")) "try `M-x doctor` in emacs instead" ;
+          err "try `M-x doctor` in emacs instead" ;
           ok s
         | message ->
           let active = clear_input (active s) message in
-          (* slightly too early *)
-          let id = random_string () in
-          let msg = User.message (`To (`Full s.config.Xconfig.jid, id)) false false message in
-          Contact.replace_contact s.contacts (Contact.new_message active msg) ;
-          (* XXX: actually send something out! *)
-          (* (match !xmpp_session with
-           | None -> err "no active session, try to connect first"
-           | Some t -> send_msg t state active failure message) >>= fun () ->
-          *)
+          (match !xmpp_session with
+           | None -> err "no active session, try to connect first" ; Lwt.return_unit
+           | Some t -> send_msg t s active failure message) >>= fun () ->
           ok s
       in
       p handler >>= fun () ->
