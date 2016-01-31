@@ -294,32 +294,33 @@ let render_state (width, height) state =
     (I.(main <-> bottom), cursorc)
 
 let quit state =
-  match !xmpp_session with
-  | None -> Lwt.return_unit
-  | Some x ->
-     let otr_sessions =
-       Contact.fold
-         (fun _ u acc ->
-          match u with
-          | `Room _ -> acc
-          | `User u ->
-             List.fold_left
-               (fun acc s ->
-                if User.(encrypted s.otr) then
-                  (u, s) :: acc
-                else acc)
-               acc
-               u.User.active_sessions)
-         state.contacts []
-     in
-     let send_out (user, session) =
-       match Otr.Engine.end_otr session.User.otr with
-       | _, Some body ->
-          let jid = `Full (user.User.bare_jid, session.User.resource) in
-          send x jid None body (fun _ -> Lwt.return_unit)
-       | _ -> Lwt.return_unit
-     in
-     Lwt_list.iter_s send_out otr_sessions
+  Utils.option
+    Lwt.return_unit
+    (fun x ->
+       let otr_sessions =
+         Contact.fold
+           (fun _ u acc ->
+              match u with
+              | `Room _ -> acc
+              | `User u ->
+                List.fold_left
+                  (fun acc s ->
+                     if User.(encrypted s.otr) then (u, s) :: acc
+                     else acc)
+                  acc
+                  u.User.active_sessions)
+           state.contacts []
+       in
+       let send_out (user, session) =
+         match Otr.Engine.end_otr session.User.otr with
+         | _, Some body ->
+           let jid = `Full (user.User.bare_jid, session.User.resource) in
+           send x jid None body (fun _ -> Lwt.return_unit)
+         | _ -> Lwt.return_unit
+       in
+       Lwt_list.iter_s send_out otr_sessions)
+    !xmpp_session
+
 
 (*
 let warn jid user add_msg =
