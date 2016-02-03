@@ -157,6 +157,14 @@ let fingerprint_to_string fp =
   in
   "  " ^ ver ^ " " ^ pp_fp ^ " (" ^ used ^ ", " ^ resources ^ "), " ^ first ^ ", " ^ last
 
+type subscription_mod = [
+  | `Probe
+  | `Subscribe
+  | `Subscribed
+  | `Unsubscribe
+  | `Unsubscribed
+]
+
 type subscription = [
   | `None
   | `From

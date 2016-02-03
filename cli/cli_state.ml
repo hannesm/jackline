@@ -1,3 +1,4 @@
+open Lwt.Infix
 
 type display_mode =
   | BuddyList
@@ -80,7 +81,6 @@ module Notify = struct
     | C_N -> "connected_notifications"
 
   let notify_writer jid cb fname =
-    let open Lwt.Infix in
     let mvar = Lwt_mvar.create Disconnected in
     let write_file buf =
       let open Lwt_unix in
@@ -125,11 +125,9 @@ end
 let (xmpp_session : Xmpp_callbacks.user_data Xmpp_callbacks.XMPPClient.session_data option ref) = ref None
 
 module Connect = struct
-  open Lwt.Infix
-
   let disconnect () =
-    Xmpp_callbacks.cancel_keepalive () ;
-    Xmpp_callbacks.keepalive_running := false ;
+    Xmpp_callbacks.Keepalive.cancel_keepalive () ;
+    Xmpp_callbacks.Keepalive.keepalive_running := false ;
     match !xmpp_session with
     | Some s ->
        Xmpp_callbacks.close s >|= fun () ->
@@ -254,8 +252,20 @@ let empty_state config_directory config contacts connect_mvar state_mvar =
 }
 
 
-let send s ?kind jid id body fail =
-  Xmpp_callbacks.send_msg s ?kind jid id body fail
+let send s session ?kind jid id body fail =
+  let x, req = match session with
+    | None -> (false, false)
+    | Some x -> match id, x.User.receipt with
+      | Some _, `Unknown -> (false, true)
+      | Some _, `Supported -> (true, false)
+      | _ -> (false, false)
+  in
+  Xmpp_callbacks.send_msg s ?kind jid x id body fail >>= fun () ->
+  if req then
+    Xmpp_callbacks.request_disco s jid
+  else
+    Lwt.return_unit
+
 
 let random_string () =
   let open Nocrypto in

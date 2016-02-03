@@ -112,7 +112,7 @@ let render_buddy_list (w, h) state =
   in
   let to_draw = Utils.drop start buddies in
   let formatted = I.vcat (List.map (format_buddy state w) to_draw) in
-  I.vframe ~align:`Top h formatted
+  I.vlimit ~align:`Top h formatted
 
 let horizontal_line buddy resource a scrollback width =
   let pre = I.string a "── "
@@ -159,7 +159,7 @@ let horizontal_line buddy resource a scrollback width =
   in
   let fill =
     let len = width - I.(width pre + width scroll + width jid + width otr + width presence_status) in
-    if len <= 0 then I.empty else I.uchar a (`Uchar 0x2015) len 1
+    if len <= 0 then I.empty else I.uchar a 0x2015 len 1
   in
   I.hcat [ pre ; scroll ; jid ; fill ; otr ; presence_status ]
 
@@ -179,13 +179,13 @@ let status_line self mysession notify log a width =
   in
   let fill =
     let len = width - I.(width jid + width status + width notify) in
-    if len <= 0 then I.empty else I.uchar a (`Uchar 0x2015) len 1
+    if len <= 0 then I.empty else I.uchar a 0x2015 len 1
   in
   I.(notify <|> jid <|> fill <|> status)
 
 let cut_scroll scrollback height image =
   let bottom = scrollback * height in
-  I.vframe ~align:`Bottom height (I.vcrop 0 bottom image)
+  I.vlimit ~align:`Bottom height (I.vcrop 0 bottom image)
 
 let render_messages width p msgfmt data =
   let data = List.filter p data in
@@ -261,7 +261,7 @@ let render_state (width, height) state =
       match state.window_mode with
       | BuddyList ->
         let buddies = render_buddy_list (buddy_width, main_height) state
-        and vline = I.uchar a (`Uchar 0x2502) 1 main_height
+        and vline = I.uchar a 0x2502 1 main_height
         in
         I.(buddies <|> vline <|> msgs msgfilter msgfmt)
       | FullScreen -> msgs msgfilter msgfmt
@@ -278,7 +278,7 @@ let render_state (width, height) state =
         else
           let logs =
             let l = render_wrapped_list width logfmt (List.rev self.User.message_history) in
-            I.vframe ~align:`Bottom log_height l
+            I.vlimit ~align:`Bottom log_height l
           and hline = horizontal_line active resource a state.scrollback width
           in
           I.(hline <-> logs)
@@ -292,6 +292,78 @@ let render_state (width, height) state =
       I.vcat [ hline_log ; status ; input ]
     in
     (I.(main <-> bottom), cursorc)
+
+(* main thingy: *)
+(* draw ; read mvar ; process : might do network output, modify user hash table (state -> state lwt.t) ; goto 10 *)
+
+(* terminal reader *)
+(*  waits for terminal input, processes it [commands, special keys, messages], puts result into mvar *)
+
+(* sigwinch -- rerender *)
+
+(* stream reader *)
+(*  processes xml stream fragments, puts resulting action [message received, buddy list updates] into mvar *)
+
+(* XXX: remove mutable (and hashtbl) from cli_state, rewrite code to conform *)
+
+module T = Notty_lwt.Terminal
+
+(* this is rendering and drawing stuff to terminal, waiting for updates of the ui_mvar... *)
+let rec loop term mvar state =
+  let size = T.size term in
+  let image, cursorc = render_state size state in
+  T.image term image >>= fun () ->
+  T.cursor term (Some (cursorc, snd size)) >>= fun () ->
+  Lwt_mvar.take mvar >>= fun action ->
+  action state >>= function
+    (* XXX: should we treat disconnect here as well? someone needs to!
+       (so far, make_prompt did this...
+       could also do the reconnect dance (currently in several handlers (connect), and init_system)..
+       and adjust xmpp_session) *)
+  | `Ok state -> loop term mvar state
+  | `Quit state -> Lwt.return state
+
+let init_system ui_mvar connect_mvar =
+  let err r m =
+    Lwt.async (fun () ->
+        Connect.disconnect () >>= fun () ->
+        selflog ui_mvar "async error" m >|= fun () ->
+        if r then
+          ignore (Lwt_engine.on_timer 10. false (fun _ ->
+              Lwt.async (fun () -> Lwt_mvar.put connect_mvar Reconnect))))
+  in
+  Lwt.async_exception_hook := (function
+      | Tls_lwt.Tls_failure `Error (`AuthenticationFailure _) as exn ->
+        err false (Printexc.to_string exn)
+      | Unix.Unix_error (Unix.EBADF, _, _ ) as exn ->
+        xmpp_session := None ; err false (Printexc.to_string exn) (* happens on /disconnect *)
+      | Unix.Unix_error (Unix.EINVAL, "select", _ ) as exn ->
+        xmpp_session := None ; err true (Printexc.to_string exn) (* not sure whether true should be false *)
+      | exn -> err true (Printexc.to_string exn)
+  )
+
+
+type direction = Up | Down
+
+let navigate_message_buffer state direction =
+  match direction, state.scrollback with
+  | Down, 0 -> state
+  | Down, n ->
+    let s = { state with scrollback = pred n } in
+    if s.scrollback = 0 then notified s else s
+  | Up, n -> { state with scrollback = succ n }
+
+let navigate_buddy_list state direction =
+  let userlist = all_jids state in
+  let set_active idx =
+    let user = List.nth userlist idx in
+    activate_contact state user
+  and active_idx = Utils.find_index state.active_contact 0 userlist
+  in
+  let l = List.length userlist in
+  match direction with
+  | Down -> set_active (succ active_idx mod l)
+  | Up -> set_active ((l + pred active_idx) mod l)
 
 let quit state =
   Utils.option
@@ -315,7 +387,7 @@ let quit state =
          match Otr.Engine.end_otr session.User.otr with
          | _, Some body ->
            let jid = `Full (user.User.bare_jid, session.User.resource) in
-           send x jid None body (fun _ -> Lwt.return_unit)
+           send x (Some session) jid None body (fun _ -> Lwt.return_unit)
          | _ -> Lwt.return_unit
        in
        Lwt_list.iter_s send_out otr_sessions)
@@ -368,24 +440,24 @@ let send_msg t state active_user failure message =
        add_msg (`To (jid, id)) true (Escape.unescape m) ;
        id
   in
-  let maybe_send ?kind jid out user_out =
+  let maybe_send ?kind jid session out user_out =
     Utils.option
       Lwt.return_unit
-      (fun body -> send t ?kind jid (Some (handle_otr_out jid user_out)) body failure)
+      (fun body -> send t session ?kind jid (Some (handle_otr_out jid user_out)) body failure)
       out
   in
-  let jid, out, user_out, kind =
+  let jid, session, out, user_out, kind =
     match active_user with
     | `Room _ -> (* XXX MUC should also be more careful, privmsg.. *)
        let jid = `Bare (Xjid.t_to_bare state.active_contact) in
-       (jid, Some message, `Sent message, Some Xmpp_callbacks.XMPPClient.Groupchat)
+       (jid, None, Some message, `Sent message, Some Xmpp_callbacks.XMPPClient.Groupchat)
     | `User u ->
        let bare = u.User.bare_jid in
        match session state with
        | None ->
           let ctx = Otr.State.new_session (otr_config u state) state.config.Xconfig.dsa () in
           let _, out, user_out = Otr.Engine.send_otr ctx message in
-          (`Bare bare, out, user_out, None)
+          (`Bare bare, None, out, user_out, None)
        | Some session ->
           let ctx = session.User.otr in
           let msg =
@@ -397,86 +469,9 @@ let send_msg t state active_user failure message =
           let ctx, out, user_out = Otr.Engine.send_otr ctx msg in
           let user = User.update_otr u session ctx in
           Contact.replace_user state.contacts user ;
-          (`Full (bare, session.User.resource), out, user_out, None)
+          (`Full (bare, session.User.resource), Some session, out, user_out, None)
   in
-  maybe_send ?kind jid out user_out
-
-(* main thingy: *)
-(* draw ; read mvar ; process : might do network output, modify user hash table (state -> state lwt.t) ; goto 10 *)
-
-(* terminal reader *)
-(*  waits for terminal input, processes it [commands, special keys, messages], puts result into mvar *)
-
-(* sigwinch -- rerender *)
-
-(* stream reader *)
-(*  processes xml stream fragments, puts resulting action [message received, buddy list updates] into mvar *)
-
-(* XXX: remove mutable (and hashtbl) from cli_state, rewrite code to conform *)
-
-module T = Notty_lwt.Terminal
-
-(* this is rendering and drawing stuff to terminal, waiting for updates of the ui_mvar... *)
-let rec loop term mvar state =
-  let size = T.size term in
-  let image, cursorc = render_state size state in
-  T.image term image >>= fun () ->
-  T.cursor term (Some (cursorc, snd size)) >>= fun () ->
-  Lwt_mvar.take mvar >>= fun action ->
-  action state >>= function
-    (* XXX: should we treat disconnect here as well? someone needs to!
-       (so far, make_prompt did this...
-       could also do the reconnect dance (currently in several handlers (connect), and init_system)..
-       and adjust xmpp_session) *)
-  | `Ok state -> loop term mvar state
-  | `Quit state -> Lwt.return state
-
-let init_system ui_mvar connect_mvar =
-  let err r m =
-    Lwt.async (fun () ->
-        Connect.disconnect () >>= fun () ->
-        selflog ui_mvar "async error" m >|= fun () ->
-        if r then
-          ignore (Lwt_engine.on_timer 10. false (fun _ ->
-              Lwt.async (fun () -> Lwt_mvar.put connect_mvar Reconnect))))
-  in
-  Lwt.async_exception_hook := (function
-      | Tls_lwt.Tls_failure `Error (`AuthenticationFailure _) as exn ->
-        err false (Printexc.to_string exn)
-      | Unix.Unix_error (Unix.EBADF, _, _ ) as exn ->
-        xmpp_session := None ; err false (Printexc.to_string exn) (* happens on /disconnect *)
-      | Unix.Unix_error (Unix.EINVAL, "select", _ ) as exn ->
-        xmpp_session := None ; err true (Printexc.to_string exn) (* not sure whether true should be false *)
-      | exn -> err true (Printexc.to_string exn)
-  )
-
-
-let rec winch term mvar () =
-  T.next_resize term >>= fun _ ->
-  Lwt_mvar.put mvar (fun s -> Lwt.return (`Ok s)) >>= fun () ->
-  winch term mvar ()
-
-type direction = Up | Down
-
-let navigate_message_buffer state direction =
-  match direction, state.scrollback with
-  | Down, 0 -> state
-  | Down, n ->
-    let s = { state with scrollback = pred n } in
-    if s.scrollback = 0 then notified s else s
-  | Up, n -> { state with scrollback = succ n }
-
-let navigate_buddy_list state direction =
-  let userlist = all_jids state in
-  let set_active idx =
-    let user = List.nth userlist idx in
-    activate_contact state user
-  and active_idx = Utils.find_index state.active_contact 0 userlist
-  in
-  let l = List.length userlist in
-  match direction with
-  | Down -> set_active (succ active_idx mod l)
-  | Up -> set_active ((l + pred active_idx) mod l)
+  maybe_send ?kind jid session out user_out
 
 let read_terminal term mvar () =
   (* XXX: notifications C-q / C-x *)
@@ -491,7 +486,7 @@ let read_terminal term mvar () =
   and ok s = Lwt.return (`Ok s)
   in
   let rec loop () =
-    Lwt_stream.next (T.input term) >>= function
+    Lwt_stream.next (T.events term) >>= function
     | `Key (`Uchar chr, []) ->
       p (fun s -> ok (input s (fun pre post -> pre @ [chr], post))) >>= fun () ->
       loop ()
@@ -569,7 +564,7 @@ let read_terminal term mvar () =
           ok s
         | cmd when String.get cmd 0 = '/' ->
           let active = clear_input (active s) cmd in
-          Cli_commands.exec cmd s term active self failure
+          Cli_commands.exec cmd s term active self failure p
         | _ when self ->
           err "try `M-x doctor` in emacs instead" ;
           ok s
@@ -585,17 +580,17 @@ let read_terminal term mvar () =
     (* XXX: elsewhere: if List.length state.notifications = 0 then Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) *)
 
     (* UI navigation and toggles *)
-    | `Key (`Pg_up, []) ->
+    | `Key (`Page_up, []) ->
       p (fun s -> ok (navigate_buddy_list s Up)) >>= fun () ->
       loop ()
-    | `Key (`Pg_dn, []) ->
+    | `Key (`Page_dn, []) ->
       p (fun s -> ok (navigate_buddy_list s Down)) >>= fun () ->
       loop ()
 
-    | `Key (`Pg_up, [`Ctrl]) ->
+    | `Key (`Page_up, [`Ctrl]) ->
       p (fun s -> ok (navigate_message_buffer s Up)) >>= fun () ->
       loop ()
-    | `Key (`Pg_dn, [`Ctrl]) ->
+    | `Key (`Page_dn, [`Ctrl]) ->
       p (fun s -> ok (navigate_message_buffer s Down)) >>= fun () ->
       loop ()
 
@@ -617,6 +612,8 @@ let read_terminal term mvar () =
     | `Key ((`Fn 12), []) ->
       p (fun s -> ok { s with window_mode = next_display_mode s.window_mode }) >>= fun () ->
       loop ()
+
+    | `Resize _ -> p (fun s -> ok s) >>= fun () -> loop ()
 
     | _ -> loop ()
   in

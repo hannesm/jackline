@@ -54,6 +54,14 @@ type fingerprint = {
 
 val fingerprint_to_string : fingerprint -> string
 
+type subscription_mod = [
+  | `Probe
+  | `Subscribe
+  | `Subscribed
+  | `Unsubscribe
+  | `Unsubscribed
+]
+
 type subscription = [
   | `None
   | `From

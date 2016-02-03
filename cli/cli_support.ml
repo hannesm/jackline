@@ -50,7 +50,7 @@ let read_line ?(above = []) ?(prefix = "") ?default ?(below = []) term =
     and iinp2 = I.uchars A.(st reverse) inp2
     in
     rewrap term above below (iprefix, iinp, iinp2) (T.size term) >>= fun () ->
-    Lwt_stream.next (T.input term) >>= function
+    Lwt_stream.next (T.events term) >>= function
       | `Key (`Enter, []) ->
          let buf = Buffer.create (Array.length inp + Array.length inp2) in
          Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
@@ -83,10 +83,10 @@ let read_line ?(above = []) ?(prefix = "") ?default ?(below = []) term =
 let read_password ?(above = []) ?(prefix = "") ?(below = []) term =
   let rec go pre =
     let w = I.(width (uchars A.empty (Array.of_list pre))) in
-    let input = I.uchar A.(st reverse) (`Uchar 0x2605) w 1 in
+    let input = I.uchar A.(st reverse) 0x2605 w 1 in
     let prefix = I.string A.empty prefix in
     rewrap term above below (prefix, input, I.empty) (T.size term) >>= fun () ->
-    Lwt_stream.next (T.input term) >>= function
+    Lwt_stream.next (T.events term) >>= function
       | `Key (`Enter, []) ->
          let buf = Buffer.create w in
          Array.iter (Uutf.Buffer.add_utf_8 buf) (Array.of_list pre) ;

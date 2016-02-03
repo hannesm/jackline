@@ -27,7 +27,6 @@ let ask above ?(below = []) prefix ?default transform valid term =
   doit false above below prefix ?default transform valid term
 
 let configure term () =
-  (* TODO: sigwinch handler for the time configure is run.. *)
   let above =
     let greet =
       "Welcome to Jackline configuration. You will be guided through the setup."
@@ -102,7 +101,7 @@ let configure term () =
     let pw = "Password: " in
     let chars = match password with
       | None -> I.string A.empty "will be asked at startup"
-      | Some _ -> I.uchar A.empty (`Uchar 0x2605) 5 1
+      | Some _ -> I.uchar A.empty 0x2605 5 1
     in
     above @ [I.(string A.empty pw <|> chars)]
   in
