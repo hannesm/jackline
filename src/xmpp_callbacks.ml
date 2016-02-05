@@ -54,7 +54,7 @@ type user_data = {
   (* this is to initialise all subscription information to `None before fetching the roster --
      this needs to be done, since a roster get will not return those not in your roster (and might have been modified by different client) *)
   reset_users          : unit -> unit Lwt.t ;
-  update_user          : (Xjid.t * string option * string list * User.subscription * User.property list) -> bool -> unit Lwt.t ;
+  update_users         : (Xjid.t * string option * string list * User.subscription * User.property list) list -> bool -> unit Lwt.t ;
 
   (* just log and maybe disconnect!? *)
   failure              : exn -> unit Lwt.t ;
@@ -128,10 +128,9 @@ end
 
 let send_msg t ?(kind=Chat) jid receipt id body failure =
   let x =
-    if receipt then
-      [Xml.Xmlelement ((ns_receipts, "request"), [], [])]
-    else
-      []
+    match receipt, id with
+    | true, Some _ -> [Xml.Xmlelement ((ns_receipts, "request"), [], [])]
+    | _ -> []
   in
   let jid_to = Xjid.jid_to_xmpp_jid jid in
   try_lwt
@@ -164,9 +163,9 @@ let delayed_timestamp = function
 let receipt_id = function
   | Xml.Xmlelement ((ns_rec, "received"), attrs, _) when ns_rec = ns_receipts ->
     (match Xml.safe_get_attr_value "id" attrs with
-     | "" -> None
-     | id -> Some id)
-  | _ -> None
+     | "" -> []
+     | id -> [id])
+  | _ -> []
 
 let answer_receipt stanza_id = function
   | Xml.Xmlelement ((ns_rec, "request"), _, _) when ns_rec = ns_receipts ->
@@ -195,11 +194,7 @@ let message_callback (t : user_data session_data) stanza =
         in
         t.user_data.group_message jid timestamp stanza.content.subject stanza.content.body data id
      | _ ->
-       let receipts =
-         List.map (function Some x -> x | _ -> assert false)
-           (List.filter (function Some _ -> true | _ -> false)
-               (List.map receipt_id stanza.x))
-       in
+       let receipts = List.flatten (List.map receipt_id stanza.x) in
        t.user_data.received_receipts jid receipts >>= fun () ->
        match
          stanza.content.body,
@@ -316,7 +311,7 @@ let roster_callback item =
     let jid = Xjid.xmpp_jid_to_jid item.Roster.jid in
     Some (jid, name, groups, subscription, properties)
   with
-  _ -> None
+    _ -> None (* XXX: handle error! *)
 
 let session_callback (kind, show, status, priority) mvar t =
   let err txt = t.user_data.locallog "handling error" txt in
@@ -344,7 +339,8 @@ let session_callback (kind, show, status, priority) mvar t =
            let _, items = Roster.decode attrs els in
            if List.length items = 1 then
              let mods = List.map roster_callback items in
-             Lwt_list.iter_s (function Some x -> t.user_data.update_user x true | None -> Lwt.return_unit) mods >|= fun () ->
+             let users = List.fold_left (fun acc -> function None -> acc | Some x -> x :: acc) [] mods in
+             t.user_data.update_users users true >|= fun () ->
              IQResult None
            else
              fail BadRequest
@@ -385,7 +381,8 @@ let session_callback (kind, show, status, priority) mvar t =
       ignore jid_from ; ignore jid_to ; ignore lang ; ignore ver ;
       let mods = List.map roster_callback items in
       t.user_data.reset_users () >>= fun () ->
-      Lwt_list.iter_s (function None -> Lwt.return_unit | Some x -> t.user_data.update_user x false) mods) >>= fun () ->
+      let users = List.fold_left (fun acc -> function None -> acc | Some x -> x :: acc) [] mods in
+      t.user_data.update_users users false) >>= fun () ->
 
   (try_lwt send_presence t ?kind ?show ?status ?priority ()
    with e -> t.user_data.failure e) >>= fun () ->

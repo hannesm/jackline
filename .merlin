@@ -19,6 +19,7 @@ PKG nocrypto
 PKG react
 PKG notty
 PKG ptime
+PKG ptime.clock.os
 
 EXT sexplib
 EXT lwt

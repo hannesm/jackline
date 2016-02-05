@@ -114,6 +114,13 @@ let render_buddy_list (w, h) state =
   let formatted = I.vcat (List.map (format_buddy state w) to_draw) in
   I.vlimit ~align:`Top h formatted
 
+let spacer a uchar width left right =
+  let fill =
+    let len = width - I.(width left + width right) in
+    if len <= 0 then I.empty else I.uchar a uchar len 1
+  in
+  I.hcat [ left ; fill ; right ]
+
 let horizontal_line buddy resource a scrollback width =
   let pre = I.string a "── "
   and scroll = if scrollback = 0 then I.empty else I.string a ("*scrolling " ^ string_of_int scrollback ^ "* ")
@@ -140,13 +147,7 @@ let horizontal_line buddy resource a scrollback width =
   and presence_status =
     let tr p s =
       let status =
-        Utils.option
-          ""
-          (fun x -> Utils.option
-              (x ^ " ")
-              (fun (a, _) -> a ^ " ")
-              (Astring.String.cut ~sep:"\n" x))
-          s
+        Utils.option "" (fun x -> Utils.option x fst (Astring.String.cut ~sep:"\n" x) ^ " ") s
       in
       I.string a (" " ^ User.presence_to_string p ^ " " ^ status ^ "─")
     in
@@ -157,11 +158,7 @@ let horizontal_line buddy resource a scrollback width =
         | `Member m -> tr m.Muc.presence m.Muc.status)
       resource
   in
-  let fill =
-    let len = width - I.(width pre + width scroll + width jid + width otr + width presence_status) in
-    if len <= 0 then I.empty else I.uchar a 0x2015 len 1
-  in
-  I.hcat [ pre ; scroll ; jid ; fill ; otr ; presence_status ]
+  spacer a 0x2015 width (I.hcat [ pre ; scroll ; jid ]) I.(otr <|> presence_status)
 
 let status_line self mysession notify log a width =
   let a = A.(a ++ st bold) in
@@ -177,11 +174,7 @@ let status_line self mysession notify log a width =
     in
     I.(string a "[ " <|> string A.(buddy_to_color color ++ a) data <|> string a " ]─")
   in
-  let fill =
-    let len = width - I.(width jid + width status + width notify) in
-    if len <= 0 then I.empty else I.uchar a 0x2015 len 1
-  in
-  I.(notify <|> jid <|> fill <|> status)
+  spacer a 0x2015 width I.(notify <|> jid) status
 
 let cut_scroll scrollback height image =
   let bottom = scrollback * height in
@@ -293,19 +286,6 @@ let render_state (width, height) state =
     in
     (I.(main <-> bottom), cursorc)
 
-(* main thingy: *)
-(* draw ; read mvar ; process : might do network output, modify user hash table (state -> state lwt.t) ; goto 10 *)
-
-(* terminal reader *)
-(*  waits for terminal input, processes it [commands, special keys, messages], puts result into mvar *)
-
-(* sigwinch -- rerender *)
-
-(* stream reader *)
-(*  processes xml stream fragments, puts resulting action [message received, buddy list updates] into mvar *)
-
-(* XXX: remove mutable (and hashtbl) from cli_state, rewrite code to conform *)
-
 module T = Notty_lwt.Term
 
 (* this is rendering and drawing stuff to terminal, waiting for updates of the ui_mvar... *)
@@ -317,6 +297,7 @@ let rec loop term mvar state =
   Lwt_mvar.take mvar >>= fun action ->
   action state >>= function
     (* XXX: should we treat disconnect here as well? someone needs to!
+        --> distinguish `Failure (disconnected, should reconnect) and `Disconnect (/disconnect)
        (so far, make_prompt did this...
        could also do the reconnect dance (currently in several handlers (connect), and init_system)..
        and adjust xmpp_session) *)

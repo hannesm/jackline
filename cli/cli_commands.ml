@@ -231,6 +231,23 @@ let handle_connect p c_mvar failure =
   and enc_message _jid ?timestamp _dir _txt =
     let exec state =
       ignore (timestamp) ;
+      (*
+-           let session = t.user_data.session jid in
+-           let ctx, out, ret = Otr.Engine.handle session.User.otr v in
+-           t.user_data.update_otr jid session ctx ;
+-           List.iter (notify_user msg jid ctx t.user_data.inc_fp t.user_data.verify_fp) ret ;
+-           match out with
+-           | None -> return_unit
+-           | Some body ->
+-              (try_lwt
+-                 send_message t ?jid_to ~kind:Chat ~body ()
+-               with e -> t.user_data.failure e) >>= fun () ->
+-              if (t.user_data.session jid).User.receipt = `Unknown then
+-                try_lwt request_disco t jid
+-                with e -> t.user_data.failure e
+-              else
+-                return_unit
+         only OUT if timestamp = none (otherwise offline storage) *)
       (* XXX TODO: get session, handle OTR, maybe send out packets.. *)
       Lwt.return (`Ok state)
     in
@@ -414,18 +431,22 @@ let handle_connect p c_mvar failure =
       Lwt.return (`Ok state)
     in
     p exec
-  and update_user (jid, name, groups, subscription, properties) alert =
+  and update_users users alert =
     let exec state =
-      let user =
-        match Contact.find_user state.contacts (Xjid.t_to_bare jid) with
-        | None -> User.new_user ~jid:(Xjid.t_to_bare jid) ~name ~groups ~subscription ()
-        | Some u -> { u with User.name ; groups ; subscription ; properties }
+      let single (jid, name, groups, subscription, properties) =
+        let user =
+          match Contact.find_user state.contacts (Xjid.t_to_bare jid) with
+          | None -> User.new_user ~jid:(Xjid.t_to_bare jid) ~name ~groups ~subscription ()
+          | Some u -> { u with User.name ; groups ; subscription ; properties }
+        in
+        Contact.replace_user state.contacts user ;
+        Lwt_mvar.put state.contact_mvar (`User user) >|= fun () ->
+        `Bare user.User.bare_jid
       in
-      Contact.replace_user state.contacts user ;
-      Lwt_mvar.put state.contact_mvar (`User user) >>= fun () ->
+      Lwt_list.map_s single users >>= fun ids ->
       let state =
         if alert then
-          notify state (`Bare user.User.bare_jid)
+          List.fold_left notify state ids
         else
           state
       in
@@ -449,7 +470,7 @@ let handle_connect p c_mvar failure =
       group_presence ;
 
       reset_users ;
-      update_user ;
+      update_users ;
 
       failure ;
   }
