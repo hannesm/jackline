@@ -303,11 +303,14 @@ let handle_connect p c_mvar failure =
       in
       let msgs = List.flatten (List.map (notify_user (`Full (bare, res)) ctx inc_fp verify_fp) ret) in
       let state, user = find_user state bare in
-      let user = List.fold_left
-          (fun u (dir, enc, m) ->
+      let user, mark = List.fold_left
+          (fun (u, n) (dir, enc, m) ->
              let txt = validate_utf8 m in
-             User.insert_message ?timestamp u dir enc true txt)
-          user
+             (User.insert_message ?timestamp u dir enc true txt,
+              match dir with
+              | `Local (_, s) when Astring.String.is_prefix ~affix:"OTR" s -> n
+              | _ -> true))
+          (user, false)
           msgs
       in
       Contact.replace_user state.contacts user ;
@@ -318,7 +321,7 @@ let handle_connect p c_mvar failure =
        | _, _, None -> Lwt.return_unit
        | _, Some body, Some s ->
          send s (Some session) ~kind:Xmpp_callbacks.XMPPClient.Chat (`Full (bare, res)) None body failure) >>= fun () ->
-      let state = notify state (`Full (bare, res)) in
+      let state = if mark then notify state (`Full (bare, res)) else state in
       Lwt.return (`Ok state)
     in
     p exec

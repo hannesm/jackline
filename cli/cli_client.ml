@@ -287,6 +287,34 @@ let render_state (width, height) state =
 
 module T = Notty_lwt.Term
 
+let quit state =
+  Utils.option
+    Lwt.return_unit
+    (fun x ->
+       let otr_sessions =
+         Contact.fold
+           (fun _ u acc ->
+              match u with
+              | `Room _ -> acc
+              | `User u ->
+                List.fold_left
+                  (fun acc s ->
+                     if User.(encrypted s.otr) then (u, s) :: acc
+                     else acc)
+                  acc
+                  u.User.active_sessions)
+           state.contacts []
+       in
+       let send_out (user, session) =
+         match Otr.Engine.end_otr session.User.otr with
+         | _, Some body ->
+           let jid = `Full (user.User.bare_jid, session.User.resource) in
+           send x (Some session) jid None body (fun _ -> Lwt.return_unit)
+         | _ -> Lwt.return_unit
+       in
+       Lwt_list.iter_s send_out otr_sessions)
+    !xmpp_session
+
 (* this is rendering and drawing stuff to terminal, waiting for updates of the ui_mvar... *)
 let rec loop term mvar state =
   let size = T.size term in
@@ -301,7 +329,9 @@ let rec loop term mvar state =
        could also do the reconnect dance (currently in several handlers (connect), and init_system)..
        and adjust xmpp_session) *)
   | `Ok state -> loop term mvar state
-  | `Quit state -> Lwt.return state
+  | `Quit state ->
+    quit state >>= fun () ->
+    Lwt.return state
 
 let init_system ui_mvar connect_mvar =
   let err r m =
@@ -344,35 +374,6 @@ let navigate_buddy_list state direction =
   match direction with
   | Down -> set_active (succ active_idx mod l)
   | Up -> set_active ((l + pred active_idx) mod l)
-
-let quit state =
-  Utils.option
-    Lwt.return_unit
-    (fun x ->
-       let otr_sessions =
-         Contact.fold
-           (fun _ u acc ->
-              match u with
-              | `Room _ -> acc
-              | `User u ->
-                List.fold_left
-                  (fun acc s ->
-                     if User.(encrypted s.otr) then (u, s) :: acc
-                     else acc)
-                  acc
-                  u.User.active_sessions)
-           state.contacts []
-       in
-       let send_out (user, session) =
-         match Otr.Engine.end_otr session.User.otr with
-         | _, Some body ->
-           let jid = `Full (user.User.bare_jid, session.User.resource) in
-           send x (Some session) jid None body (fun _ -> Lwt.return_unit)
-         | _ -> Lwt.return_unit
-       in
-       Lwt_list.iter_s send_out otr_sessions)
-    !xmpp_session
-
 
 let warn jid user add_msg =
   let last_msg =
@@ -482,8 +483,7 @@ let k_to_s = function
   | _ -> "unknown"
 
 let read_terminal term mvar () =
-  (* XXX: notifications C-q / C-x *)
-  (* XXX: emacs key bindings: C-ae C-ku C-fb C-left/right [word forward/backward] C- wy[mark, kill, yank] C-_-[undo/redo] *)
+  (* XXX: emacs key bindings: C-left/right [word forward/backward] C- wy[mark, kill, yank] C-_-[undo/redo] *)
   (* XXX: handle history (up/down) *)
   (* XXX: handle tab completion -- maybe suggestions in grey as well *)
   let p = Lwt_mvar.put mvar
@@ -493,98 +493,89 @@ let read_terminal term mvar () =
     Lwt_stream.next (T.events term) >>= fun e ->
     match readline_input e with
     | `Ok f -> p (fun s -> ok (let input = f s.input in { s with input })) >>= fun () -> loop ()
-    | `Unhandled k -> match k with
-      (* command and message processing *)
-      | `Key (`Enter, []) ->
-        let handler s =
-          let pre, post = s.input in
-          let inp = Array.of_list pre
-          and inp2 = Array.of_list post
+    | `Unhandled k -> match emacs_bindings k with
+      | `Ok f -> p (fun s -> ok (let input = f s.input in { s with input })) >>= fun () -> loop ()
+      | `Unhandled k -> match k with
+        (* command and message processing *)
+        | `Key (`Enter, []) ->
+          let handler s =
+            let pre, post = s.input in
+            let inp = Array.of_list pre
+            and inp2 = Array.of_list post
+            in
+            let buf = Buffer.create (Array.length inp + Array.length inp2) in
+            Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
+            Array.iter (Uutf.Buffer.add_utf_8 buf) inp2 ;
+            let clear_input b message =
+              let b = Contact.add_readline_history b message in
+              let b = Contact.set_input_buffer b ([], []) in
+              Contact.replace_contact s.contacts b ;
+              b
+            and self = Xjid.jid_matches (`Bare (fst s.config.Xconfig.jid)) s.active_contact
+            and s = { s with input = ([], []) }
+            in
+            let err msg = add_status s (`Local ((`Full s.config.Xconfig.jid), "error")) msg
+            and failure reason =
+              Connect.disconnect () >>= fun () ->
+              add_status s (`Local (s.active_contact, "session error")) (Printexc.to_string reason) ;
+              ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async (fun () ->
+                  Lwt_mvar.put s.connect_mvar Reconnect))) ;
+              Lwt.return_unit (* XXX: disconnected? *)
+            in
+            match Buffer.contents buf with
+            | "/quit" -> Lwt.return (`Quit s)
+            | "" -> (* XXX: expand/unexpand:
+                       if Contact.expanded active || potentially_visible_resource state active then
+                       (Contact.replace_contact state.contacts (Contact.expand active) ;
+                       if Contact.expanded active then
+                       (state.active_contact <- `Bare (Contact.bare active))) ;
+                    *)
+              ok s
+            | cmd when String.get cmd 0 = '/' ->
+              let active = clear_input (active s) cmd in
+              Cli_commands.exec cmd s term active self failure p
+            | _ when self ->
+              err "try `M-x doctor` in emacs instead" ;
+              ok s
+            | message ->
+              let active = clear_input (active s) message in
+              (match !xmpp_session with
+               | None -> err "no active session, try to connect first" ; Lwt.return_unit
+               | Some t -> send_msg t s active failure message) >>= fun () ->
+              ok s
           in
-          let buf = Buffer.create (Array.length inp + Array.length inp2) in
-          Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
-          Array.iter (Uutf.Buffer.add_utf_8 buf) inp2 ;
-          let clear_input b message =
-            let b = Contact.add_readline_history b message in
-            let b = Contact.set_input_buffer b ([], []) in
-            Contact.replace_contact s.contacts b ;
-            b
-          and self = Xjid.jid_matches (`Bare (fst s.config.Xconfig.jid)) s.active_contact
-          and s = { s with input = ([], []) }
-          in
-          let err msg = add_status s (`Local ((`Full s.config.Xconfig.jid), "error")) msg
-          and failure reason =
-            Connect.disconnect () >>= fun () ->
-            add_status s (`Local (s.active_contact, "session error")) (Printexc.to_string reason) ;
-            ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async (fun () ->
-                Lwt_mvar.put s.connect_mvar Reconnect))) ;
-            Lwt.return_unit (* XXX: disconnected? *)
-          in
-          match Buffer.contents buf with
-          | "/quit" -> quit s >|= fun () -> `Quit s
-          | "" -> (* XXX: expand/unexpand:
-                     if Contact.expanded active || potentially_visible_resource state active then
-                     (Contact.replace_contact state.contacts (Contact.expand active) ;
-                     if Contact.expanded active then
-                     (state.active_contact <- `Bare (Contact.bare active))) ;
-                  *)
-            ok s
-          | cmd when String.get cmd 0 = '/' ->
-            let active = clear_input (active s) cmd in
-            Cli_commands.exec cmd s term active self failure p
-          | _ when self ->
-            err "try `M-x doctor` in emacs instead" ;
-            ok s
-          | message ->
-            let active = clear_input (active s) message in
-            (match !xmpp_session with
-             | None -> err "no active session, try to connect first" ; Lwt.return_unit
-             | Some t -> send_msg t s active failure message) >>= fun () ->
-            ok s
-        in
-        p handler >>= fun () ->
-        loop ()
-      (* XXX: elsewhere: if List.length state.notifications = 0 then Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) *)
+          p handler >>= fun () ->
+          loop ()
+        (* XXX: elsewhere: if List.length state.notifications = 0 then Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) *)
 
-      (* UI navigation and toggles *)
-      | `Key (`Page `Up, []) ->
-        p (fun s -> ok (navigate_buddy_list s Up)) >>= fun () ->
-        loop ()
-      | `Key (`Page `Down, []) ->
-        p (fun s -> ok (navigate_buddy_list s Down)) >>= fun () ->
-        loop ()
+        | `Key (`Uchar 0x44, [`Ctrl]) (* C-d *) -> p (fun s -> Lwt.return (`Quit s))
 
-      | `Key (`Page `Up, [`Ctrl]) ->
-        p (fun s -> ok (navigate_message_buffer s Up)) >>= fun () ->
-        loop ()
-      | `Key (`Page `Down, [`Ctrl]) ->
-        p (fun s -> ok (navigate_message_buffer s Down)) >>= fun () ->
-        loop ()
+        (* UI navigation and toggles *)
+        | `Key (`Page `Up, []) -> p (fun s -> ok (navigate_buddy_list s Up)) >>= fun () -> loop ()
+        | `Key (`Page `Down, []) -> p (fun s -> ok (navigate_buddy_list s Down)) >>= fun () -> loop ()
 
-      | `Key (`Function 5, []) ->
-        p (fun s -> ok { s with show_offline = not s.show_offline }) >>= fun () ->
-        loop ()
-      | `Key (`Function 10, []) ->
-        p (fun s -> ok { s with log_height = succ s.log_height }) >>= fun () ->
-        loop ()
-      | `Key (`Function 10, [`Shift]) ->
-        p (fun s -> ok { s with log_height = max 0 (pred s.log_height) }) >>= fun () ->
-        loop ()
-      | `Key (`Function 11, []) ->
-        p (fun s -> ok { s with buddy_width = succ s.buddy_width }) >>= fun () ->
-        loop ()
-      | `Key (`Function 11, [`Shift]) ->
-        p (fun s -> ok { s with buddy_width = max 0 (pred s.buddy_width) }) >>= fun () ->
-        loop ()
-      | `Key (`Function 12, []) ->
-        p (fun s -> ok { s with window_mode = next_display_mode s.window_mode }) >>= fun () ->
-        loop ()
+        | `Key (`Page `Up, [`Ctrl]) -> p (fun s -> ok (navigate_message_buffer s Up)) >>= fun () -> loop ()
+        | `Key (`Page `Down, [`Ctrl]) -> p (fun s -> ok (navigate_message_buffer s Down)) >>= fun () -> loop ()
 
-      | `Resize _ -> p (fun s -> ok s) >>= fun () -> loop ()
+        | `Key (`Uchar 0x58, [`Ctrl]) (* C-x *) -> p (fun s -> ok (activate_contact s s.last_active_contact)) >>= fun () -> loop ()
+        | `Key (`Uchar 0x71, [`Ctrl]) (* C-q *) ->
+          p (fun s -> ok (match List.rev s.notifications with
+              | x::_ -> activate_contact s x
+              | _ -> s)) >>= fun () ->
+          loop ()
 
-      | k ->
-        let k = k_to_s k in
-        p (fun s -> add_status s (`Local (`Full s.config.Xconfig.jid, "key")) k ; ok s) >>= fun () ->
-        loop ()
+        | `Key (`Function 5, []) -> p (fun s -> ok { s with show_offline = not s.show_offline }) >>= fun () -> loop ()
+        | `Key (`Function 10, []) -> p (fun s -> ok { s with log_height = succ s.log_height }) >>= fun () -> loop ()
+        | `Key (`Function 10, [`Shift]) -> p (fun s -> ok { s with log_height = max 0 (pred s.log_height) }) >>= fun () -> loop ()
+        | `Key (`Function 11, []) -> p (fun s -> ok { s with buddy_width = succ s.buddy_width }) >>= fun () -> loop ()
+        | `Key (`Function 11, [`Shift]) -> p (fun s -> ok { s with buddy_width = max 0 (pred s.buddy_width) }) >>= fun () -> loop ()
+        | `Key (`Function 12, []) -> p (fun s -> ok { s with window_mode = next_display_mode s.window_mode }) >>= fun () -> loop ()
+
+        | `Resize _ -> p (fun s -> ok s) >>= fun () -> loop ()
+
+        | k ->
+          let k = k_to_s k in
+          p (fun s -> add_status s (`Local (`Full s.config.Xconfig.jid, "key")) k ; ok s) >>= fun () ->
+          loop ()
   in
   loop ()

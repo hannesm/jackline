@@ -64,6 +64,26 @@ let readline_input = function
   | `Key (`Uchar chr, []) -> `Ok (fun (pre, post) -> pre @ [chr], post)
   | k -> `Unhandled k
 
+let emacs_bindings = function
+  | `Key (`Uchar 0x41, [`Ctrl]) (* C-a *) -> `Ok (fun (pre, post) -> ([], pre @ post))
+  | `Key (`Uchar 0x45, [`Ctrl]) (* C-e *) -> `Ok (fun (pre, post) -> (pre @ post, []))
+
+  | `Key (`Uchar 0x4b, [`Ctrl]) (* C-k *) -> `Ok (fun (pre, _) -> (pre, []))
+  | `Key (`Uchar 0x55, [`Ctrl]) (* C-u *) -> `Ok (fun (_, post) -> ([], post))
+
+  | `Key (`Uchar 0x46, [`Ctrl]) (* C-f *) ->
+    `Ok (fun (pre, post) ->
+        match post with
+        | [] -> (pre, post)
+        | hd::tl -> (pre @ [hd], tl))
+  | `Key (`Uchar 0x42, [`Ctrl]) (* C-b *) ->
+    `Ok (fun (pre, post) ->
+        match List.rev pre with
+        | [] -> ([], post)
+        | hd::tl -> (List.rev tl, hd :: post))
+
+  | k -> `Unhandled k
+
 let str_to_char_list str =
   Astring.String.fold_right (fun ch acc -> int_of_char ch :: acc) str []
 
@@ -80,13 +100,16 @@ let read_line ?(above = []) ?(prefix = "") ?default ?(below = []) term =
     match readline_input e with
     | `Ok f -> go (f (pre, post))
     | `Unhandled k ->
-      match k with
-      | `Key (`Enter, []) ->
-        let buf = Buffer.create (Array.length inp + Array.length inp2) in
-        Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
-        Array.iter (Uutf.Buffer.add_utf_8 buf) inp2 ;
-        Lwt.return (Buffer.contents buf)
-      | _ -> go (pre, post)
+      match emacs_bindings k with
+      | `Ok f -> go (f (pre, post))
+      | `Unhandled k ->
+        match k with
+        | `Key (`Enter, []) ->
+          let buf = Buffer.create (Array.length inp + Array.length inp2) in
+          Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
+          Array.iter (Uutf.Buffer.add_utf_8 buf) inp2 ;
+          Lwt.return (Buffer.contents buf)
+        | _ -> go (pre, post)
   in
   let pre = Utils.option [] str_to_char_list default in
   go (pre, [])
