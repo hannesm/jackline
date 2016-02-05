@@ -438,9 +438,10 @@ let send_msg t state active_user failure message =
        id
   in
   let maybe_send ?kind jid session out user_out =
+    let id = handle_otr_out jid user_out in
     Utils.option
       Lwt.return_unit
-      (fun body -> send t session ?kind jid (Some (handle_otr_out jid user_out)) body failure)
+      (fun body -> send t session ?kind jid (Some id) body failure)
       out
   in
   let jid, session, out, user_out, kind =

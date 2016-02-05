@@ -303,7 +303,7 @@ let isnotified state jid =
 
 let notified state =
   let notifications = List.filter (fun x -> not (isactive state x)) state.notifications in
-  if List.length notifications = 0 then
+  if List.length notifications = 0 && List.length state.notifications > 0 then
     Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) ;
   { state with notifications }
 
