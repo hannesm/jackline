@@ -18,4 +18,13 @@ let rec drop x l =
   | n, _ :: xs -> drop (pred n) xs
   | _, []      -> []
 
+let take x l =
+  let rec step x l acc =
+    match x, l with
+    | 0, _       -> List.rev acc
+    | _, []      -> List.rev acc
+    | n, x :: xs -> step (pred n) xs (x :: acc)
+  in
+  step x l []
+
 let version = "%%VERSION%%"
