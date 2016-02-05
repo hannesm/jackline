@@ -1,5 +1,46 @@
 open Lwt.Infix
 
+(*
+  mutable c_ignbrk : bool; 	(* Ignore the break condition. *)
+  mutable c_brkint : bool; 	(* Signal interrupt on break condition. *)
+  mutable c_ignpar : bool; 	(* Ignore characters with parity errors. *)
+  mutable c_parmrk : bool; 	(* Mark parity errors. *)
+  mutable c_inpck : bool; 	(* Enable parity check on input. *)
+  mutable c_istrip : bool; 	(* Strip 8th bit on input characters. *)
+  mutable c_inlcr : bool; 	(* Map NL to CR on input. *)
+  mutable c_igncr : bool; 	(* Ignore CR on input. *)
+T  mutable c_icrnl : bool; 	(* Map CR to NL on input. *)
+T  mutable c_ixon : bool; 	(* Recognize XON/XOFF characters on input. *)
+  mutable c_ixoff : bool; 	(* Emit XON/XOFF chars to control input flow. *)
+T  mutable c_opost : bool; 	(* Enable output processing. *)
+  mutable c_obaud : int; 	(* Output baud rate (0 means close connection). *)
+  mutable c_ibaud : int; 	(* Input baud rate. *)
+  mutable c_csize : int; 	(* Number of bits per character (5-8). *)
+  mutable c_cstopb : int; 	(* Number of stop bits (1-2). *)
+T  mutable c_cread : bool; 	(* Reception is enabled. *)
+T  mutable c_parenb : bool; 	(* Enable parity generation and detection. *)
+  mutable c_parodd : bool; 	(* Specify odd parity instead of even. *)
+T  mutable c_hupcl : bool; 	(* Hang up on last close. *)
+  mutable c_clocal : bool; 	(* Ignore modem status lines. *)
+T  mutable c_isig : bool; 	(* Generate signal on INTR, QUIT, SUSP. *)
+T  mutable c_icanon : bool; 	(* Enable canonical processing (line buffering and editing) *)
+  mutable c_noflsh : bool; 	(* Disable flush after INTR, QUIT, SUSP. *)
+T  mutable c_echo : bool; 	(* Echo input characters. *)
+T  mutable c_echoe : bool; 	(* Echo ERASE (to erase previous character). *)
+T  mutable c_echok : bool; 	(* Echo KILL (to erase the current line). *)
+  mutable c_echonl : bool; 	(* Echo NL even if c_echo is not set. *)
+\003  mutable c_vintr : char; 	(* Interrupt character (usually ctrl-C). *)
+\028  mutable c_vquit : char; 	(* Quit character (usually ctrl-\). *)
+\b  mutable c_verase : char; 	(* Erase character (usually DEL or ctrl-H). *)
+\021  mutable c_vkill : char; 	(* Kill line character (usually ctrl-U). *)
+\004  mutable c_veof : char; 	(* End-of-file character (usually ctrl-D). *)
+\255  mutable c_veol : char; 	(* Alternate end-of-line char. (usually none). *)
+1  mutable c_vmin : int; 	(* Minimum number of characters to read before the read request is satisfied. *)
+0  mutable c_vtime : int; 	(* Maximum read wait (in 0.1s units). *)
+\017  mutable c_vstart : char; 	(* Start character (usually ctrl-Q). *)
+\019  mutable c_vstop : char; 	(* Stop character (usually ctrl-S). *)
+*)
+
 let start_client cfgdir debug () =
   Sys.(set_signal sigpipe Signal_ignore) ;
 
@@ -10,7 +51,9 @@ let start_client cfgdir debug () =
 
   Nocrypto_entropy_lwt.initialize () >>= fun () ->
 
-  let term = Notty_lwt.Term.create ~mouse:false () in
+  Lwt_unix.tcgetattr Lwt_unix.stdin >>= fun saved_tc ->
+  Lwt_unix.(tcsetattr stdin TCSANOW { saved_tc with c_ignbrk = true ; c_isig = false ; c_icanon = false ; c_echo = false ; c_vstop = '\255' ; c_verase = '\255' }) >>= fun () ->
+  let term = Notty_lwt.Term.create ~input:Lwt_unix.stdin ~mouse:false () in
 
   Persistency.load_dsa cfgdir >>= fun dsa ->
 
@@ -111,7 +154,8 @@ let start_client cfgdir debug () =
   (* cancel history dumper *)
   Lwt_engine.stop_event hist_dumper ;
   (* store histories a last time *)
-  Persistency.dump_histories cfgdir users
+  Persistency.dump_histories cfgdir users >>= fun () ->
+  Lwt_unix.(tcsetattr stdin TCSANOW saved_tc)
 
 
 let config_dir = ref ""
