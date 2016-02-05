@@ -85,7 +85,7 @@ let format_buddy state width contact =
     else
       A.empty
   in
-  let a = A.(buddy_to_color (Contact.color contact None) & a) in
+  let a = A.(a ++ buddy_to_color (Contact.color contact None)) in
   let first_char = if isnotified state jid then "*" else " " in
   let buddy = I.string a (first_char ^ Contact.oneline contact None) in
   let len = width - I.width buddy in
@@ -135,7 +135,7 @@ let horizontal_line buddy resource a scrollback width =
            (User.verification_status_to_color vs, User.verification_status_to_string vs))
           (User.otr_fingerprint s.User.otr)
       in
-      I.(string a " " <|> string A.(a & buddy_to_color col) data <|> string a " ─")
+      I.(string a " " <|> string A.(a ++ buddy_to_color col) data <|> string a " ─")
     | _ -> I.empty
   and presence_status =
     let tr p s =
@@ -164,8 +164,8 @@ let horizontal_line buddy resource a scrollback width =
   I.hcat [ pre ; scroll ; jid ; fill ; otr ; presence_status ]
 
 let status_line self mysession notify log a width =
-  let a = A.(a & st bold) in
-  let notify = if notify then I.string A.(a & st blink) "##" else I.string a "──"
+  let a = A.(a ++ st bold) in
+  let notify = if notify then I.string A.(a ++ st blink) "##" else I.string a "──"
   and jid =
     let data = User.userid self mysession
     and a' = if log then A.(st reverse) else a
@@ -175,7 +175,7 @@ let status_line self mysession notify log a width =
     let data = User.presence_to_string mysession.User.presence
     and color = if mysession.User.presence = `Offline then `Bad else `Good
     in
-    I.(string a "[ " <|> string A.(a & buddy_to_color color) data <|> string a " ]─")
+    I.(string a "[ " <|> string A.(buddy_to_color color ++ a) data <|> string a " ]─")
   in
   let fill =
     let len = width - I.(width jid + width status + width notify) in
@@ -306,7 +306,7 @@ let render_state (width, height) state =
 
 (* XXX: remove mutable (and hashtbl) from cli_state, rewrite code to conform *)
 
-module T = Notty_lwt.Terminal
+module T = Notty_lwt.Term
 
 (* this is rendering and drawing stuff to terminal, waiting for updates of the ui_mvar... *)
 let rec loop term mvar state =
@@ -512,14 +512,14 @@ let read_terminal term mvar () =
     | `Key (`End, []) ->
       p (fun s -> ok (input s (fun pre post -> pre @ post, []))) >>= fun () ->
       loop ()
-    | `Key (`Right, []) ->
+    | `Key (`Arrow `Right, []) ->
       let f pre post = match post with
         | [] -> (pre, post)
         | hd::tl -> (pre @ [hd], tl)
       in
       p (fun s -> ok (input s f)) >>= fun () ->
       loop ()
-    | `Key (`Left, []) ->
+    | `Key (`Arrow `Left, []) ->
       let f pre post = match List.rev pre with
         | [] -> ([], post)
         | hd::tl -> (List.rev tl, hd :: post)
@@ -580,36 +580,36 @@ let read_terminal term mvar () =
     (* XXX: elsewhere: if List.length state.notifications = 0 then Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) *)
 
     (* UI navigation and toggles *)
-    | `Key (`Page_up, []) ->
+    | `Key (`Page `Up, []) ->
       p (fun s -> ok (navigate_buddy_list s Up)) >>= fun () ->
       loop ()
-    | `Key (`Page_dn, []) ->
+    | `Key (`Page `Down, []) ->
       p (fun s -> ok (navigate_buddy_list s Down)) >>= fun () ->
       loop ()
 
-    | `Key (`Page_up, [`Ctrl]) ->
+    | `Key (`Page `Up, [`Ctrl]) ->
       p (fun s -> ok (navigate_message_buffer s Up)) >>= fun () ->
       loop ()
-    | `Key (`Page_dn, [`Ctrl]) ->
+    | `Key (`Page `Down, [`Ctrl]) ->
       p (fun s -> ok (navigate_message_buffer s Down)) >>= fun () ->
       loop ()
 
-    | `Key ((`Fn 5), []) ->
+    | `Key (`Function 5, []) ->
       p (fun s -> ok { s with show_offline = not s.show_offline }) >>= fun () ->
       loop ()
-    | `Key ((`Fn 10), []) ->
+    | `Key (`Function 10, []) ->
       p (fun s -> ok { s with log_height = succ s.log_height }) >>= fun () ->
       loop ()
-(*    | `Key `Shift (`Fn 10) ->
+    | `Key (`Function 10, [`Shift]) ->
       p (fun s -> ok { s with log_height = max 0 (pred s.log_height) }) >>= fun () ->
-      loop () *)
-    | `Key ((`Fn 11), []) ->
+      loop ()
+    | `Key (`Function 11, []) ->
       p (fun s -> ok { s with buddy_width = succ s.buddy_width }) >>= fun () ->
       loop ()
-(*    | `Key `Shift (`Fn 11) ->
+    | `Key (`Function 11, [`Shift]) ->
       p (fun s -> ok { s with buddy_width = max 0 (pred s.buddy_width) }) >>= fun () ->
-      loop () *)
-    | `Key ((`Fn 12), []) ->
+      loop ()
+    | `Key (`Function 12, []) ->
       p (fun s -> ok { s with window_mode = next_display_mode s.window_mode }) >>= fun () ->
       loop ()
 

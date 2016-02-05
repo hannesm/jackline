@@ -3,7 +3,7 @@ open Lwt.Infix
 
 open Notty
 
-module T = Notty_lwt.Terminal
+module T = Notty_lwt.Term
 
 let wrap ?width ?height image =
   let rec doit p f i acc =
@@ -66,11 +66,11 @@ let read_line ?(above = []) ?(prefix = "") ?default ?(below = []) term =
           | _::tl -> go pre tl)
       | `Key (`Home, []) -> go [] (pre @ post)
       | `Key (`End, []) -> go (pre @ post) []
-      | `Key (`Right, []) ->
+      | `Key (`Arrow `Right, []) ->
          (match post with
           | [] -> go pre post
           | hd::tl -> go (pre @ [hd]) tl)
-      | `Key (`Left, []) ->
+      | `Key (`Arrow `Left, []) ->
          (match List.rev pre with
           | [] -> go [] post
           | hd::tl -> go (List.rev tl) (hd :: post))

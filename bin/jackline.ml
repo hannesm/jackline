@@ -10,7 +10,7 @@ let start_client cfgdir debug () =
 
   Nocrypto_entropy_lwt.initialize () >>= fun () ->
 
-  let term = Notty_lwt.Terminal.create () in
+  let term = Notty_lwt.Term.create ~mouse:false () in
 
   Persistency.load_dsa cfgdir >>= fun dsa ->
 
