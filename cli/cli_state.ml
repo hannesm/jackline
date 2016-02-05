@@ -254,13 +254,16 @@ let empty_state config_directory config contacts connect_mvar state_mvar =
 
 let send s session ?kind jid id body fail =
   let x, req =
-    Utils.option
-      (false, false)
-      (fun s -> match s.User.receipt with
-         | `Unknown -> (false, true)
-         | `Supported -> (true, false)
-         | _ -> (false, false))
-      session
+    match kind with
+    | Some Xmpp_callbacks.XMPPClient.Groupchat -> (false, false)
+    | _ ->
+      Utils.option
+        (false, false)
+        (fun s -> match s.User.receipt with
+           | `Unknown -> (false, true)
+           | `Supported -> (true, false)
+           | _ -> (false, false))
+        session
   in
   Xmpp_callbacks.send_msg s ?kind jid x id body fail >>= fun () ->
   if req then

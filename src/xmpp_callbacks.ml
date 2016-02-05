@@ -41,7 +41,7 @@ type user_data = {
   locallog             : string -> string -> unit Lwt.t ;
 
   message              : Xjid.bare_jid -> ?timestamp:Ptime.t -> User.direction -> string -> unit Lwt.t ;
-  enc_message          : Xjid.t -> ?timestamp:Ptime.t -> User.direction -> string -> unit Lwt.t ;
+  enc_message          : Xjid.full_jid -> ?timestamp:Ptime.t -> string -> unit Lwt.t ;
   group_message        : Xjid.t -> Ptime.t option -> string option -> string option -> Xep_muc.User.data option -> string option -> unit Lwt.t ;
 
   received_receipts    : Xjid.t -> string list -> unit Lwt.t ;
@@ -138,21 +138,6 @@ let send_msg t ?(kind=Chat) jid receipt id body failure =
   with
     e -> failure e
 
-let validate_utf8 txt =
-  let rec loop d buf = match Uutf.decode d with
-    | `Await -> assert false
-    | `End -> Buffer.contents buf
-    | `Malformed _ -> Uutf.Buffer.add_utf_8 buf 0xFFFD ; loop d buf
-    | `Uchar x when x = 0x0009 || x = 0x000A -> (* accept tab and newline *)
-       Uutf.Buffer.add_utf_8 buf x ; loop d buf
-    | `Uchar 0x000D -> loop d buf (* ignore carriage return *)
-    | `Uchar x when x < 0x20 -> Uutf.Buffer.add_utf_8 buf 0xFFFD ; loop d buf (* replace other control characters *)
-    (* clearly: DEL 0x7F, vertical tabs, bom, left-to-right, ... *)
-    | `Uchar x -> Uutf.Buffer.add_utf_8 buf x ; loop d buf
-  in
-  let nln = `Readline 0x000A in
-  loop (Uutf.decoder ~nln ~encoding:`UTF_8 (`String txt)) (Buffer.create (String.length txt))
-
 let delayed_timestamp = function
   | None -> None
   | Some delay ->
@@ -205,11 +190,11 @@ let message_callback (t : user_data session_data) stanza =
        | Some v, timestamp, `Bare b ->
          (* this is likely a message from the jabber server itself *)
          t.user_data.message b ?timestamp (`From jid) v
-       | Some v, Some timestamp, `Full _ ->
+       | Some v, Some timestamp, `Full full ->
          (* some delayed message (offline storage), don't send out receipt / OTR thingies *)
-         t.user_data.enc_message jid ~timestamp (`From jid) v
-       | Some v, None, `Full _ ->
-         t.user_data.enc_message jid (`From jid) v >>= fun () ->
+         t.user_data.enc_message full ~timestamp v
+       | Some v, None, `Full full ->
+         t.user_data.enc_message full v >>= fun () ->
          let answer_receipts =
            match stanza.id with
            | None -> []

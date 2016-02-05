@@ -19,7 +19,7 @@ true : warn(+A-4-6-7-9-40-42-44-48)
   package(erm_xmpp), package(hex), syntax(camlp4o)
 <src/contact.{ml,mli}>: package(sexplib), package(sexplib.syntax), \
   package(erm_xmpp), package(hex), syntax(camlp4o)
-<src/xmpp_callbacks.ml>: package(erm_xmpp), package(uutf), \
+<src/xmpp_callbacks.ml>: package(erm_xmpp), \
   package(lwt), package(lwt.syntax), package(otr), package(sexplib), \
   package(tls), package(tls.lwt), package(ptime), \
   package(rresult), syntax(camlp4o)
@@ -32,7 +32,7 @@ true : warn(+A-4-6-7-9-40-42-44-48)
   package(tls.lwt), package(notty), package(erm_xmpp), \
   package(ptime), package(ptime.clock.os), syntax(camlp4o)
 <cli/cli_commands.ml>: package(astring), package(lwt), package(lwt.syntax), \
-  package(otr), package(erm_xmpp), syntax(camlp4o)
+  package(otr), package(erm_xmpp), package(uutf), syntax(camlp4o)
 <cli/cli_config.ml>: package(lwt), package(nocrypto), \
   package(otr), package(react), package(notty), package(tls.lwt)
 <cli/cli_state.ml>: package(hex), package(lwt), package(lwt.syntax), \

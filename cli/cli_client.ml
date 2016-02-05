@@ -103,7 +103,6 @@ let render_buddy_list (w, h) state =
       Utils.find_index state.active_contact 0 jids
     in
     let l = List.length buddies in
-    assert (focus >= 0 && focus < l) ;
     let up, down = (h / 2, (h + 1) / 2) in
     match focus - up >= 0, focus + down > l with
     | true, true -> l - h
