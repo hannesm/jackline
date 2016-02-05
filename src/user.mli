@@ -114,6 +114,7 @@ type user = {
   message_history   : message list ; (* persistent if preserve_messages is true *)
   input_buffer: (int list * int list) ; (* not persistent *)
   readline_history  : string list ; (* not persistent *)
+  history_position  : int ;
   otr_fingerprints  : fingerprint list ;
   otr_custom_config : Otr.State.config option ;
   active_sessions   : session list ; (* not persistent *)

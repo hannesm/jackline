@@ -10,6 +10,8 @@ val expanded : contact -> bool
 val messages : contact -> User.message list
 val input_buffer : contact -> (int list * int list)
 val readline_history : contact -> string list
+val history_position : contact -> int
+val set_history_position : contact -> int -> contact
 
 val received : contact -> string -> contact
 

@@ -363,6 +363,22 @@ let navigate_message_buffer state direction =
     if s.scrollback = 0 then notified s else s
   | Up, n -> { state with scrollback = succ n }
 
+let history state dir =
+  let active = active state in
+  let hitems = "" :: Contact.readline_history active
+  and cursor = Contact.history_position active
+  in
+  let l = List.length hitems in
+  let activate p =
+    let c = Contact.set_history_position active p in
+    Contact.replace_contact state.contacts c ;
+    let data = List.nth hitems p in
+    { state with input = (str_to_char_list data, []) }
+  in
+  match dir with
+  | Up -> activate (succ cursor mod l)
+  | Down -> activate ((l + pred cursor) mod l)
+
 let navigate_buddy_list state direction =
   let userlist = all_jids state in
   let set_active idx =
@@ -484,7 +500,6 @@ let k_to_s = function
 
 let read_terminal term mvar () =
   (* XXX: emacs key bindings: C-left/right [word forward/backward] C- wy[mark, kill, yank] C-_-[undo/redo] *)
-  (* XXX: handle history (up/down) *)
   (* XXX: handle tab completion -- maybe suggestions in grey as well *)
   let p = Lwt_mvar.put mvar
   and ok s = Lwt.return (`Ok s)
@@ -547,6 +562,9 @@ let read_terminal term mvar () =
           p handler >>= fun () ->
           loop ()
         (* XXX: elsewhere: if List.length state.notifications = 0 then Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) *)
+
+        | `Key (`Arrow `Up, []) -> p (fun s -> ok (history s Up)) >>= fun () -> loop ()
+        | `Key (`Arrow `Down, []) -> p (fun s -> ok (history s Down)) >>= fun () -> loop ()
 
         | `Key (`Uchar 0x44, [`Ctrl]) (* C-d *) -> p (fun s -> Lwt.return (`Quit s))
 

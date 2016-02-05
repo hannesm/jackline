@@ -134,11 +134,12 @@ type groupchat = {
   message_history : User.message list ; (* persistent if preserve_messages *)
   input_buffer : (int list * int list) ;
   readline_history : string list ;
+  history_position : int ;
   last_status : bool ;
 }
 
 let new_room ~jid ?(topic=None) ~my_nick ?(members=[]) ?(features=[]) ?(preserve_messages=false) () =
-  { room_jid = jid ; topic ; my_nick ; members ; features ; expand = false ; preserve_messages ; message_history = [] ; input_buffer = ([], []) ; readline_history = [] ; last_status = true }
+  { room_jid = jid ; topic ; my_nick ; members ; features ; expand = false ; preserve_messages ; message_history = [] ; input_buffer = ([], []) ; readline_history = [] ; history_position = 0 ; last_status = true }
 
 let short_member_info m =
   Printf.sprintf " %s %s (role: %s) (affiliation: %s)" (User.presence_to_char m.presence) m.nickname (role_to_string m.role) (affiliation_to_string m.affiliation)

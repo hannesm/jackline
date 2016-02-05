@@ -100,14 +100,23 @@ let new_message contact message =
   | `User u -> `User (User.new_message u message)
   | `Room r -> `Room (Muc.new_message r message)
 
+let history_position = function
+  | `User u -> u.User.history_position
+  | `Room r -> r.Muc.history_position
+
+let set_history_position c n = match c with
+  | `User u -> `User { u with User.history_position = n }
+  | `Room r -> `Room { r with Muc.history_position = n }
+
 let readline_history = function
   | `User u -> u.User.readline_history
   | `Room r -> r.Muc.readline_history
 
 let add_readline_history b h =
+  let history = Utils.take 19 (readline_history b) in
   match b with
-  | `User u -> `User { u with User.readline_history = h :: u.User.readline_history }
-  | `Room r -> `Room { r with Muc.readline_history = h :: r.Muc.readline_history }
+  | `User u -> `User { u with User.readline_history = h :: history }
+  | `Room r -> `Room { r with Muc.readline_history = h :: history }
 
 let color (b : contact) (r : resource option) =
   match b, r with
