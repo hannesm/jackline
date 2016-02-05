@@ -133,22 +133,24 @@ let might_match cmd prefix =
   cmp_i 0
 
 let completion input =
-  if String.(length input > 0 && get input 0 = '/') then
+  let open Astring.String in
+  let l = length input in
+  if l > 0 && get input 0 = '/' then
     match cmd_arg input with
     | (cmd, None) when Commands.mem commands cmd ->
       let command = Commands.find commands cmd in
-      List.map (fun x -> ("/" ^ x, " ")) command.subcommands
+      command.subcommands
     | (cmd, None) ->
       let cmds = keys () in
-      List.map (fun x -> ("/" ^ x, " "))
+      List.map (fun x -> drop ~max:(pred l) x)
         (List.filter (fun f -> might_match f cmd) cmds)
     | (cmd, Some arg) when Commands.mem commands cmd ->
       let command = Commands.find commands cmd in
-      List.map (fun x -> "/" ^ cmd ^ " " ^ x, "")
+      List.map (fun x -> drop ~max:(pred l) (cmd ^ " " ^ x))
         (List.filter (fun f -> might_match f arg) command.subcommands)
-    | _ -> [(input, "")]
+    | _ -> []
   else
-    [(input, "")]
+    []
 
 open Lwt
 

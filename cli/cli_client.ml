@@ -237,7 +237,19 @@ let render_state (width, height) state =
       let iinp = I.uchars A.empty inp
       and iinp2 = I.uchars A.empty inp2
       in
-      (I.(iinp <|> iinp2), succ (I.width iinp))
+      let completion =
+        match post with
+        | [] ->
+          let buf = Buffer.create (Array.length inp) in
+          Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
+          let input = Buffer.contents buf in
+          ( match Cli_commands.completion input with
+            | [] -> I.empty
+            | [x] -> I.string A.(fg (gray 20)) x
+            | xs -> I.string A.(fg (gray 20)) (String.concat "|" xs) )
+        | _ -> I.empty
+      in
+      (I.(iinp <|> completion <|> iinp2), succ (I.width iinp))
     in
     let main =
       let msgfmt = format_message tz_offset_s now active resource
@@ -501,7 +513,6 @@ let k_to_s = function
 
 let read_terminal term mvar () =
   (* XXX: emacs key bindings: C-left/right [word forward/backward] C- wy[mark, kill, yank] C-_-[undo/redo] *)
-  (* XXX: handle tab completion -- maybe suggestions in grey as well *)
   let p = Lwt_mvar.put mvar
   and ok s = Lwt.return (`Ok s)
   in
@@ -563,6 +574,25 @@ let read_terminal term mvar () =
           p handler >>= fun () ->
           loop ()
         (* XXX: elsewhere: if List.length state.notifications = 0 then Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) *)
+
+        | `Key (`Tab, []) ->
+          let handle s =
+            let pre, post = s.input in
+            let input =
+              let inp = Array.of_list pre in
+              let buf = Buffer.create (Array.length inp) in
+              Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
+              Buffer.contents buf
+            in
+            let pre =
+              match Cli_commands.completion input with
+              | [] -> pre
+              | [x] -> pre @ str_to_char_list x
+              | _ -> pre
+            in
+            ok ({ s with input = (pre, post) })
+          in
+          p handle >>= fun () -> loop ()
 
         | `Key (`Arrow `Up, []) -> p (fun s -> ok (history s Up)) >>= fun () -> loop ()
         | `Key (`Arrow `Down, []) -> p (fun s -> ok (history s Down)) >>= fun () -> loop ()
