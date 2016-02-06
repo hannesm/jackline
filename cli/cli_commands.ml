@@ -108,7 +108,7 @@ let split_ws s =
       if arg = "" then
         None
       else
-        Some str
+        Some arg
   in
   (String.sub s 0 ws, arg)
 
