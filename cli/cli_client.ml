@@ -578,20 +578,22 @@ let read_terminal term mvar () =
           loop ()
         (* XXX: elsewhere: if List.length state.notifications = 0 then Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) *)
 
-        | `Key (`Tab, []) ->
-          let handle s =
-            let pre, post = s.input in
-            let input =
-              let inp = Array.of_list pre in
-              let buf = Buffer.create (Array.length inp) in
-              Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
-              Buffer.contents buf
-            in
-            let pre =
-              match Cli_commands.completion input with
-              | [] -> pre
-              | [x] -> pre @ str_to_char_list x
-              | _ -> pre
+          | `Key (`Tab, []) ->
+            let handle s =
+              let pre, post = s.input in
+              let input =
+                let inp = Array.of_list pre in
+                let buf = Buffer.create (Array.length inp) in
+                Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
+                Buffer.contents buf
+              in
+              let pre =
+                match Cli_commands.completion input with
+                | [] -> pre
+                | [x] -> pre @ str_to_char_list (x ^ " ")
+                | _ -> pre
+              in
+              ok ({ s with input = (pre, post) })
             in
             ok ({ s with input = (pre, post) })
           in
