@@ -233,19 +233,18 @@ let render_state (width, height) state =
     let input, cursorc =
       (* XXX: needs a proper renderer with sideways scrolling *)
       let pre, post = state.input in
-      let inp = Array.of_list pre
-      and inp2 = Array.of_list post
-      in
 
-      let iinp = I.uchars A.empty inp
-      and iinp2 = I.uchars A.empty inp2
+      let iinp =
+        let inp = Array.of_list pre in
+        I.uchars A.empty inp
+      and iinp2 =
+        let inp2 = Array.of_list post in
+        I.uchars A.empty inp2
       in
       let completion =
         match post with
         | [] ->
-          let buf = Buffer.create (Array.length inp) in
-          Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
-          let input = Buffer.contents buf in
+          let input = char_list_to_str pre in
           ( match Cli_commands.completion input with
             | [] -> I.empty
             | [x] -> I.string A.(fg (gray 20)) x
@@ -544,12 +543,7 @@ let read_terminal term mvar () =
           | `Key (`Enter, []) ->
             let handler s =
               let pre, post = s.input in
-              let inp = Array.of_list pre
-              and inp2 = Array.of_list post
-              in
-              let buf = Buffer.create (Array.length inp + Array.length inp2) in
-              Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
-              Array.iter (Uutf.Buffer.add_utf_8 buf) inp2 ;
+              let input = char_list_to_str (pre @ post) in
               let clear_input b message =
                 let b = Contact.add_readline_history b message in
                 let b = Contact.set_input_buffer b ([], []) in
@@ -559,7 +553,7 @@ let read_terminal term mvar () =
               and s = { s with input = ([], []) }
               in
               let err msg = add_status s (`Local ((`Full s.config.Xconfig.jid), "error")) msg in
-              match Buffer.contents buf with
+              match input with
               | "/quit" -> Lwt.return (`Quit s)
               | "" -> (* XXX: expand/unexpand:
                          if Contact.expanded active || potentially_visible_resource state active then
@@ -588,12 +582,7 @@ let read_terminal term mvar () =
           | `Key (`Tab, []) ->
             let handle s =
               let pre, post = s.input in
-              let input =
-                let inp = Array.of_list pre in
-                let buf = Buffer.create (Array.length inp) in
-                Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
-                Buffer.contents buf
-              in
+              let input = char_list_to_str pre in
               let pre =
                 match Cli_commands.completion input with
                 | [] -> pre

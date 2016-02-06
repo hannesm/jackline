@@ -87,13 +87,21 @@ let emacs_bindings = function
 let str_to_char_list str =
   Astring.String.fold_right (fun ch acc -> int_of_char ch :: acc) str []
 
+let char_list_to_str xs =
+  let inp = Array.of_list xs in
+  let buf = Buffer.create (Array.length inp) in
+  Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
+  Buffer.contents buf
+
 let read_line ?(above = []) ?(prefix = "") ?default ?(below = []) term =
   let rec go (pre, post) =
-    let inp = Array.of_list pre in
-    let inp2 = Array.of_list post in
     let iprefix = I.string A.empty prefix
-    and iinp = I.uchars A.(st reverse) inp
-    and iinp2 = I.uchars A.(st reverse) inp2
+    and iinp =
+      let inp = Array.of_list pre in
+      I.uchars A.(st reverse) inp
+    and iinp2 =
+      let inp2 = Array.of_list post in
+      I.uchars A.(st reverse) inp2
     in
     rewrap term above below (iprefix, iinp, iinp2) (T.size term) >>= fun () ->
     Lwt_stream.next (T.events term) >>= fun e ->
@@ -104,11 +112,7 @@ let read_line ?(above = []) ?(prefix = "") ?default ?(below = []) term =
       | `Ok f -> go (f (pre, post))
       | `Unhandled k ->
         match k with
-        | `Key (`Enter, []) ->
-          let buf = Buffer.create (Array.length inp + Array.length inp2) in
-          Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
-          Array.iter (Uutf.Buffer.add_utf_8 buf) inp2 ;
-          Lwt.return (Buffer.contents buf)
+        | `Key (`Enter, []) -> Lwt.return (char_list_to_str (pre @ post))
         | _ -> go (pre, post)
   in
   let pre = Utils.option [] str_to_char_list default in
@@ -121,10 +125,7 @@ let read_password ?(above = []) ?(prefix = "") ?(below = []) term =
     let prefix = I.string A.empty prefix in
     rewrap term above below (prefix, input, I.empty) (T.size term) >>= fun () ->
     Lwt_stream.next (T.events term) >>= function
-      | `Key (`Enter, []) ->
-         let buf = Buffer.create w in
-         Array.iter (Uutf.Buffer.add_utf_8 buf) (Array.of_list pre) ;
-         Lwt.return (Buffer.contents buf)
+      | `Key (`Enter, []) -> Lwt.return (char_list_to_str pre)
       | `Key (`Backspace, []) ->
          (match List.rev pre with
           | [] -> go pre
