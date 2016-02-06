@@ -112,11 +112,14 @@ let render_buddy_list (w, h) state =
       | true, false -> focus - up
       | false, _ -> 0
   in
-  let to_draw = Utils.drop start buddies in
+  let to_draw =
+    let fst = Utils.drop start buddies in
+    Utils.take h fst
+  in
   let formatted = I.vcat (List.map (format_buddy state w) to_draw) in
   I.vlimit ~align:`Top h formatted
 
-let spacer a uchar width left right =
+let v_space a uchar width left right =
   let fill =
     let len = width - I.(width left + width right) in
     if len <= 0 then I.empty else I.uchar a uchar len 1
@@ -160,7 +163,7 @@ let horizontal_line buddy resource a scrollback width =
         | `Member m -> tr m.Muc.presence m.Muc.status)
       resource
   in
-  spacer a 0x2015 width (I.hcat [ pre ; scroll ; jid ]) I.(otr <|> presence_status)
+  v_space a 0x2015 width (I.hcat [ pre ; scroll ; jid ]) I.(otr <|> presence_status)
 
 let status_line self mysession notify log a width =
   let a = A.(a ++ st bold) in
@@ -176,7 +179,7 @@ let status_line self mysession notify log a width =
     in
     I.(string a "[ " <|> string A.(buddy_to_color color ++ a) data <|> string a " ]─")
   in
-  spacer a 0x2015 width I.(notify <|> jid) status
+  v_space a 0x2015 width I.(notify <|> jid) status
 
 let cut_scroll scrollback height image =
   let bottom = scrollback * height in
