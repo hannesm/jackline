@@ -67,7 +67,15 @@ let format_message tz_offset_s now buddy resource { User.direction ; encrypted ;
     | `Default -> A.empty
     | `Highlight -> A.(st bold)
   in
-  I.string (to_style style) (time ^ pre ^ message)
+  let m = Astring.String.cuts ~sep:"\n" message
+  and a = to_style style
+  in
+  let pre = I.string a (time ^ pre) in
+  let datas = List.map (I.string a) m in
+  match datas with
+  | [] -> I.empty
+  | [x] -> I.(pre <|> x)
+  | x::xs -> I.vcat (I.(pre <|> x)::xs)
 
 let buddy_to_color = function
   | `Default -> A.empty
