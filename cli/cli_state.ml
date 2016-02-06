@@ -122,6 +122,8 @@ module Notify = struct
     mvar
 end
 
+let (reading : bool ref) = ref true
+
 let (xmpp_session : Xmpp_callbacks.user_data Xmpp_callbacks.XMPPClient.session_data option ref) = ref None
 
 module Connect = struct
@@ -154,52 +156,46 @@ module Connect = struct
 
   let connect_me config ui_mvar state_mvar users =
     let mvar = Lwt_mvar.create Cancel in
-    let failure reason =
-      disconnect () >>= fun () ->
-      selflog ui_mvar "session error" (Printexc.to_string reason) >>= fun () ->
-      let conn = fun () -> Lwt_mvar.put mvar Reconnect in
-      ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async conn)) ;
-      Lwt.return_unit
-    in
     let connect user_data (p, s, prio) =
       match config.Xconfig.password with
-      | None -> failure (Invalid_argument "no password provided, please restart")
+      | None -> Lwt.fail (Invalid_argument "no password provided, please restart")
       | Some password ->
-         try_lwt
-           (resolve config ui_mvar >>= fun sockaddr ->
-            let certname = match config.Xconfig.certificate_hostname with
-              | None -> JID.to_idn (Xjid.jid_to_xmpp_jid (`Full config.Xconfig.jid))
-              | Some x -> x
+        (resolve config ui_mvar >>= fun sockaddr ->
+         let certname = match config.Xconfig.certificate_hostname with
+           | None -> JID.to_idn (Xjid.jid_to_xmpp_jid (`Full config.Xconfig.jid))
+           | Some x -> x
+         in
+         (match config.Xconfig.authenticator with
+          | `Trust_anchor x -> X509_lwt.authenticator (`Ca_file x)
+          | `Fingerprint fp ->
+            let time = Unix.gettimeofday () in
+            let fp =
+              Nocrypto.Uncommon.Cs.of_hex
+                (String.map (function ':' -> ' ' | x -> x) fp)
             in
-            (match config.Xconfig.authenticator with
-             | `Trust_anchor x -> X509_lwt.authenticator (`Ca_file x)
-             | `Fingerprint fp ->
-                let time = Unix.gettimeofday () in
-                let fp =
-                  Nocrypto.Uncommon.Cs.of_hex
-                    (String.map (function ':' -> ' ' | x -> x) fp)
-                in
-                let fingerprints = [(certname, fp)]
-                and hash = `SHA256
-                in
-                let auth = X509.Authenticator.server_cert_fingerprint ~time ~hash ~fingerprints in
-                Lwt.return auth) >>= fun authenticator ->
-            let kind, show = Xmpp_callbacks.presence_to_xmpp p in
-            Xmpp_callbacks.connect
-              sockaddr
-              config.Xconfig.jid certname password
-              (kind, show, s, prio) authenticator user_data
-              (fun session ->
-                 Lwt_mvar.put mvar (Success user_data) >>= fun () ->
-                 let users = Contact.fold (fun k v acc ->
-                                match v with
-                                | `Room r when r.Muc.last_status -> k :: acc
-                                | _ -> acc) users []
-                 in
-                 Lwt_list.iter_s (fun x -> Xmpp_callbacks.Xep_muc.enter_room session (Xjid.jid_to_xmpp_jid (`Bare x))) users)) >|= fun session ->
-               xmpp_session := Some session ;
-               Lwt.async (fun () -> Xmpp_callbacks.parse_loop session)
-      with exn -> failure exn
+            let fingerprints = [(certname, fp)]
+            and hash = `SHA256
+            in
+            let auth = X509.Authenticator.server_cert_fingerprint ~time ~hash ~fingerprints in
+            Lwt.return auth) >>= fun authenticator ->
+         let kind, show = Xmpp_callbacks.presence_to_xmpp p in
+         Xmpp_callbacks.connect
+           sockaddr
+           config.Xconfig.jid certname password
+           (kind, show, s, prio) authenticator user_data
+           (fun session ->
+              Lwt_mvar.put mvar (Success user_data) >>= fun () ->
+              let users =
+                Contact.fold
+                  (fun k v acc ->
+                     match v with
+                     | `Room r when r.Muc.last_status -> k :: acc
+                     | _ -> acc)
+                  users []
+              in
+              Lwt_list.iter_s (fun x -> Xmpp_callbacks.Xep_muc.enter_room session (Xjid.jid_to_xmpp_jid (`Bare x))) users)) >|= fun session ->
+           xmpp_session := Some session ;
+           Lwt.async (fun () -> Xmpp_callbacks.parse_loop session)
     in
     let rec reconnect_loop user_data presence =
       Lwt_mvar.take mvar >>= function
@@ -252,7 +248,7 @@ let empty_state config_directory config contacts connect_mvar state_mvar =
 }
 
 
-let send s session ?kind jid id body fail =
+let send s session ?kind jid id body =
   let x, req =
     match kind with
     | Some Xmpp_callbacks.XMPPClient.Groupchat -> (false, false)
@@ -265,7 +261,7 @@ let send s session ?kind jid id body fail =
            | _ -> (false, false))
         session
   in
-  Xmpp_callbacks.send_msg s ?kind jid x id body fail >>= fun () ->
+  Xmpp_callbacks.send_msg s ?kind jid x id body >>= fun () ->
   if req then
     Xmpp_callbacks.request_disco s jid
   else

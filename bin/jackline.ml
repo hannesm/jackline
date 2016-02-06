@@ -142,7 +142,7 @@ let start_client cfgdir debug () =
     Lwt_engine.on_timer 600. true (fun _ -> Lwt.async dump)
   in
 
-  Cli_client.init_system ui_mvar connect_mvar ;
+  Cli_client.init_system ui_mvar ;
   Lwt.async (Cli_client.read_terminal term ui_mvar) ;
   (* main loop *)
   Cli_client.loop term ui_mvar state >>= fun state ->

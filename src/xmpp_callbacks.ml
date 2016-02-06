@@ -55,9 +55,6 @@ type user_data = {
      this needs to be done, since a roster get will not return those not in your roster (and might have been modified by different client) *)
   reset_users          : unit -> unit Lwt.t ;
   update_users         : (Xjid.t * string option * string list * User.subscription * User.property list) list -> bool -> unit Lwt.t ;
-
-  (* just log and maybe disconnect!? *)
-  failure              : exn -> unit Lwt.t ;
 }
 
 let request_disco t jid =
@@ -86,9 +83,7 @@ let request_disco t jid =
   in
   t.user_data.update_receipt_state jid `Requested >>= fun () ->
   let jid_to = Xjid.jid_to_xmpp_jid jid in
-  try_lwt
-    make_iq_request t ~jid_to (IQGet (Disco.make_disco_query [])) callback
-  with e -> t.user_data.failure e
+  make_iq_request t ~jid_to (IQGet (Disco.make_disco_query [])) callback
 
 module Keepalive = struct
   let ping_urn = "urn:xmpp:ping"
@@ -106,9 +101,7 @@ module Keepalive = struct
     else
       let jid_to = JID.of_string (t.myjid.JID.ldomain) in
       keepalive_running := true ;
-      try_lwt
-        make_iq_request t ~jid_to (IQGet (Xml.make_element (Some ping_urn, "ping") [] [])) callback
-      with e -> t.user_data.failure e
+      make_iq_request t ~jid_to (IQGet (Xml.make_element (Some ping_urn, "ping") [] [])) callback
 
   let keepalive : Lwt_engine.event option ref = ref None
 
@@ -126,17 +119,14 @@ module Keepalive = struct
     keepalive := Some (Lwt_engine.on_timer 45. false (fun _ -> Lwt.async doit))
 end
 
-let send_msg t ?(kind=Chat) jid receipt id body failure =
+let send_msg t ?(kind=Chat) jid receipt id body =
   let x =
     match receipt, id with
     | true, Some _ -> [Xml.Xmlelement ((ns_receipts, "request"), [], [])]
     | _ -> []
   in
   let jid_to = Xjid.jid_to_xmpp_jid jid in
-  try_lwt
-    send_message t ~kind ~jid_to ~body ~x ?id ()
-  with
-    e -> failure e
+  send_message t ~kind ~jid_to ~body ~x ?id ()
 
 let delayed_timestamp = function
   | None -> None
@@ -202,10 +192,7 @@ let message_callback (t : user_data session_data) stanza =
          in
          let jid_to = stanza.jid_from in
          Lwt_list.iter_s
-           (fun x ->
-              try_lwt
-                send_message t ?jid_to ~kind:Chat ~x:[x] ()
-              with e -> t.user_data.failure e)
+           (fun x -> send_message t ?jid_to ~kind:Chat ~x:[x] ())
            answer_receipts
 
 let message_error t ?id ?jid_from ?jid_to ?lang error =
@@ -369,8 +356,7 @@ let session_callback (kind, show, status, priority) mvar t =
       let users = List.fold_left (fun acc -> function None -> acc | Some x -> x :: acc) [] mods in
       t.user_data.update_users users false) >>= fun () ->
 
-  (try_lwt send_presence t ?kind ?show ?status ?priority ()
-   with e -> t.user_data.failure e) >>= fun () ->
+  send_presence t ?kind ?show ?status ?priority () >>= fun () ->
 
   Keepalive.restart_keepalive t ;
   mvar t

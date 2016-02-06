@@ -217,7 +217,7 @@ let notify_user jid ctx inc_fp verify_fp = function
      [ ((`Local (jid, "OTR SMP")), false, "successfully verified!") ]
   | `SMP_failure             -> [ ((`Local (jid, "OTR SMP")), false, "failure") ]
 
-let handle_connect p c_mvar failure =
+let handle_connect p c_mvar =
   let find_user state bare =
     match Contact.find_user state.contacts bare with
     | Some user -> (state, user)
@@ -322,7 +322,7 @@ let handle_connect p c_mvar failure =
        | _, None, _ -> Lwt.return_unit
        | _, _, None -> Lwt.return_unit
        | _, Some body, Some s ->
-         send s (Some session) ~kind:Xmpp_callbacks.XMPPClient.Chat (`Full (bare, res)) None body failure) >>= fun () ->
+         send s (Some session) ~kind:Xmpp_callbacks.XMPPClient.Chat (`Full (bare, res)) None body) >>= fun () ->
       let state = if mark then notify state (`Full (bare, res)) else state in
       Lwt.return (`Ok state)
     in
@@ -525,8 +525,6 @@ let handle_connect p c_mvar failure =
 
       reset_users ;
       update_users ;
-
-      failure ;
   }
   in
   Lwt_mvar.put c_mvar (Connect user_data)
@@ -535,10 +533,9 @@ let handle_disconnect msg =
   Connect.disconnect () >|= fun () ->
   msg "session error" "disconnected"
 
-let send_status s (presence, status, priority) failure =
+let send_status s (presence, status, priority) =
   let kind, show = Xmpp_callbacks.presence_to_xmpp presence in
-  (try_lwt Xmpp_callbacks.XMPPClient.send_presence s ?kind ?show ?status ?priority ()
-   with e -> failure e)
+  Xmpp_callbacks.XMPPClient.send_presence s ?kind ?show ?status ?priority ()
 
 let handle_status session arg =
   let p, status = split_ws arg in
@@ -556,14 +553,12 @@ let handle_priority session p =
   with
     _ -> None
 
-let handle_add s a msg failure =
+let handle_add s a msg =
   try
     (* TODO: validate input here *)
     let jid_to = JID.of_string a in
-    (try_lwt
-       (Xmpp_callbacks.XMPPClient.(send_presence s ~jid_to ~kind:Subscribe ()) >|= fun () ->
-        msg a "has been subscribed (approval pending)")
-     with e -> failure e)
+    Xmpp_callbacks.XMPPClient.(send_presence s ~jid_to ~kind:Subscribe ()) >|= fun () ->
+    msg a "has been subscribed (approval pending)"
   with _ -> msg "error" "parsing of jid failed (user@node)" ; Lwt.return_unit
 
 let handle_fingerprint user err fp =
@@ -606,9 +601,9 @@ let handle_log buddy v a cfgdir =
   else
     ([], None, None)
 
-let handle_authorization arg =
+let handle_authorization =
   let open Xmpp_callbacks.XMPPClient in
-  match arg with
+  function
   | "allow"               -> Some (Subscribed, "is now allowed to receive your presence updates")
   | "cancel"              -> Some (Unsubscribed, "won't receive your presence updates anymore")
   | "request"             -> Some (Subscribe, "has been asked to sent presence updates to you")
@@ -677,8 +672,8 @@ let handle_otr_start user session otr_cfg dsa =
        (and if we see a reply, we'll get some resource from the other side) *)
     let ctx = Otr.State.new_session otr_cfg dsa () in
     let _, out = Otr.Engine.start_otr ctx in
-    let clos = fun s failure ->
-      send s None (`Bare user.User.bare_jid) None out failure
+    let clos state s =
+      send s None (`Bare user.User.bare_jid) None out >|= fun () -> `Ok state
     in
     ([ "starting OTR session" ], None, Some clos)
   | Some session when User.encrypted session.User.otr ->
@@ -686,8 +681,8 @@ let handle_otr_start user session otr_cfg dsa =
   | Some session ->
     let ctx, out = Otr.Engine.start_otr session.User.otr in
     let user = User.update_otr user session ctx in
-    let clos = fun s failure ->
-      send s (Some session) (`Full (user.User.bare_jid, session.User.resource)) None out failure
+    let clos state s =
+      send s (Some session) (`Full (user.User.bare_jid, session.User.resource)) None out >|= fun () -> `Ok state
     in
     ([ "starting OTR session" ], Some user, Some clos)
 
@@ -700,9 +695,10 @@ let handle_otr_stop user session err =
     let datas, clos = match out with
       | None   -> ([], None)
       | Some body ->
-         let clos = fun s failure ->
+         let clos state s =
            let jid = `Full (user.User.bare_jid, session.User.resource) in
-           send s (Some session) jid None body failure
+           send s (Some session) jid None body >|= fun () ->
+           `Ok state
          in
          ([ "finished OTR session" ], Some clos)
     in
@@ -720,9 +716,9 @@ let handle_smp_abort user session =
   let clos = match out with
    | None -> None
    | Some out ->
-      Some (fun s failure ->
+      Some (fun state s ->
             let jid = `Full (user.User.bare_jid, session.User.resource) in
-            send s (Some session) jid None out failure)
+            send s (Some session) jid None out >|= fun () -> `Ok state)
   in
   (datas, Some user, clos)
 
@@ -741,36 +737,46 @@ let handle_smp_shared user session secret =
     match out with
     | None   -> None
     | Some body ->
-       Some (fun s failure ->
+       Some (fun state s ->
              let jid = `Full (user.User.bare_jid, session.User.resource) in
-             send s (Some session) jid None body failure)
+             send s (Some session) jid None body >|= fun () -> `Ok state)
   in
   (datas @ ["initiated SMP"], Some user, clos)
 
-let handle_smp_question term users user session question =
-  let clos s failure =
+let handle_smp_question user session question =
+  let clos _state s =
     let jid = `Full (user.User.bare_jid, session.User.resource) in
-    (* XXX   (new Cli_config.read_inputline ~term ~prompt:"shared secret: " ())#run >>= fun secret -> *)
-    let _term = term in
-    let secret = "blubb" in
-    let sec = Astring.String.trim secret in
-    let ctx, out, ret = Otr.Engine.start_smp session.User.otr ~question sec in
-    let user = User.update_otr user session ctx in
-    let add_msg u m = User.insert_message u (`Local (jid, "")) false false m in
-    let user = if sec <> secret then
-                 add_msg user "trimmed secret"
-               else
-                 user
+    let handle state term =
+      reading := false ;
+      Cli_support.read_password ~prefix:"Shared secret: " term >>= fun secret ->
+      reading := true ;
+      let sec = Astring.String.trim secret in
+      match Contact.find_user state.contacts user.User.bare_jid with
+      | None -> assert false
+      | Some user -> match User.find_session user session.User.resource with
+        | None -> assert false
+        | Some session ->
+          let ctx, out, ret = Otr.Engine.start_smp session.User.otr ~question sec in
+          let user = User.update_otr user session ctx in
+          let add_msg u m = User.insert_message u (`Local (jid, "")) false false m in
+          let user =
+            if sec <> secret then
+              add_msg user ("asked SMP " ^ question ^ ", trimmed your secret")
+            else
+              add_msg user ("asked SMP " ^ question)
+          in
+          let user = List.fold_left (fun c -> function
+              | `Warning x -> add_msg c ("SMP question warning: " ^ x)
+              | _ ->  c)
+              user (List.rev ret)
+          in
+          Contact.replace_user state.contacts user ;
+          let state = { state with input = ([], []) } in
+          match out with
+          | None      -> return state
+          | Some body -> send s (Some session) jid None body >|= fun () -> state
     in
-    let user = List.fold_left (fun c -> function
-      | `Warning x -> add_msg c ("SMP question warning: " ^ x)
-      | _ ->  c)
-      user (List.rev ret)
-    in
-    Contact.replace_user users user ;
-    match out with
-    | None      -> Lwt.return_unit
-    | Some body -> send s (Some session) jid None body failure
+    return (`Ask handle)
   in
   ([], None, Some clos)
 
@@ -790,27 +796,26 @@ let handle_smp_answer user session secret =
     match out with
     | None   -> None
     | Some body ->
-       Some (fun s failure ->
+       Some (fun state s ->
              let jid = `Full (user.User.bare_jid, session.User.resource) in
-             send s (Some session) jid None body failure)
+             send s (Some session) jid None body >|= fun () ->
+             `Ok state)
   in
   (datas, Some user, clos)
 
 let handle_remove user =
-  fun s failure ->
-  (try_lwt
-   let bare_jid = Xjid.bare_jid_to_string user.User.bare_jid in
-   (* XXX: #116 - provide a error_callback: StanzaError.t -> ?? *)
-     Xmpp_callbacks.(Roster.put ~remove:() s bare_jid
-       (fun ?jid_from ?jid_to ?lang el ->
+  fun state s ->
+    let bare_jid = Xjid.bare_jid_to_string user.User.bare_jid in
+    (* XXX: #116 - provide a error_callback: StanzaError.t -> ?? *)
+    Xmpp_callbacks.(Roster.put ~remove:() s bare_jid
+      (fun ?jid_from ?jid_to ?lang el ->
         ignore jid_to ; ignore lang ; ignore el ;
         match jid_from with
         | None -> fail XMPPClient.BadRequest
         | Some x -> match Xjid.string_to_jid x with
-                    | None -> fail XMPPClient.BadRequest
-                    | Some jid ->
-                       s.XMPPClient.user_data.log (`From jid) ("Removal of " ^ bare_jid ^ " successful")))
-   with e -> failure e)
+          | None -> fail XMPPClient.BadRequest
+          | Some jid ->
+            s.XMPPClient.user_data.log (`From jid) ("Removal of " ^ bare_jid ^ " successful"))) >|= fun () -> `Ok state
 
 let print_otr_policy cfg =
   let policies = String.concat ", "
@@ -895,14 +900,15 @@ let handle_leave buddy reason =
      let nick = r.Muc.my_nick
      and jid = `Bare r.Muc.room_jid
      in
-     let clos s _failure =
-       Xmpp_callbacks.Xep_muc.leave_room s ?reason ~nick (Xjid.jid_to_xmpp_jid jid)
+     let clos state s =
+       Xmpp_callbacks.Xep_muc.leave_room s ?reason ~nick (Xjid.jid_to_xmpp_jid jid) >|= fun () ->
+       `Ok state
      in
      let r = `Room { r with Muc.last_status = false } in
      (["leaving room"], Some r, Some clos)
   | _ -> (["not a chatroom"], None, None)
 
-let exec input state term contact isself failure p : ([ `Ok of Cli_state.state | `Quit of Cli_state.state ] Lwt.t) =
+let exec input state contact isself p =
   let log (direction, msg) = add_status state direction msg in
   let msg = tell_user log state.active_contact in
   let err = msg "error" in
@@ -923,7 +929,7 @@ let exec input state term contact isself failure p : ([ `Ok of Cli_state.state |
      let err msg = err msg ; ok state in
      match other, !xmpp_session with
      (* connect *)
-     | ("connect", _), None   -> handle_connect p state.connect_mvar failure >>= fun () -> ok state
+     | ("connect", _), None   -> handle_connect p state.connect_mvar >>= fun () -> ok state
      | ("connect", _), Some _ -> err "already connected"
 
      (* disconnect *)
@@ -936,7 +942,7 @@ let exec input state term contact isself failure p : ([ `Ok of Cli_state.state |
         handle_help (msg ~prefix:"argument required") (Some x) ; ok state
 
      (* add *)
-     | ("add", Some a), Some s -> handle_add s a (msg ?prefix:None) failure >>= fun () -> ok state
+     | ("add", Some a), Some s -> handle_add s a (msg ?prefix:None) >>= fun () -> ok state
 
      (* status *)
      | ("status", Some arg), Some s ->
@@ -944,7 +950,7 @@ let exec input state term contact isself failure p : ([ `Ok of Cli_state.state |
          | None -> handle_help (msg ~prefix:"unknown argument") (Some "status") ; ok state
          | Some p ->
             Lwt_mvar.put state.connect_mvar (Presence p) >>= fun () ->
-            send_status s p failure >>= fun () ->
+            send_status s p >>= fun () ->
             ok state)
 
      (* priority *)
@@ -953,7 +959,7 @@ let exec input state term contact isself failure p : ([ `Ok of Cli_state.state |
          | None   -> handle_help (msg ~prefix:"unknown argument") (Some "priority") ; ok state
          | Some p ->
             Lwt_mvar.put state.connect_mvar (Presence p) >>= fun () ->
-            send_status s p failure >>= fun () ->
+            send_status s p >>= fun () ->
             ok state)
 
      (* multi user chat *)
@@ -977,8 +983,7 @@ let exec input state term contact isself failure p : ([ `Ok of Cli_state.state |
         in
 
         let datas, u, clos = match other, s with
-          | ("clear", _), _ ->
-             ([], Some (Contact.clear_messages contact), None)
+          | ("clear", _), _ -> ([], Some (Contact.clear_messages contact), None)
 
           | ("log", None), _ -> handle_help (msg ~prefix:"argument required") (Some "log")
           | ("log", Some a), _ when a = "on"  -> handle_log contact true a state.config_directory
@@ -1025,11 +1030,10 @@ let exec input state term contact isself failure p : ([ `Ok of Cli_state.state |
                  match handle_authorization a with
                  | None   -> handle_help (msg ~prefix:"unknown argument") (Some "authorization")
                  | Some (kind, m) ->
-                    let clos = fun s failure ->
-                      (try_lwt
-                       let jid_to = Xjid.jid_to_xmpp_jid (`Bare u.User.bare_jid) in
-                           Xmpp_callbacks.XMPPClient.send_presence s ~jid_to ~kind ()
-                           with e -> failure e)
+                    let clos state s =
+                      let jid_to = Xjid.jid_to_xmpp_jid (`Bare u.User.bare_jid) in
+                      Xmpp_callbacks.XMPPClient.send_presence s ~jid_to ~kind () >|= fun () ->
+                      `Ok state
                     in
                     ([m], None, Some clos))
 
@@ -1086,7 +1090,7 @@ let exec input state term contact isself failure p : ([ `Ok of Cli_state.state |
                   (match split_ws a with
                    | "abort", _ -> handle_smp_abort u session
                    | "shared", Some arg -> handle_smp_shared u session arg
-                   | "question", Some question -> handle_smp_question term state.contacts u session question
+                   | "question", Some question -> handle_smp_question u session question
                    | "answer", Some arg -> handle_smp_answer u session arg
                    | _ -> handle_help (msg ~prefix:"argument required") (Some "smp"))
                | _ -> err "need a secure session, use /otr start first")
@@ -1112,6 +1116,6 @@ let exec input state term contact isself failure p : ([ `Ok of Cli_state.state |
             (* TODO: this is slightly too eager (too many writes) *)
             Lwt_mvar.put state.contact_mvar u) >>= fun () ->
         match clos, !xmpp_session with
-        | Some x, Some s -> x s failure >|= fun () -> `Ok state
+        | Some x, Some s -> x state s
         | Some _, None -> msg "error" "not connected" ; Lwt.return (`Ok state)
         | None, _ -> Lwt.return (`Ok state)
