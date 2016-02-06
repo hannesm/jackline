@@ -744,37 +744,45 @@ let handle_smp_shared user session secret =
   (datas @ ["initiated SMP"], Some user, clos)
 
 let handle_smp_question user session question =
+  let p = "shared secret:" in
   let clos _state s =
     let jid = `Full (user.User.bare_jid, session.User.resource) in
-    let handle state term =
+    let handle state input_mvar ui_mvar =
       reading := false ;
-      Cli_support.read_password ~prefix:"Shared secret: " term >>= fun secret ->
-      reading := true ;
-      let sec = Astring.String.trim secret in
-      match Contact.find_user state.contacts user.User.bare_jid with
-      | None -> assert false
-      | Some user -> match User.find_session user session.User.resource with
-        | None -> assert false
-        | Some session ->
-          let ctx, out, ret = Otr.Engine.start_smp session.User.otr ~question sec in
-          let user = User.update_otr user session ctx in
-          let add_msg u m = User.insert_message u (`Local (jid, "")) false false m in
-          let user =
-            if sec <> secret then
-              add_msg user ("asked SMP " ^ question ^ ", trimmed your secret")
-            else
-              add_msg user ("asked SMP " ^ question)
+      Lwt.async (fun () ->
+          Lwt_mvar.take input_mvar >>= fun secret ->
+          reading := true ;
+          let sec =
+            let s =
+              if Astring.String.is_prefix ~affix:p secret then
+                Astring.String.drop ~max:(Astring.String.length p) secret
+              else
+                secret
+            in
+            Astring.String.trim s
           in
-          let user = List.fold_left (fun c -> function
-              | `Warning x -> add_msg c ("SMP question warning: " ^ x)
-              | _ ->  c)
-              user (List.rev ret)
+          let handle state =
+            match Contact.find_user state.contacts user.User.bare_jid with
+            | None -> assert false
+            | Some user -> match User.find_session user session.User.resource with
+              | None -> assert false
+              | Some session ->
+                let ctx, out, ret = Otr.Engine.start_smp session.User.otr ~question sec in
+                let user = User.update_otr user session ctx in
+                let add_msg u m = User.insert_message u (`Local (jid, "")) false false m in
+                let user = add_msg user ("asked SMP " ^ question) in
+                let user = List.fold_left (fun c -> function
+                    | `Warning x -> add_msg c ("SMP question warning: " ^ x)
+                    | _ ->  c)
+                    user (List.rev ret)
+                in
+                Contact.replace_user state.contacts user ;
+                match out with
+                | None      -> return (`Ok state)
+                | Some body -> send s (Some session) jid None body >|= fun () -> `Ok state
           in
-          Contact.replace_user state.contacts user ;
-          let state = { state with input = ([], []) } in
-          match out with
-          | None      -> return state
-          | Some body -> send s (Some session) jid None body >|= fun () -> state
+          Lwt_mvar.put ui_mvar handle) ;
+      Lwt.return { state with input = (Cli_support.str_to_char_list (p ^ " "), []) }
     in
     return (`Ask handle)
   in

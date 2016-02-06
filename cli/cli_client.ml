@@ -347,7 +347,7 @@ let quit state =
     !xmpp_session
 
 (* this is rendering and drawing stuff to terminal, waiting for updates of the ui_mvar... *)
-let rec loop term mvar state =
+let rec loop term mvar input_mvar state =
   let reset state =
     let buddies = Contact.fold (fun _ b acc -> Contact.reset b :: acc) state.contacts [] in
     List.iter (Contact.replace_contact state.contacts) buddies
@@ -366,14 +366,16 @@ let rec loop term mvar state =
    with exn ->
      add_status state (`Local ((`Full state.config.Xconfig.jid), "error")) (Printexc.to_string exn) ;
      Lwt.return (`Failure state)) >>= function
-  | `Ok state -> loop term mvar state
-  | `Disconnect state -> reset state ; loop term mvar state
+  | `Ok state -> loop term mvar input_mvar state
+  | `Disconnect state -> reset state ; loop term mvar input_mvar state
   | `Failure state ->
     reset state ;
     ignore (Lwt_engine.on_timer 10. false
               (fun _ -> Lwt.async (fun () -> Lwt_mvar.put state.connect_mvar Reconnect))) ;
-    loop term mvar state
-  | `Ask c -> c state term >>= fun s -> loop term mvar s
+    loop term mvar input_mvar state
+  | `Ask c ->
+    c state input_mvar mvar >>= fun s ->
+    loop term mvar input_mvar s
   | `Quit state ->
     quit state >>= fun () ->
     Lwt.return state
@@ -548,20 +550,36 @@ let k_to_s = function
   | `Key (`Function x, ms) -> "function " ^ string_of_int x ^ ":" ^ m_to_s ms
   | _ -> "unknown"
 
-let read_terminal term mvar () =
+let read_terminal term mvar input_mvar () =
   (* XXX: emacs key bindings: C-left/right [word forward/backward] C- wy[mark, kill, yank] C-_-[undo/redo] *)
   let p = Lwt_mvar.put mvar
   and ok s = Lwt.return (`Ok s)
   in
   let rec loop () =
     Lwt_stream.next (T.events term) >>= fun e ->
-    if !reading then
-      match readline_input e with
+    match readline_input e with
+    | `Ok f -> p (fun s -> ok (let input = f s.input in { s with input })) >>= fun () -> loop ()
+    | `Unhandled k -> match emacs_bindings k with
       | `Ok f -> p (fun s -> ok (let input = f s.input in { s with input })) >>= fun () -> loop ()
-      | `Unhandled k -> match emacs_bindings k with
-        | `Ok f -> p (fun s -> ok (let input = f s.input in { s with input })) >>= fun () -> loop ()
-        | `Unhandled k -> match k with
+      | `Unhandled k ->
+        if not !reading then
           (* command and message processing *)
+          match k with
+          | `Key (`Enter, []) ->
+            let handler s =
+              let pre, post = s.input in
+              let input = char_list_to_str (pre @ post) in
+              let b = Contact.set_input_buffer (active s) ([], []) in
+              Contact.replace_contact s.contacts b ;
+              let s = { s with input = ([], []) } in
+              Lwt_mvar.put input_mvar input >>= fun () ->
+              ok s
+            in
+            p handler >>= fun () -> loop ()
+          | _ -> loop () (* don't do this navigation when reading a password! *)
+
+        else
+          match k with
           | `Key (`Enter, []) ->
             let handler s =
               let pre, post = s.input in
@@ -601,7 +619,6 @@ let read_terminal term mvar () =
             in
             p handler >>= fun () ->
             loop ()
-        (* XXX: elsewhere: if List.length state.notifications = 0 then Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) *)
 
           | `Key (`Tab, []) ->
             let handle s =
@@ -649,7 +666,5 @@ let read_terminal term mvar () =
             let k = k_to_s k in
             p (fun s -> add_status s (`Local (`Full s.config.Xconfig.jid, "key")) k ; ok s) >>= fun () ->
             loop ()
-    else
-      loop ()
   in
   loop ()

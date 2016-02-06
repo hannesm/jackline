@@ -143,9 +143,11 @@ let start_client cfgdir debug () =
   in
 
   Cli_client.init_system ui_mvar ;
-  Lwt.async (Cli_client.read_terminal term ui_mvar) ;
+
+  let input_mvar = Lwt_mvar.create_empty () in
+  Lwt.async (Cli_client.read_terminal term ui_mvar input_mvar) ;
   (* main loop *)
-  Cli_client.loop term ui_mvar state >>= fun state ->
+  Cli_client.loop term ui_mvar input_mvar state >>= fun state ->
 
   closing () >>= fun () ->
 
