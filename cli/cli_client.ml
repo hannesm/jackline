@@ -98,16 +98,19 @@ let render_buddy_list (w, h) state =
   (* XXX: actually a treeview, resources and whether to expand contact / potential children *)
   let buddies = active_contacts state in
   let start =
-    let focus =
-      let jids = List.map (fun c -> Contact.jid c None) buddies in
-      Utils.find_index state.active_contact 0 jids
-    in
     let l = List.length buddies in
-    let up, down = (h / 2, (h + 1) / 2) in
-    match focus - up >= 0, focus + down > l with
-    | true, true -> l - h
-    | true, false -> focus - up
-    | false, _ -> 0
+    if h >= l then
+      0
+    else
+      let focus =
+        let jids = List.map (fun c -> Contact.jid c None) buddies in
+        Utils.find_index state.active_contact 0 jids
+      in
+      let up, down = (h / 2, (h + 1) / 2) in
+      match focus - up >= 0, focus + down > l with
+      | true, true -> l - h
+      | true, false -> focus - up
+      | false, _ -> 0
   in
   let to_draw = Utils.drop start buddies in
   let formatted = I.vcat (List.map (format_buddy state w) to_draw) in
