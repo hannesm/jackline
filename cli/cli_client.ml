@@ -74,9 +74,16 @@ let buddy_to_color = function
   | `Good -> A.(fg green)
   | `Bad -> A.(fg red)
 
-let format_buddy state width contact =
-  (* XXX: pass resource *)
-  let jid = Contact.jid contact None in
+let v_space a uchar width left right =
+  let len = width - I.(width left + width right) in
+  if len <= 0 then
+    I.hpad 0 len I.(left <|> right)
+  else
+  let fill = I.uchar a uchar len 1 in
+  I.hcat [ left ; fill ; right ]
+
+let format_buddy state width s contact resource =
+  let jid = Contact.jid contact resource in
   let a =
     if isactive state jid then
       A.(st reverse)
@@ -85,46 +92,53 @@ let format_buddy state width contact =
     else
       A.empty
   in
-  let a = A.(a ++ buddy_to_color (Contact.color contact None)) in
-  let first_char = if isnotified state jid then "*" else " " in
-  let buddy = I.string a (first_char ^ Contact.oneline contact None) in
-  let len = width - I.width buddy in
-  if len > 0 then
-    I.(buddy <|> char a ' ' len 1)
-  else
-    I.hpad 0 len buddy
+  let a = A.(a ++ buddy_to_color (Contact.color contact resource)) in
+  let first =
+    match isnotified state jid, Contact.expanded contact with
+    | true, true -> I.char a '*' 1 1
+    | false, false -> I.char a (if potentially_visible_resource state contact then '+' else ' ') 1 1
+    | true, false -> I.uchar a 0x2600 1 1
+    | false, true -> I.char a ' ' 1 1
+  and data = if s then Contact.oneline contact None else Contact.oneline contact resource
+  in
+  let buddy = I.(first <|> string a data) in
+  v_space a 0x20 width buddy I.empty
+
+let format_buddies state w buddies =
+  (* where buddies is (contact * resource list) list *)
+  List.fold_right
+    (fun (c, res) acc ->
+       let r = if Contact.expanded c then None else Contact.active c
+       and res = List.map (fun x -> Some x) res
+       in
+       format_buddy state w true c r :: List.map (format_buddy state w false c) res @ acc)
+    buddies []
 
 let render_buddy_list (w, h) state =
-  (* XXX: actually a treeview, resources and whether to expand contact / potential children *)
-  let buddies = active_contacts state in
+  let buddies = active_contacts_resources state in
+  let flattened = show_resources buddies in
   let start =
-    let l = List.length buddies in
+    let l = List.length flattened in
     if h >= l then
       0
     else
-      let focus =
-        let jids = List.map (fun c -> Contact.jid c None) buddies in
-        Utils.find_index state.active_contact 0 jids
-      in
+      let focus = Utils.find_index state.active_contact 0 flattened in
       let up, down = (h / 2, (h + 1) / 2) in
       match focus - up >= 0, focus + down > l with
       | true, true -> l - h
       | true, false -> focus - up
       | false, _ -> 0
   in
-  let to_draw =
-    let fst = Utils.drop start buddies in
+
+  (* XXX: could be smarter and not format all the buddies, but only those in view *)
+  let formatted_buddies = format_buddies state w buddies in
+
+  let to_render =
+    let fst = Utils.drop start formatted_buddies in
     Utils.take h fst
   in
-  let formatted = I.vcat (List.map (format_buddy state w) to_draw) in
+  let formatted = I.vcat to_render in
   I.vlimit ~align:`Top h formatted
-
-let v_space a uchar width left right =
-  let fill =
-    let len = width - I.(width left + width right) in
-    if len <= 0 then I.empty else I.uchar a uchar len 1
-  in
-  I.hcat [ left ; fill ; right ]
 
 let horizontal_line buddy resource a scrollback width =
   let pre = I.string a "── "
@@ -563,13 +577,15 @@ let read_terminal term mvar () =
               let err msg = add_status s (`Local ((`Full s.config.Xconfig.jid), "error")) msg in
               match input with
               | "/quit" -> Lwt.return (`Quit s)
-              | "" -> (* XXX: expand/unexpand:
-                         if Contact.expanded active || potentially_visible_resource state active then
-                         (Contact.replace_contact state.contacts (Contact.expand active) ;
-                         if Contact.expanded active then
-                         (state.active_contact <- `Bare (Contact.bare active))) ;
-                      *)
-                ok s
+              | "" ->
+                let active = active s in
+                let exp = Contact.expanded active in
+                ok (if exp || potentially_visible_resource s active then
+                      (Contact.replace_contact s.contacts (Contact.expand active) ;
+                       if exp then { s with active_contact = `Bare (Contact.bare active) }
+                       else s)
+                    else
+                      s)
               | cmd when String.get cmd 0 = '/' ->
                 let active = clear_input (active s) cmd in
                 Cli_commands.exec cmd s active self p
