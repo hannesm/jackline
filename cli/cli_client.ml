@@ -339,7 +339,12 @@ let rec loop term mvar state =
     List.iter (Contact.replace_contact state.contacts) buddies
   in
   let size = T.size term in
-  let image, cursorc = render_state size state in
+  let image, cursorc =
+    try
+      render_state size state
+    with
+      e -> (I.string A.(fg red) (Printexc.to_string e), 1)
+  in
   T.image term image >>= fun () ->
   T.cursor term (Some (cursorc, snd size)) >>= fun () ->
   Lwt_mvar.take mvar >>= fun action ->
