@@ -52,7 +52,7 @@ let start_client cfgdir debug () =
   Nocrypto_entropy_lwt.initialize () >>= fun () ->
 
   Lwt_unix.tcgetattr Lwt_unix.stdin >>= fun saved_tc ->
-  Lwt_unix.(tcsetattr stdin TCSANOW { saved_tc with c_ignbrk = true ; c_isig = false ; c_icanon = false ; c_echo = false ; c_vstop = '\255' ; c_verase = '\255' }) >>= fun () ->
+  Lwt_unix.(tcsetattr stdin TCSANOW { saved_tc with c_ignbrk = true ; c_isig = false ; c_icanon = false ; c_echo = false ; c_vstart = '\255' ; c_vstop = '\255' ; c_verase = '\255' }) >>= fun () ->
   let term = Notty_lwt.Term.create ~input:Lwt_unix.stdin ~mouse:false () in
 
   Persistency.load_dsa cfgdir >>= fun dsa ->

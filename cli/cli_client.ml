@@ -647,11 +647,15 @@ let read_terminal term mvar input_mvar () =
           | `Key (`Page `Down, [`Ctrl]) -> p (fun s -> ok (navigate_message_buffer s Down)) >>= fun () -> loop ()
 
           | `Key (`Uchar 0x58, [`Ctrl]) (* C-x *) -> p (fun s -> ok (activate_contact s s.last_active_contact)) >>= fun () -> loop ()
-          | `Key (`Uchar 0x71, [`Ctrl]) (* C-q *) ->
-            p (fun s -> ok (match List.rev s.notifications with
+          | `Key (`Uchar 0x51, [`Ctrl]) (* C-q *) ->
+            let handle s =
+              let s = match List.rev s.notifications with
                 | x::_ -> activate_contact s x
-                | _ -> s)) >>= fun () ->
-            loop ()
+                | _ -> s
+              in
+              ok s
+            in
+            p handle >>= fun () -> loop ()
 
           | `Key (`Function 5, []) -> p (fun s -> ok { s with show_offline = not s.show_offline }) >>= fun () -> loop ()
           | `Key (`Function 10, []) -> p (fun s -> ok { s with log_height = succ s.log_height }) >>= fun () -> loop ()
