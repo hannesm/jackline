@@ -13,6 +13,13 @@ module XMPPClient = XMPP.Make (Lwt) (Xmlstream.XmlStream) (IDCallback)
 
 open XMPPClient
 
+let stanza_error_to_str se =
+  String.concat " "
+    [ string_of_error_type se.err_type ;
+      string_of_condition se.err_condition ;
+      se.err_text ;
+      se.err_lang ]
+
 let presence_to_xmpp = function
   | `Offline      -> (Some Unavailable, None)
   | `Online       -> (None, None)

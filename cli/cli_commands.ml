@@ -814,8 +814,10 @@ let handle_smp_answer user session secret =
 let handle_remove user =
   fun state s ->
     let bare_jid = Xjid.bare_jid_to_string user.User.bare_jid in
-    (* XXX: #116 - provide a error_callback: StanzaError.t -> ?? *)
     Xmpp_callbacks.(Roster.put ~remove:() s bare_jid
+      ~error_callback:(fun se ->
+        let str = stanza_error_to_str se in
+        s.XMPPClient.user_data.log (`From (`Bare user.User.bare_jid)) ("Failed to remove: " ^ str))
       (fun ?jid_from ?jid_to ?lang el ->
         ignore jid_to ; ignore lang ; ignore el ;
         match jid_from with
