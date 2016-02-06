@@ -226,6 +226,24 @@ let tz_offset_s () =
   | None -> 0 (* XXX: report error *)
   | Some x -> x
 
+let v_center left right width =
+  let lw = I.width left
+  and rw = I.width right
+  in
+  match rw, lw >= width with
+  | 0, true -> (I.hcrop (lw - width + 1) 0 left, width)
+  | 0, false -> (left, succ lw)
+  | _, _ ->
+    if lw + rw >= width then
+      let leftw = min (max (width - rw) (width / 2)) lw in
+      let rightw = width - leftw in
+      let l = I.hcrop (lw - leftw) 0 left
+      and r = I.hcrop 0 (rw - rightw) right
+      in
+      (I.(l <|> r), succ leftw)
+    else
+      (I.(left <|> right), succ lw)
+
 let render_state (width, height) state =
   let log_height, main_height =
     let s = state.log_height in
@@ -256,7 +274,6 @@ let render_state (width, height) state =
     in
 
     let input, cursorc =
-      (* XXX: needs a proper renderer with sideways scrolling *)
       let pre, post = state.input in
 
       let iinp =
@@ -266,17 +283,16 @@ let render_state (width, height) state =
         let inp2 = Array.of_list post in
         I.uchars A.empty inp2
       in
-      let completion =
-        match post with
+      let r = match post with
         | [] ->
           let input = char_list_to_str pre in
           ( match Cli_commands.completion input with
             | [] -> I.empty
             | [x] -> I.string A.(fg (gray 20)) x
             | xs -> I.string A.(fg (gray 20)) (String.concat "|" xs) )
-        | _ -> I.empty
+        | _ -> iinp2
       in
-      (I.(iinp <|> completion <|> iinp2), succ (I.width iinp))
+      v_center iinp r width
     in
     let main =
       let msgfmt = format_message tz_offset_s now active resource
