@@ -307,8 +307,12 @@ let handle_connect p c_mvar =
       let state, user = find_user state bare in
       let user, mark = List.fold_left
           (fun (u, n) (dir, enc, m) ->
-             let txt = validate_utf8 m in
-             (User.insert_message ?timestamp u dir enc true txt,
+             let m =
+               let m = validate_utf8 m in
+               let m = Escape.strip_tags m in
+               Escape.unescape m
+             in
+             (User.insert_message ?timestamp u dir enc true m,
               match dir with
               | `Local (_, s) when Astring.String.is_prefix ~affix:"OTR" s -> n
               | _ -> true))
