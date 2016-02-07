@@ -5,33 +5,27 @@ open Notty
 
 module T = Notty_lwt.Term
 
-let wrap ?width ?height image =
-  let rec doit p f i acc =
-    if p i then
-      let i = f i in
-      doit p f i (i :: acc)
+let wrap w image =
+  let w1 = I.width image in
+  let rec go i =
+    if (w1 - i) <= w then
+      [ I.hcrop i 0 image ]
     else
-      image :: List.rev acc
+      I.hcrop i (w1 - i - w) image :: go (i + w)
   in
-  match width, height with
-  | Some w, None ->
-    let is = doit (fun i -> I.width i > w) (I.hcrop w 0) image [] in
-    I.vcat is
-  | None, Some h ->
-    let is = doit (fun i -> I.height i > h) (I.vcrop 0 h) image [] in
-    I.hcat is
-  | None, None | Some _, Some _ -> assert false
+  let vs = go 0 in
+  I.vcat vs
 
 let rewrap term above below (prefix, inp, inp2) (width, _) =
-  let content = wrap ~width I.(prefix <|> inp <|> inp2) in
-  let above = I.vcat (List.map (wrap ~width) above) in
-  let below = I.vcat (List.map (wrap ~width) below) in
+  let content = wrap width I.(prefix <|> inp <|> inp2) in
+  let above = I.vcat (List.map (wrap width) above) in
+  let below = I.vcat (List.map (wrap width) below) in
   let image = I.(above <-> content <-> below) in
   T.image term image >>= fun () ->
   let col, row =
     let col = I.width prefix + I.width inp in
     let h =
-      let content = wrap ~width I.(prefix <|> inp) in
+      let content = wrap width I.(prefix <|> inp) in
       I.(height (above <-> content)) in
     let height = if col mod width = 0 then succ h else h in
     (succ (col mod width), height)

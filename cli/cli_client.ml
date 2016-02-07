@@ -26,7 +26,7 @@ let format_log tz_offset_s now log =
 
 let render_wrapped_list width fmt entries =
   let formatted = List.map fmt entries in
-  I.vcat (List.map (wrap ~width) formatted)
+  I.vcat (List.map (wrap width) formatted)
 
 let format_message tz_offset_s now buddy resource { User.direction ; encrypted ; received ; timestamp ; message ; _ } =
   let time = print_time ~now ~tz_offset_s timestamp
