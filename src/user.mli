@@ -54,6 +54,14 @@ type fingerprint = {
 
 val fingerprint_to_string : fingerprint -> string
 
+type subscription_mod = [
+  | `Probe
+  | `Subscribe
+  | `Subscribed
+  | `Unsubscribe
+  | `Unsubscribed
+]
+
 type subscription = [
   | `None
   | `From
@@ -104,8 +112,9 @@ type user = {
   properties        : property list ;
   preserve_messages : bool ;
   message_history   : message list ; (* persistent if preserve_messages is true *)
-  saved_input_buffer: string ; (* not persistent *)
+  input_buffer: (int list * int list) ; (* not persistent *)
   readline_history  : string list ; (* not persistent *)
+  history_position  : int ;
   otr_fingerprints  : fingerprint list ;
   otr_custom_config : Otr.State.config option ;
   active_sessions   : session list ; (* not persistent *)

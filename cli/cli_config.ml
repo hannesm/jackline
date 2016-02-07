@@ -1,169 +1,304 @@
-open Lwt
-open React
+open Cli_support
+open Lwt.Infix
+open Notty
 
-class read_inputline ~term ~prompt () = object(self)
-  inherit LTerm_read_line.read_line ()
-  inherit [Zed_utf8.t] LTerm_read_line.term term
+let safe_int_of_string x =
+  try int_of_string x with Failure _ -> -1
 
-  method! show_box = false
+let string_of_int_option default = function
+  | None -> default
+  | Some x -> string_of_int x
 
-  initializer
-    self#set_prompt (S.const (LTerm_text.of_string prompt))
-end
+let rewrap term above below (prefix, inp, inp2) (width, _) =
+  let content = wrap width I.(prefix <|> inp <|> inp2) in
+  let above = I.vcat (List.map (wrap width) above) in
+  let below = I.vcat (List.map (wrap width) below) in
+  let image = I.(above <-> content <-> below) in
+  Notty_lwt.Term.image term image >>= fun () ->
+  let col, row =
+    let col = I.width prefix + I.width inp in
+    let h =
+      let content = wrap width I.(prefix <|> inp) in
+      I.(height (above <-> content)) in
+    let height = if col mod width = 0 then succ h else h in
+    (succ (col mod width), height)
+  in
+  Notty_lwt.Term.cursor term (Some (col, row))
 
-class read_password term ~prompt = object(self)
-  inherit LTerm_read_line.read_password () as super
-  inherit [Zed_utf8.t] LTerm_read_line.term term
+let read_line ?(above = []) ?(prefix = "") ?default ?(below = []) term =
+  let rec go (pre, post) =
+    let iprefix = I.string A.empty prefix
+    and iinp =
+      let inp = Array.of_list pre in
+      I.uchars A.(st reverse) inp
+    and iinp2 =
+      let inp2 = Array.of_list post in
+      I.uchars A.(st reverse) inp2
+    in
+    rewrap term above below (iprefix, iinp, iinp2) (Notty_lwt.Term.size term) >>= fun () ->
+    Lwt_stream.next (Notty_lwt.Term.events term) >>= fun e ->
+    match readline_input e with
+    | `Ok f -> go (f (pre, post))
+    | `Unhandled k ->
+      match emacs_bindings k with
+      | `Ok f -> go (f (pre, post))
+      | `Unhandled k ->
+        match k with
+        | `Key (`Enter, []) -> Lwt.return (char_list_to_str (pre @ post))
+        | `Key (`Uchar 0x43, [`Ctrl]) -> Lwt.fail (Invalid_argument "Ctrl-c")
+        | `Key (`Uchar 0x44, [`Ctrl]) -> Lwt.fail (Invalid_argument "Ctrl-d")
+        | _ -> go (pre, post)
+  in
+  let pre = Utils.option [] str_to_char_list default in
+  go (pre, [])
 
-  method! send_action = function
-    | LTerm_read_line.Break ->
-        (* Ignore Ctrl+C *)
-        ()
-    | action ->
-        super#send_action action
+let read_password ?(above = []) ?(prefix = "") ?(below = []) term =
+  let rec go pre =
+    let w = I.(width (uchars A.empty (Array.of_list pre))) in
+    let input = I.uchar A.(st reverse) 0x2605 w 1 in
+    let prefix = I.string A.empty prefix in
+    rewrap term above below (prefix, input, I.empty) (Notty_lwt.Term.size term) >>= fun () ->
+    Lwt_stream.next (Notty_lwt.Term.events term) >>= function
+      | `Key (`Enter, []) -> Lwt.return (char_list_to_str pre)
+      | `Key (`Backspace, []) ->
+         (match List.rev pre with
+          | [] -> go pre
+          | _::tl -> go (List.rev tl))
+      | `Key (`Uchar chr, []) -> go (pre @ [chr])
+      | _ -> go pre
+  in
+  go []
 
-  initializer
-    self#set_prompt (S.const (LTerm_text.of_string prompt))
-end
+let rec read_yes_no ?above ?prefix ?below def term =
+  let default = if def then "yes" else "no" in
+  read_line ?above ?below ?prefix ~default term >>= function
+    | "" -> Lwt.return def
+    | "y" | "Y" | "yes" | "Yes" | "YES" -> Lwt.return true
+    | "n" | "N" | "no" | "No" | "NO" -> Lwt.return false
+    | _ -> read_yes_no ?above ?prefix ?below def term
 
-let rec read_yes_no term msg default =
-  let string = if default then "y" else "n" in
-  (new read_inputline ~term ~prompt:(msg ^ " [answer 'y' or 'n' (pressing enter defaults to " ^ string ^ ")]: ") ())#run >>= fun res ->
-  match res with
-  | "Y" | "y" | "Yes" | "yes" -> return true
-  | "N" | "n" | "No"  | "no"  -> return false
-  | "" -> return default
-  | _ -> read_yes_no term msg default
-
-let exactly_one char s =
-  String.contains s char &&
-  try String.index_from s (succ (String.index s char)) char = 0 with Not_found -> true
+let ask above ?(below = []) prefix ?default transform valid term =
+  let rec doit diderror above below prefix ?default transform valid term =
+    read_line ~above ~below ~prefix ?default term >>= fun data ->
+    match valid (transform data) with
+    | `Ok f -> Lwt.return f
+    | `Invalid ->
+      let below =
+        if diderror then
+          below
+        else
+          let im = I.string A.(fg red) "invalid data, try again" in
+          im :: below
+      in
+      doit true above below prefix ?default transform valid term
+  in
+  doit false above below prefix ?default transform valid term
 
 let configure term () =
-  LTerm.fprintl term "Welcome to Jackline configuration. You will be guided through the setup, question marked with \"[optional]\" are for advanced users and can be ignored." >>= fun () ->
-  (new read_inputline ~term ~prompt:"enter jabber id (user@host/resource): " ())#run >>= fun jid ->
-  (if not (exactly_one '@' jid) then
-     fail (Invalid_argument "invalid jabber ID (needs exactly one @ character)")
-   else return_unit) >>= fun () ->
-  (if not (exactly_one '/' jid) then
-     fail (Invalid_argument "invalid jabber ID (needs exactly one / character)")
-   else return_unit ) >>= fun () ->
-  (match Xjid.string_to_jid jid with
-   | None | Some (`Bare _) -> fail (Invalid_argument "invalid jabber ID")
-   | Some (`Full f) -> return f) >>= fun jid ->
+  let above =
+    let greet =
+      "Welcome to Jackline configuration. You will be guided through the setup."
+    in
+    [I.string A.empty greet]
+  in
 
-  (new read_inputline ~term ~prompt:"[optional] enter priority (defaults to 0): " ())#run >>= fun prio ->
-  (if prio = "" then
-     return None
-   else
-     let prio = int_of_string prio in
-     if prio < 0 || prio > 127 then
-       fail (Invalid_argument "invalid priority (range allowed is from 0 to 127)")
-     else return (Some prio)) >>= fun priority ->
+  (* JID *)
+  let prefix = "Jabber ID: " in
+  let below = [I.string A.empty "format must be 'user@server/resource'"] in
+  ask above ~below prefix
+    Xjid.string_to_jid
+    (function Some (`Full f) -> `Ok f | _ -> `Invalid)
+    term >>= fun jid ->
 
-  read_yes_no term "[optional] configure hostname manually?" false >>= fun hostname ->
-  ( if hostname then
-      begin
-        (new read_inputline ~term ~prompt:"enter hostname or IP: " ())#run >>= fun hostname ->
-        (* XXX: check that hostname is valid! *)
-        let hostname = match hostname with
-          | "" -> None
-          | x -> Some x
-        in
-        (new read_inputline ~term ~prompt:"enter port [5222]: " ())#run >>= fun port ->
-        (if port = "" then
-           return None
-         else
-           let port = int_of_string port in
-           if port <= 0 || port > 65535 then
-             fail (Invalid_argument "invalid port number")
-           else return (Some port)) >>= fun (port) ->
-        return (hostname, port)
-      end
-    else
-      return (None, None) ) >>= fun (hostname, port) ->
+  let ((_, dom), _) = jid in
+  let above =
+    let txt = "Jabber ID: " ^ Xjid.full_jid_to_string jid in
+    above @ [I.string A.empty txt]
+  in
 
-  (new read_password term ~prompt:"[optional] password (otherwise will be asked at startup): ")#run >>= fun password ->
-  let password = if password = "" then None else Some password in
+  (* Priority *)
+  let below = [I.string A.empty "between 0 and 128"] in
+  ask above ~below "Priority: " ~default:"0"
+    safe_int_of_string
+    (function
+      | p when p = 0 -> `Ok None
+      | p when p >= 0 && p < 128 -> `Ok (Some p)
+      | _ -> `Invalid)
+    term >>= fun priority ->
 
-  (* trust anchor *)
-  read_yes_no term "Provide a pem-encoded trust anchor (alternative: SHA256 digest of the server certificate)?" false >>= fun ta ->
-  ( if ta then
-      begin
-        (new read_inputline ~term ~prompt:"enter path to trust anchor file: " ())#run >>= fun trust_anchor ->
-        Lwt_unix.access trust_anchor [ Unix.F_OK ; Unix.R_OK ] >>= fun () ->
-        X509_lwt.certs_of_pem trust_anchor >>= fun tas ->
-        let tas = X509.Validation.valid_cas ~time:(Unix.time ()) tas in
-        if List.length tas = 0 then
-          fail (Invalid_argument "trust anchors are empty!")
-        else
-          return (`Trust_anchor trust_anchor)
-      end
-    else
-      begin
-         (* XXX: actually ASK whether we should try to connect now *)
-        let pre = " (run `openssl s_client -connect "
-        and post = " -starttls xmpp | openssl x509 -sha256 -fingerprint -noout`)"
-        in
-        let ((_, dom), _) = jid in
-        let hostport = match hostname, port with
-          | Some h, Some p -> pre ^ h ^ ":" ^ (string_of_int p) ^ post
-          | None, Some p -> pre ^ dom ^ ":" ^ (string_of_int p) ^ post
-          | Some h, None -> pre ^ h ^ ":5222" ^ post
-          | None, None -> pre ^ dom ^ ":5222" ^ post
-        in
-        (new read_inputline ~term ~prompt:("enter server certificate fingerprint" ^ hostport ^ ": ") ())#run >>= fun fp ->
-        (try
-           let dotted_hex_to_cs hex =
-             Nocrypto.Uncommon.Cs.of_hex
-               (String.map (function ':' -> ' ' | x -> x) hex)
-           in
-           let binary = dotted_hex_to_cs fp in
-           if Cstruct.len binary <> 32 then
-             fail (Invalid_argument "fingerprint is either too short or too long")
-           else
-             return fp
-         with _ ->
-           fail (Invalid_argument "please provide only hex characters (or whitespace or colon)") ) >|= fun fp ->
-        `Fingerprint fp
-      end ) >>= fun authenticator ->
+  let above =
+    let txt = "Priority: " ^ string_of_int_option "0 (default)" priority in
+    above @ [I.string A.empty txt]
+  in
 
-  (new read_inputline ~term ~prompt:("[optional] enter name in certificate (by default, domain of JID will be used): ") ())#run >>= fun certname ->
-  let certificate_hostname = if certname = "" then None else Some certname in
+  (* Server name *)
+  ask above "Servername: " ~default:dom
+    (fun x -> x)
+    (function
+      | "" -> `Invalid
+      | x when x = dom -> `Ok None
+      | x -> `Ok (Some x))
+    term >>= fun hostname ->
+
+  let above =
+    let servername = "Servername: " ^ Utils.option dom (fun x -> x) hostname in
+    above @ [I.string A.empty servername]
+  in
+
+  (* Port *)
+  ask above "TCP Port: " ~default:"5222"
+    safe_int_of_string
+    (function
+      | x when x = 5222 -> `Ok None
+      | x when x > 0 && x < 65536 -> `Ok (Some x)
+      | _ -> `Invalid)
+    term >>= fun port ->
+
+  let above =
+    let port = "Port: " ^ string_of_int_option "5222 (default)" port in
+    above @ [I.string A.empty port]
+  in
+
+  (* Password *)
+  (let prefix = "Password (if empty, will be asked at every startup): " in
+   read_password ~above ~prefix term >|= function
+   | "" -> None
+   | x -> Some x) >>= fun password ->
+
+  let above =
+    let pw = "Password: " in
+    let chars = match password with
+      | None -> I.string A.empty "will be asked at startup"
+      | Some _ -> I.uchar A.empty 0x2605 5 1
+    in
+    above @ [I.(string A.empty pw <|> chars)]
+  in
+
+  (* Fingerprint authenticator *)
+  let prefix =
+    "Certificate fingerprint (leave empty to instead specify CA file): "
+  and below =
+    let str =
+      let hostport =
+        Utils.option dom (fun x -> x) hostname ^ ":" ^
+        string_of_int (Utils.option 5222 (fun x -> x) port)
+      in
+      "run `openssl s_client -connect " ^ hostport ^
+      " -starttls xmpp | openssl x509 -sha256 -fingerprint -noout`"
+    in
+    [I.string A.empty str]
+  and transform fp =
+    let dotted_hex_to_cs hex =
+      try
+        Nocrypto.Uncommon.Cs.of_hex
+          (String.map (function ':' -> ' ' | x -> x) hex)
+      with _ -> Cstruct.create 0
+    in
+    (fp, dotted_hex_to_cs fp)
+  and valid = function
+    | ("", _) -> `Ok None
+    | (fp, x) when Cstruct.len x = 32 -> `Ok (Some fp)
+    | _ -> `Invalid
+  in
+  ask above ~below prefix transform valid term >>= (function
+  | None ->
+    (* do sth smart here... ask doesn't allow valid to have lwt.t.. -- maybe it should!? *)
+    ask above "CA file: " (fun x -> x) (fun x -> `Ok x) term >>= fun trust_anchor ->
+    Lwt_unix.access trust_anchor [ Unix.F_OK ; Unix.R_OK ] >>= fun () ->
+    X509_lwt.certs_of_pem trust_anchor >>= fun tas ->
+    (match X509.Validation.valid_cas ~time:(Unix.time ()) tas with
+     | [] -> Lwt.fail (Invalid_argument "trust anchor file is empty!")
+     | _ -> Lwt.return (`Trust_anchor trust_anchor))
+  | Some fp -> Lwt.return (`Fingerprint fp) ) >>= fun authenticator ->
+
+  let above =
+    let txt =
+      match authenticator with
+      | `Fingerprint fp -> "Certificate fingerprint: " ^ fp
+      | `Trust_anchor file -> "Trust anchor: " ^ file
+    in
+    above @ [I.string A.empty txt]
+  in
+
+  (* SubjectAlternativeName *)
+  let prefix = "Server name in certificate: " in
+  read_line ~above ~prefix ~default:dom term >|= (function
+    | x when x = dom -> None
+    | x -> Some x) >>= fun certificate_hostname ->
+
+  let above =
+    let name = Utils.option (dom ^ " (default)") (fun x -> x) certificate_hostname in
+    let txt = "Certificate server name: " ^ name in
+    above @ [I.string A.empty txt]
+  in
 
   (* otr config *)
-  LTerm.fprintl term "OTR config" >>= fun () ->
-  let ask_list xs to_string prefix suffix default =
-    Lwt_list.fold_left_s (fun acc v ->
-      read_yes_no term (prefix ^ (to_string v) ^ (suffix v)) (default v) >|= function
-      | true -> v :: acc
-      | false -> acc)
-      [] xs
+  let prefix = "OTR protocol version 3 support? " in
+  read_yes_no ~above ~prefix true term >>= fun v3 ->
+  let above' versions =
+    let text = "OTR versions: " in
+    let v = String.concat ", " (List.map Otr.State.version_to_string versions) in
+    above @ [I.string A.empty (text ^ v)]
   in
-  ask_list
-    Otr.State.all_versions
-    Otr.State.version_to_string
-    "Protocol "
-    (fun _ -> " support (recommended)")
-    (fun _ -> true) >>= fun versions ->
-  (if List.length versions = 0 then
-     fail (Invalid_argument "no OTR version selected")
-   else
-     return versions ) >>= fun versions ->
+  let versions = if v3 then [ `V3 ] else [] in
+  let prefix = "OTR protocol version 2 support? " in
+  read_yes_no ~above:(above' versions) ~prefix true term >>= fun v2 ->
 
-  ask_list
-    Otr.State.all_policies
-    Otr.State.policy_to_string
-    ""
-    (function `REVEAL_MACS -> " (not recommended)" | _ -> " (recommended)")
-    (function `REVEAL_MACS -> false | _ -> true) >>= fun policies ->
+  let versions = versions @ if v2 then [ `V2 ] else [] in
+  (match versions with
+   | [] -> Lwt.fail (Invalid_argument "no OTR version selected")
+   | _ -> Lwt.return_unit) >>= fun () ->
+
+  let above = above' versions in
+
+  let above' pols =
+    let txt = "OTR policies: " in
+    let p = String.concat ", " (List.map Otr.State.policy_to_string pols) in
+    above @ [I.string A.empty (txt ^ p)]
+  in
+
+  let prefix = "Require encryption? " in
+  read_yes_no ~above ~prefix true term >>= fun require ->
+
+  let pols = if require then [ `REQUIRE_ENCRYPTION ] else [] in
+  let prefix = "Send whitespace tag? " in
+  read_yes_no ~above:(above' pols) ~prefix true term >>= fun ws_tag ->
+
+  let pols =
+    pols @ if ws_tag then [ `SEND_WHITESPACE_TAG ] else []
+  in
+  let prefix = "Whitespace tag starts key exchange? " in
+  read_yes_no ~above:(above' pols) ~prefix true term >>= fun ws_start ->
+
+  let pols =
+    pols @ if ws_start then [ `WHITESPACE_START_AKE ] else []
+  in
+  let prefix = "Error starts key exchange? " in
+  read_yes_no ~above:(above' pols) ~prefix true term >>= fun err_start ->
+
+  let pols =
+    pols @ if err_start then [ `ERROR_START_AKE ] else []
+  in
+  let prefix = "Reveal MAC after usage? " in
+  read_yes_no ~above:(above' pols) ~prefix false term >>= fun reveal ->
+
+  let policies =
+    pols @ if reveal then [ `REVEAL_MACS ] else []
+  in
+
   let dsa = Nocrypto.Dsa.generate `Fips1024 in
   let otr_config = Otr.State.config versions policies in
 
-  (new read_inputline ~term ~prompt:"[optional] full path to program called on notifications: " ())#run >|= fun cb ->
-  let notification_callback = if String.length cb = 0 then None else Some cb in
+  let above =
+    let fp = User.pp_binary_fingerprint (Otr.Utils.own_fingerprint dsa) in
+    above' pols @ [I.string A.empty ("Your OTR fingerprint is " ^ fp)]
+  in
 
-  let config = Xconfig.({
+  (read_line ~above ~prefix:"Path to notification callback: " term >|= function
+   | "" -> None
+   | x -> Some x) >|= fun notification_callback ->
+
+  Xconfig.({
       version = current_version ;
       jid ;
       priority ;
@@ -175,5 +310,4 @@ let configure term () =
       dsa ;
       certificate_hostname ;
       notification_callback
-    }) in
-  config
+    })

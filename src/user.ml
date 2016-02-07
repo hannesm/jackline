@@ -157,6 +157,14 @@ let fingerprint_to_string fp =
   in
   "  " ^ ver ^ " " ^ pp_fp ^ " (" ^ used ^ ", " ^ resources ^ "), " ^ first ^ ", " ^ last
 
+type subscription_mod = [
+  | `Probe
+  | `Subscribe
+  | `Subscribed
+  | `Unsubscribe
+  | `Unsubscribed
+]
+
 type subscription = [
   | `None
   | `From
@@ -221,8 +229,9 @@ type user = {
   properties        : property list ;
   preserve_messages : bool ;
   message_history   : message list ; (* persistent if preserve_messages is true *)
-  saved_input_buffer: string ; (* not persistent *)
+  input_buffer: (int list * int list) ; (* not persistent *)
   readline_history  : string list ; (* not persistent *)
+  history_position  : int ; (* not persistent *)
   otr_fingerprints  : fingerprint list ;
   otr_custom_config : Otr.State.config option ;
   active_sessions   : session list ; (* not persistent *)
@@ -268,15 +277,24 @@ let new_user ~jid ?(name=None) ?(groups=[]) ?(subscription=`None) ?(otr_fingerpr
   let message_history = []
   and expand = false
   and self = false
-  and saved_input_buffer = ""
+  and input_buffer = ([], [])
   and readline_history = []
+  and history_position = 0
   in
-  { bare_jid = jid ; name ; groups ; subscription ; properties ; otr_fingerprints ; preserve_messages ; active_sessions ; message_history ; saved_input_buffer ; readline_history ; otr_custom_config ; expand ; self }
+  { bare_jid = jid ; name ; groups ; subscription ; properties ; otr_fingerprints ; preserve_messages ; active_sessions ; message_history ; input_buffer ; readline_history ; otr_custom_config ; expand ; self ; history_position }
 
 let active_session user =
   let sorted = List.sort compare_session user.active_sessions
   and not_subscribed = List.mem user.subscription [`From ; `None]
   in
+  (* XXX: here be dragons: consider the other to be subscribed (i.e. in the roster),
+     but the s2s communication slightly broken: ends up in a pretty useless
+     dialogue (sending to bare, not having a otr context)
+
+     maybe a valuable strategy is to look whether R went (recently) from XXX to
+     offline?  what we really want to prevent is sending messages into the
+     nirvana (now that randomized resources are the way to go!?)
+   *)
   match List.filter (fun x -> x.presence <> `Offline) sorted, sorted with
   | x :: _, _ -> Some x
   | [], x :: _ when not_subscribed -> Some x

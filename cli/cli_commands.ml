@@ -108,7 +108,7 @@ let split_ws s =
       if arg = "" then
         None
       else
-        Some str
+        Some arg
   in
   (String.sub s 0 ws, arg)
 
@@ -133,25 +133,26 @@ let might_match cmd prefix =
   cmp_i 0
 
 let completion input =
-  if String.(length input > 0 && get input 0 = '/') then
+  let open Astring.String in
+  let l = length input in
+  if l > 0 && get input 0 = '/' then
     match cmd_arg input with
     | (cmd, None) when Commands.mem commands cmd ->
       let command = Commands.find commands cmd in
-      List.map (fun x -> ("/" ^ x, " ")) command.subcommands
+      command.subcommands
     | (cmd, None) ->
       let cmds = keys () in
-      List.map (fun x -> ("/" ^ x, " "))
+      List.map (fun x -> drop ~max:(pred l) x)
         (List.filter (fun f -> might_match f cmd) cmds)
     | (cmd, Some arg) when Commands.mem commands cmd ->
       let command = Commands.find commands cmd in
-      List.map (fun x -> "/" ^ cmd ^ " " ^ x, "")
+      List.map (fun x -> drop ~max:(pred l) (cmd ^ " " ^ x))
         (List.filter (fun f -> might_match f arg) command.subcommands)
-    | _ -> [(input, "")]
+    | _ -> []
   else
-    [(input, "")]
+    []
 
 open Lwt
-
 
 let handle_help msg = function
   | Some arg when Commands.mem commands arg ->
@@ -159,268 +160,385 @@ let handle_help msg = function
     msg cmd.command_line cmd.documentation
   | _ ->
     let cmds = String.concat " " (keys ()) in
-    msg "available commands (try [/help cmd])" cmds
+    msg "available commands (/help [cmd])" cmds
 
-let handle_connect state log redraw failure =
-  let remove jid =
-    let bare = Xjid.t_to_bare jid
-    and userlist = all_jids state
-    in
-    let contact = Contact.find_contact state.contacts bare in
-    Contact.remove state.contacts bare ;
-    Utils.option
-      ()
-      (fun c ->
-       let c = match c with
-         | `User u -> `User { u with User.subscription = `None }
-         | `Room r -> `Room r
+let validate_utf8 txt =
+  let rec loop d buf = match Uutf.decode d with
+    | `Await -> assert false
+    | `End -> Buffer.contents buf
+    | `Malformed _ -> Uutf.Buffer.add_utf_8 buf 0xFFFD ; loop d buf
+    | `Uchar x when x = 0x0009 || x = 0x000A -> (* accept tab and newline *)
+       Uutf.Buffer.add_utf_8 buf x ; loop d buf
+    | `Uchar 0x000D -> loop d buf (* ignore carriage return *)
+    | `Uchar x when x < 0x20 -> Uutf.Buffer.add_utf_8 buf 0xFFFD ; loop d buf (* replace other control characters *)
+    (* clearly: DEL 0x7F, vertical tabs, bom, left-to-right, ... *)
+    | `Uchar x -> Uutf.Buffer.add_utf_8 buf x ; loop d buf
+  in
+  let nln = `Readline 0x000A in
+  loop (Uutf.decoder ~nln ~encoding:`UTF_8 (`String txt)) (Buffer.create (String.length txt))
+
+let notify_user jid ctx inc_fp verify_fp = function
+  | `Established_encrypted_session ssid ->
+     let raw_fp = match User.otr_fingerprint ctx with Some fp -> fp | _ -> assert false in
+     let otrmsg =
+       let verify = " verify /fingerprint [fp] over second channel"
+       and tos x =
+         let stat = User.verification_status_to_string x in
+         stat ^ " key"
+       and other x =
+         if x then
+           ", but a verified is available"
+         else
+           ""
+       and count n =
+         if n = 0 then
+           " (never used before)"
+         else
+           " (used " ^ (string_of_int n) ^ " times)"
        in
-       Lwt.async (fun () -> Lwt_mvar.put state.contact_mvar c))
-      contact ;
-    (if Xjid.jid_matches (`Bare bare) state.active_contact then
-       let idx = Utils.find_index state.active_contact 0 userlist in
-       let new_idx = if idx > 0 then pred idx else succ idx in
-       activate_contact state (List.nth userlist new_idx) ) ;
-    if Xjid.jid_matches (`Bare bare) state.last_active_contact then
-      state.last_active_contact <- `Bare (fst state.config.Xconfig.jid) ;
-    redraw ()
-  and log dir txt =
-    log (dir, txt)
-  and locallog str txt =
-    let d = `Local (state.active_contact, str) in
-    log (d, txt)
-  and message jid ?timestamp dir enc txt =
-    let bare = Xjid.t_to_bare jid in
-    match Contact.find_contact state.contacts bare with
-    | Some (`User user) ->
-       let user = User.insert_message ?timestamp user dir enc true txt in
-       Contact.replace_user state.contacts user ;
-       (match dir with
-        | `Local (_, s) when Astring.String.is_prefix ~affix:"OTR" s -> ()
-        | _ -> notify state jid) ;
-       redraw ()
-    | Some (`Room _) -> () (* XXX is a private message *)
-    | None ->
-       let user =
-         let u =  User.new_user ~jid:bare () in
-         User.insert_message ?timestamp u dir enc true txt
-       in
-       Contact.replace_user state.contacts user ;
-       notify state jid ;
-       redraw ()
-  and receipt jid id =
-    match Contact.find_user state.contacts (Xjid.t_to_bare jid) with
-    | None -> ()
-    | Some user ->
-       let buddy = Contact.received (`User user) id in
-       Contact.replace_contact state.contacts buddy ;
-       redraw ()
-  and user jid =
-    let bare = Xjid.t_to_bare jid in
+       let v, c, o = inc_fp raw_fp in
+       match v with
+       | `Verified _ -> tos v
+       | _ when c = 0 && o -> "POSSIBLE BREAKIN ATTEMPT! new " ^ tos v ^ other o ^ verify
+       | _ -> tos v ^ count c ^ other o ^ verify
+     in
+     [ ((`Local (jid, "OTR")), false, ("encrypted connection established (ssid " ^ ssid ^ ")")) ;
+       ((`Local (jid, "OTR key")), false, otrmsg) ]
+  | `Warning w               -> [ ((`Local (jid, "OTR warning")), false, w) ]
+  | `Received_error e        -> [ ((`From jid), false, e) ]
+  | `Received m              -> [ ((`From jid), false, m) ]
+  | `Received_encrypted e    -> [ ((`From jid), true, e) ]
+  | `SMP_awaiting_secret     -> [ ((`Local (jid, "SMP")), false, "awaiting SMP secret, answer with /smp answer [secret]") ]
+  | `SMP_received_question q -> [ ((`Local (jid, "SMP")), false, ("received SMP question (answer with /smp answer [secret]) " ^ q)) ]
+  | `SMP_success             ->
+     let raw_fp = match User.otr_fingerprint ctx with Some fp -> fp | _ -> assert false in
+     verify_fp raw_fp ;
+     [ ((`Local (jid, "OTR SMP")), false, "successfully verified!") ]
+  | `SMP_failure             -> [ ((`Local (jid, "OTR SMP")), false, "failure") ]
+
+let handle_connect p c_mvar =
+  let find_user state bare =
     match Contact.find_user state.contacts bare with
-    | None -> User.new_user ~jid:bare ()
-    | Some user -> user
-  and session jid =
-    let user =
-      let bare = Xjid.t_to_bare jid in
-      match Contact.find_user state.contacts bare with
-      | None -> User.new_user ~jid:bare ()
-      | Some user -> user
+    | Some user -> (state, user)
+    | None ->
+      let u = User.new_user ~jid:bare () in
+      Contact.replace_user state.contacts u ;
+      (state, u)
+  and find_room state bare =
+    match Contact.find_room state.contacts bare with
+    | Some room -> (state, room)
+    | None ->
+      let room = Muc.new_room ~jid:bare ~my_nick:(fst (fst state.config.Xconfig.jid)) () in
+      Contact.replace_room state.contacts room ;
+      (state, room)
+  and find_session state user resource =
+    match
+      User.find_session user resource,
+      User.find_similar_session user resource
+    with
+    | Some s, _ -> (state, s)
+    | _, Some s ->
+      let new_session = { s with User.resource ; presence = `Offline ; priority = 0 ; status = None }
+      and similar = { s with User.dispose = true }
+      in
+      let state, u =
+        let u, removed = User.replace_session user similar in
+        let u, removed' = User.replace_session u new_session in
+        if removed || removed' then
+          (update_notifications state u similar.User.resource new_session.User.resource, u)
+        else
+          (state, u)
+      in
+      Contact.replace_user state.contacts u ;
+      (state, new_session)
+    | _ ->
+      let otr_config = otr_config user state in
+      let u, s = User.create_session user resource otr_config state.config.Xconfig.dsa in
+      Contact.replace_user state.contacts u ;
+      (state, s)
+  in
+
+  let log dir msg =
+    let exec state = add_status state dir msg ; Lwt.return (`Ok state) in
+    p exec
+  and locallog str msg =
+    let exec state =
+      let dir = `Local (state.active_contact, str) in
+      add_status state dir msg ;
+      Lwt.return (`Ok state)
     in
-    let r = match Xjid.resource jid with Some x -> x | None -> assert false
+    p exec
+
+  and message bare ?timestamp dir txt =
+    let exec state =
+      let state, user = find_user state bare in
+      let user = User.insert_message ?timestamp user dir false true txt in
+      Contact.replace_user state.contacts user ;
+      let state = notify state (`Bare bare) in
+      Lwt.return (`Ok state)
     in
-    match User.find_session user r, User.find_similar_session user r with
-    | Some session, _ -> session
-    | None, Some similar ->
-       let new_session = { similar with User.resource = r ; presence = `Offline ; priority = 0 ; status = None }
-       and similar = { similar with User.dispose = true }
-       in
-       let u =
-         let u, removed = User.replace_session user similar in
-         let u, removed' = User.replace_session u new_session in
-         (if removed || removed' then
-            update_notifications state u similar.User.resource new_session.User.resource) ;
-         u
-       in
-       Contact.replace_user state.contacts u ;
-       new_session
-    | None, None ->
-       let otr_config = otr_config user state in
-       let u, s = User.create_session user r otr_config state.config.Xconfig.dsa in
-       Contact.replace_user state.contacts u ;
-       s
-  and update_otr jid session otr =
-    match Contact.find_user state.contacts (Xjid.t_to_bare jid) with
-    | None -> () (* should not happen! *)
-    | Some user ->
-       let user = User.update_otr user session otr in
-       Contact.replace_user state.contacts user
-  and update_presence jid session presence status priority =
-    match Contact.find_user state.contacts (Xjid.t_to_bare jid) with
-    | None -> (* XXX can never happen!? *) assert false
-    | Some user ->
-       let session = { session with User.presence ; status ; priority } in
-       let user, removed = User.replace_session user session in
-       (if removed then
-          let r = session.User.resource in
-          match User.find_similar_session user r with
-          | None -> ()
-          | Some x -> update_notifications state user x.User.resource r) ;
-       Contact.replace_user state.contacts user
-  and update_receipt_state jid receipt =
-    match Contact.find_user state.contacts (Xjid.t_to_bare jid) with
-    | None -> (* XXX can never happen!? *) assert false
-    | Some user ->
-       let r = match Xjid.resource jid with
-         | Some x -> x
-         | None -> assert false
-       in
-       match User.find_session user r with
-       | Some s ->
-          let u, _ = User.replace_session user { s with User.receipt } in
-          Contact.replace_user state.contacts u
-       | None -> assert false
-  and update_user user alert =
-    Contact.replace_user state.contacts user ;
-    Lwt.async (fun () -> Lwt_mvar.put state.contact_mvar (`User user)) ;
-    if alert then notify state (`Bare user.User.bare_jid) ;
-    redraw ()
-  and reset_users () =
-    let all_users =
-      Contact.fold (fun _ c acc ->
-                    match c with
-                    | `User u -> { u with User.subscription = `None } :: acc
-                    | `Room _ -> acc)
-                   state.contacts
-                   []
+    p exec
+  and enc_message (bare, res) ?timestamp txt =
+    let exec state =
+      let state, user = find_user state bare in
+      let state, session = find_session state user res in
+      let ctx, out, ret = Otr.Engine.handle session.User.otr txt in
+      let user = User.update_otr user session ctx in
+      Contact.replace_user state.contacts user ;
+      let inc_fp raw_fp =
+        let fp = User.find_raw_fp user raw_fp in
+        let u = User.used_fp user fp res in
+        Contact.replace_user state.contacts u ;
+        let isverified fp =
+          match fp.User.verified with
+          | `Verified _ -> true
+          | _ -> false
+        in
+        (fp.User.verified,
+         fp.User.session_count,
+         List.exists isverified user.User.otr_fingerprints)
+      and verify_fp raw_fp =
+        let fp = User.find_raw_fp user raw_fp in
+        let u = User.verify_fp user fp `SMP in
+        Contact.replace_user state.contacts u
+      in
+      let msgs = List.flatten (List.map (notify_user (`Full (bare, res)) ctx inc_fp verify_fp) ret) in
+      let state, user = find_user state bare in
+      let user, mark = List.fold_left
+          (fun (u, n) (dir, enc, m) ->
+             let m =
+               let m = validate_utf8 m in
+               let m = Escape.strip_tags m in
+               Escape.unescape m
+             in
+             (User.insert_message ?timestamp u dir enc true m,
+              match dir with
+              | `Local (_, s) when Astring.String.is_prefix ~affix:"OTR" s -> n
+              | _ -> true))
+          (user, false)
+          msgs
+      in
+      Contact.replace_user state.contacts user ;
+      Lwt_mvar.put state.contact_mvar (`User user) >>= fun () ->
+      (match timestamp, out, !xmpp_session with
+       | Some _, _, _ -> Lwt.return_unit
+       | _, None, _ -> Lwt.return_unit
+       | _, _, None -> Lwt.return_unit
+       | _, Some body, Some s ->
+         send s (Some session) ~kind:Xmpp_callbacks.XMPPClient.Chat (`Full (bare, res)) None body) >>= fun () ->
+      let state = if mark then notify state (`Full (bare, res)) else state in
+      Lwt.return (`Ok state)
     in
-    List.iter (fun u ->
-               Contact.replace_user state.contacts u ;
-               Lwt.async (fun () -> Lwt_mvar.put state.contact_mvar (`User u)))
-              all_users
-  and inc_fp jid raw_fp =
-    match Xjid.resource jid with
-    | None -> assert false
-    | Some resource ->
-       match Contact.find_user state.contacts (Xjid.t_to_bare jid) with
-       | None -> assert false
-       | Some user ->
-          let fp = User.find_raw_fp user raw_fp in
-          let u = User.used_fp user fp resource in
-          Contact.replace_user state.contacts u ;
-          Lwt.async (fun () -> Lwt_mvar.put state.contact_mvar (`User u)) ;
-          let isverified fp =
-            match fp.User.verified with
-            | `Verified _ -> true
-            | _ -> false
-          in
-          (fp.User.verified,
-           fp.User.session_count,
-           List.exists isverified user.User.otr_fingerprints)
-  and verify_fp jid raw_fp =
-    match Contact.find_user state.contacts (Xjid.t_to_bare jid) with
-    | None -> assert false
-    | Some user ->
-       let fp = User.find_raw_fp user raw_fp in
-       let u = User.verify_fp user fp `SMP in
-       Contact.replace_user state.contacts u ;
-       Lwt.async (fun () -> Lwt_mvar.put state.contact_mvar (`User u))
+    p exec
   and group_message jid timestamp topic body _data id =
-    match Contact.find_room state.contacts (Xjid.t_to_bare jid) with
-    | None -> assert false
-    | Some r ->
-       let room = Utils.option r (fun x -> { r with Muc.topic = Some x }) topic in
-       let room = match body with
-         | None -> room
-         | Some msg ->
-            match id, Xjid.resource jid with
-            | Some id, Some x when x = room.Muc.my_nick ->
-               (match Contact.received (`Room room) id with
-                | `Room r -> r
-                | _ -> assert false)
-            | _ ->
-               notify state (`Bare r.Muc.room_jid) ;
-               let msg = User.message ?timestamp ~kind:`GroupChat (`From jid) false true msg in
-               Muc.new_message room msg
-       in
-       Contact.replace_room state.contacts room ;
-       redraw ()
+    let exec state =
+      let state, room = find_room state (Xjid.t_to_bare jid) in
+      let room = Utils.option room (fun x -> { room with Muc.topic = Some x }) topic in
+      let state, room = match body with
+        | None -> (state, room)
+        | Some msg ->
+          match id, Xjid.resource jid with
+          | Some id, Some x when x = room.Muc.my_nick ->
+            (match Contact.received (`Room room) id with
+             | `Room r -> (state, r)
+             | _ -> assert false)
+          | _ ->
+            let state = notify state (`Bare room.Muc.room_jid) in
+            let msg = User.message ?timestamp ~kind:`GroupChat (`From jid) false true msg in
+            (state, Muc.new_message room msg)
+      in
+      Contact.replace_room state.contacts room ;
+      Lwt.return (`Ok state)
+    in
+    p exec
+
+  and received_receipts jid ids =
+    let exec state =
+      let state, user = find_user state (Xjid.t_to_bare jid) in
+      let buddy = List.fold_left Contact.received (`User user) ids in
+      Contact.replace_contact state.contacts buddy ;
+      Lwt.return (`Ok state)
+    in
+    p exec
+  and update_receipt_state jid receipt =
+    let exec state =
+      match jid with
+      | `Bare _ -> Lwt.return (`Ok state)
+      | `Full (b, r) ->
+        let state, user = find_user state b in
+        let state, session = find_session state user r in
+        let u, _ = User.replace_session user { session with User.receipt } in
+        Contact.replace_user state.contacts u ;
+        Lwt.return (`Ok state)
+    in
+    p exec
+
+  and subscription jid smod status =
+    let exec state =
+      let bare = Xjid.t_to_bare jid in
+      let state, user = find_user state bare in
+      let post = Utils.option "" (fun x -> " - " ^ x) status in
+      let x, txt = match smod with
+        | `Probe -> "probed", post
+        | `Subscribe -> "subscription request", ("/authorization allow|cancel" ^ post)
+        | `Subscribed -> "you have been subscribed to their presence", post
+        | `Unsubscribe -> "unsubscription request", ("/authorization allow|cancel" ^ post)
+        | `Unsubscribed -> "you have been unsubscribed from their presence", post
+      in
+      let user = User.insert_message user (`Local (jid, x)) false true txt in
+      Contact.replace_user state.contacts user ;
+      let state = notify state (`Bare bare) in
+      Lwt.return (`Ok state)
+    in
+    p exec
+  and presence jid presence priority status =
+    let exec state =
+      let msg old =
+        let presence_char = User.presence_to_char presence
+        and presence_string = User.presence_to_string presence
+        and statstring = Utils.option "" (fun x -> " - " ^ x) status
+        in
+        "[" ^ old ^ ">" ^ presence_char ^ "] (now " ^ presence_string ^ ")" ^ statstring
+      in
+      match jid with
+      | `Bare _ ->
+        let log = "presence " ^ msg "_" in
+        add_status state (`From jid) log ;
+        Lwt.return (`Ok state)
+      | `Full (b, r) ->
+        let state, user = find_user state b in
+        let state, session = find_session state user r in
+        if User.presence_unmodified session presence status priority then
+          Lwt.return (`Ok state)
+        else
+          let old = User.presence_to_char session.User.presence in
+          let session = { session with User.presence ; status ; priority } in
+          let user, removed = User.replace_session user session in
+          Contact.replace_user state.contacts user ;
+          add_status state (`From jid) (msg old) ;
+          let state =
+            if removed then
+              Utils.option state (fun x -> update_notifications state user x.User.resource r)  (User.find_similar_session user r)
+            else
+              state
+          in
+          Lwt.return (`Ok state)
+    in
+    p exec
   and group_presence jid presence status data =
-    match jid with
-    | `Bare _ -> ()
-    | `Full (bare, nickname) ->
-       match Contact.find_room state.contacts bare with
-       | None -> ()
-       | Some r ->
-          let real_jid, nick, affiliation, role =
-            let open Xmpp_callbacks.Xep_muc in
-            let to_affiliation = function
-              | AffiliationOwner -> `Owner
-              | AffiliationAdmin -> `Admin
-              | AffiliationMember -> `Member
-              | AffiliationOutcast -> `Outcast
-              | AffiliationNone -> `None
-            and to_role = function
-              | RoleModerator -> `Moderator
-              | RoleParticipant -> `Participant
-              | RoleVisitor -> `Visitor
-              | RoleNone -> `None
-            in
-            match data.User.item with
-            | None -> assert false
-            | Some x ->
-               (Utils.option None (fun x -> Some (Xjid.xmpp_jid_to_jid x)) x.User.jid,
-                Utils.option None (fun x -> Some x) x.User.nick,
-                Utils.option None (fun x -> Some (to_affiliation x)) x.User.affiliation,
-                Utils.option None (fun x -> Some (to_role x)) x.User.role)
+    let exec state =
+      match jid with
+      | `Bare _ -> Lwt.return (`Ok state) (* XXX sth more sensible *)
+      | `Full (bare, nickname) ->
+        let state, r = find_room state bare in
+        let real_jid, nick, affiliation, role =
+          let open Xmpp_callbacks.Xep_muc in
+          let to_affiliation = function
+            | AffiliationOwner -> `Owner
+            | AffiliationAdmin -> `Admin
+            | AffiliationMember -> `Member
+            | AffiliationOutcast -> `Outcast
+            | AffiliationNone -> `None
+          and to_role = function
+            | RoleModerator -> `Moderator
+            | RoleParticipant -> `Participant
+            | RoleVisitor -> `Visitor
+            | RoleNone -> `None
           in
-          let nick = Utils.option nickname (fun x -> x) nick in
-          let affiliation = Utils.option `None (fun x -> x) affiliation
-          and role = Utils.option `None (fun x -> x) role
-          in
-          if nickname = r.Muc.my_nick && presence = `Offline then
-            let r = Muc.reset_room r in
-            Contact.replace_room state.contacts r
-          else
-            let members = match Muc.member r jid with
-              | None -> Muc.new_member nick ~jid:real_jid affiliation role presence status :: r.Muc.members
-              | Some _ ->
-                 (* XXX MUC need to be a bit smarter here *)
-                 { Muc.nickname = nick ; jid = real_jid ; affiliation ; role ; presence ; status } ::
-                   List.filter (fun m -> m.Muc.nickname <> nick) r.Muc.members
-            in
-            Contact.replace_room state.contacts { r with Muc.members }
+          match data.User.item with
+          | None -> assert false
+          | Some x ->
+            (Utils.option None (fun x -> Some (Xjid.xmpp_jid_to_jid x)) x.User.jid,
+             Utils.option None (fun x -> Some x) x.User.nick,
+             Utils.option None (fun x -> Some (to_affiliation x)) x.User.affiliation,
+             Utils.option None (fun x -> Some (to_role x)) x.User.role)
+        in
+        let nick = Utils.option nickname (fun x -> x) nick in
+        let affiliation = Utils.option `None (fun x -> x) affiliation
+        and role = Utils.option `None (fun x -> x) role
+        in
+        (if nickname = r.Muc.my_nick && presence = `Offline then
+           let r = Muc.reset_room r in
+           Contact.replace_room state.contacts r
+         else
+           let members = match Muc.member r jid with
+             | None -> Muc.new_member nick ~jid:real_jid affiliation role presence status :: r.Muc.members
+             | Some _ ->
+               (* XXX MUC need to be a bit smarter here *)
+               { Muc.nickname = nick ; jid = real_jid ; affiliation ; role ; presence ; status } ::
+               List.filter (fun m -> m.Muc.nickname <> nick) r.Muc.members
+           in
+           Contact.replace_room state.contacts { r with Muc.members }) ;
+        Lwt.return (`Ok state)
+    in
+    p exec
+
+  and reset_users () =
+    let exec state =
+      let all_users =
+        Contact.fold
+          (fun _ c acc ->
+             match c with
+             | `User u -> { u with User.subscription = `None } :: acc
+             | `Room _ -> acc)
+          state.contacts
+          []
+      in
+      List.iter (fun u ->
+          Contact.replace_user state.contacts u ;
+          Lwt.async (fun () -> Lwt_mvar.put state.contact_mvar (`User u)))
+        all_users ;
+      Lwt.return (`Ok state)
+    in
+    p exec
+  and update_users users alert =
+    let exec state =
+      let single (jid, name, groups, subscription, properties) =
+        let state, user = find_user state (Xjid.t_to_bare jid) in
+        let user = { user with User.name ; groups ; subscription ; properties } in
+        Contact.replace_user state.contacts user ;
+        Lwt_mvar.put state.contact_mvar (`User user) >|= fun () ->
+        `Bare user.User.bare_jid
+      in
+      Lwt_list.map_s single users >>= fun ids ->
+      let state =
+        if alert then
+          List.fold_left notify state ids
+        else
+          state
+      in
+      Lwt.return (`Ok state)
+    in
+    p exec
   in
   let (user_data : Xmpp_callbacks.user_data) = {
       Xmpp_callbacks.log ;
       locallog ;
-      remove ;
+
       message ;
-      user ;
-      session ;
-      update_otr ;
-      update_presence ;
-      update_receipt_state ;
-      update_user ;
-      reset_users ;
-      receipt ;
-      inc_fp ;
-      verify_fp ;
-      failure ;
+      enc_message ;
       group_message ;
+
+      received_receipts ;
+      update_receipt_state ;
+
+      subscription ;
+      presence ;
       group_presence ;
+
+      reset_users ;
+      update_users ;
   }
   in
-  Lwt_mvar.put state.Cli_state.connect_mvar (Connect user_data)
+  Lwt_mvar.put c_mvar (Connect user_data)
 
 let handle_disconnect msg =
   Connect.disconnect () >|= fun () ->
   msg "session error" "disconnected"
 
-let send_status s (presence, status, priority) failure =
+let send_status s (presence, status, priority) =
   let kind, show = Xmpp_callbacks.presence_to_xmpp presence in
-  (try_lwt Xmpp_callbacks.XMPPClient.send_presence s ?kind ?show ?status ?priority ()
-   with e -> failure e)
+  Xmpp_callbacks.XMPPClient.send_presence s ?kind ?show ?status ?priority ()
 
 let handle_status session arg =
   let p, status = split_ws arg in
@@ -438,14 +556,12 @@ let handle_priority session p =
   with
     _ -> None
 
-let handle_add s a msg failure =
+let handle_add s a msg =
   try
     (* TODO: validate input here *)
     let jid_to = JID.of_string a in
-    (try_lwt
-       (Xmpp_callbacks.XMPPClient.(send_presence s ~jid_to ~kind:Subscribe ()) >|= fun () ->
-        msg a "has been subscribed (approval pending)")
-     with e -> failure e)
+    Xmpp_callbacks.XMPPClient.(send_presence s ~jid_to ~kind:Subscribe ()) >|= fun () ->
+    msg a "has been subscribed (approval pending)"
   with _ -> msg "error" "parsing of jid failed (user@node)" ; Lwt.return_unit
 
 let handle_fingerprint user err fp =
@@ -488,9 +604,9 @@ let handle_log buddy v a cfgdir =
   else
     ([], None, None)
 
-let handle_authorization arg =
+let handle_authorization =
   let open Xmpp_callbacks.XMPPClient in
-  match arg with
+  function
   | "allow"               -> Some (Subscribed, "is now allowed to receive your presence updates")
   | "cancel"              -> Some (Unsubscribed, "won't receive your presence updates anymore")
   | "request"             -> Some (Subscribe, "has been asked to sent presence updates to you")
@@ -559,8 +675,8 @@ let handle_otr_start user session otr_cfg dsa =
        (and if we see a reply, we'll get some resource from the other side) *)
     let ctx = Otr.State.new_session otr_cfg dsa () in
     let _, out = Otr.Engine.start_otr ctx in
-    let clos = fun s failure ->
-      send s (`Bare user.User.bare_jid) None out failure
+    let clos state s =
+      send s None (`Bare user.User.bare_jid) None out >|= fun () -> `Ok state
     in
     ([ "starting OTR session" ], None, Some clos)
   | Some session when User.encrypted session.User.otr ->
@@ -568,8 +684,8 @@ let handle_otr_start user session otr_cfg dsa =
   | Some session ->
     let ctx, out = Otr.Engine.start_otr session.User.otr in
     let user = User.update_otr user session ctx in
-    let clos = fun s failure ->
-      send s (`Full (user.User.bare_jid, session.User.resource)) None out failure
+    let clos state s =
+      send s (Some session) (`Full (user.User.bare_jid, session.User.resource)) None out >|= fun () -> `Ok state
     in
     ([ "starting OTR session" ], Some user, Some clos)
 
@@ -582,9 +698,10 @@ let handle_otr_stop user session err =
     let datas, clos = match out with
       | None   -> ([], None)
       | Some body ->
-         let clos = fun s failure ->
+         let clos state s =
            let jid = `Full (user.User.bare_jid, session.User.resource) in
-           send s jid None body failure
+           send s (Some session) jid None body >|= fun () ->
+           `Ok state
          in
          ([ "finished OTR session" ], Some clos)
     in
@@ -602,9 +719,9 @@ let handle_smp_abort user session =
   let clos = match out with
    | None -> None
    | Some out ->
-      Some (fun s failure ->
+      Some (fun state s ->
             let jid = `Full (user.User.bare_jid, session.User.resource) in
-            send s jid None out failure)
+            send s (Some session) jid None out >|= fun () -> `Ok state)
   in
   (datas, Some user, clos)
 
@@ -623,34 +740,54 @@ let handle_smp_shared user session secret =
     match out with
     | None   -> None
     | Some body ->
-       Some (fun s failure ->
+       Some (fun state s ->
              let jid = `Full (user.User.bare_jid, session.User.resource) in
-             send s jid None body failure)
+             send s (Some session) jid None body >|= fun () -> `Ok state)
   in
   (datas @ ["initiated SMP"], Some user, clos)
 
-let handle_smp_question term users user session question =
-  let clos s failure =
+let handle_smp_question user session question =
+  let p = "shared secret:" in
+  let clos _state s =
     let jid = `Full (user.User.bare_jid, session.User.resource) in
-    (new Cli_config.read_inputline ~term ~prompt:"shared secret: " ())#run >>= fun secret ->
-    let sec = Astring.String.trim secret in
-    let ctx, out, ret = Otr.Engine.start_smp session.User.otr ~question sec in
-    let user = User.update_otr user session ctx in
-    let add_msg u m = User.insert_message u (`Local (jid, "")) false false m in
-    let user = if sec <> secret then
-                 add_msg user "trimmed secret"
-               else
-                 user
+    let handle state input_mvar ui_mvar =
+      reading := false ;
+      Lwt.async (fun () ->
+          Lwt_mvar.take input_mvar >>= fun secret ->
+          reading := true ;
+          let sec =
+            let s =
+              if Astring.String.is_prefix ~affix:p secret then
+                Astring.String.drop ~max:(Astring.String.length p) secret
+              else
+                secret
+            in
+            Astring.String.trim s
+          in
+          let handle state =
+            match Contact.find_user state.contacts user.User.bare_jid with
+            | None -> assert false
+            | Some user -> match User.find_session user session.User.resource with
+              | None -> assert false
+              | Some session ->
+                let ctx, out, ret = Otr.Engine.start_smp session.User.otr ~question sec in
+                let user = User.update_otr user session ctx in
+                let add_msg u m = User.insert_message u (`Local (jid, "")) false false m in
+                let user = add_msg user ("asked SMP " ^ question) in
+                let user = List.fold_left (fun c -> function
+                    | `Warning x -> add_msg c ("SMP question warning: " ^ x)
+                    | _ ->  c)
+                    user (List.rev ret)
+                in
+                Contact.replace_user state.contacts user ;
+                match out with
+                | None      -> return (`Ok state)
+                | Some body -> send s (Some session) jid None body >|= fun () -> `Ok state
+          in
+          Lwt_mvar.put ui_mvar handle) ;
+      Lwt.return { state with input = (Cli_support.str_to_char_list (p ^ " "), []) }
     in
-    let user = List.fold_left (fun c -> function
-      | `Warning x -> add_msg c ("SMP question warning: " ^ x)
-      | _ ->  c)
-      user (List.rev ret)
-    in
-    Contact.replace_user users user ;
-    match out with
-    | None      -> Lwt.return_unit
-    | Some body -> send s jid None body failure
+    return (`Ask handle)
   in
   ([], None, Some clos)
 
@@ -670,27 +807,28 @@ let handle_smp_answer user session secret =
     match out with
     | None   -> None
     | Some body ->
-       Some (fun s failure ->
+       Some (fun state s ->
              let jid = `Full (user.User.bare_jid, session.User.resource) in
-             send s jid None body failure)
+             send s (Some session) jid None body >|= fun () ->
+             `Ok state)
   in
   (datas, Some user, clos)
 
 let handle_remove user =
-  fun s failure ->
-  (try_lwt
-     let bare_jid = Xjid.bare_jid_to_string user.User.bare_jid in
-     Xmpp_callbacks.(Roster.put ~remove:() s bare_jid
-       (fun ?jid_from ?jid_to ?lang el ->
+  fun state s ->
+    let bare_jid = Xjid.bare_jid_to_string user.User.bare_jid in
+    Xmpp_callbacks.(Roster.put ~remove:() s bare_jid
+      ~error_callback:(fun se ->
+        let str = stanza_error_to_str se in
+        s.XMPPClient.user_data.log (`From (`Bare user.User.bare_jid)) ("Failed to remove: " ^ str))
+      (fun ?jid_from ?jid_to ?lang el ->
         ignore jid_to ; ignore lang ; ignore el ;
         match jid_from with
         | None -> fail XMPPClient.BadRequest
         | Some x -> match Xjid.string_to_jid x with
-                    | None -> fail XMPPClient.BadRequest
-                    | Some jid ->
-                       s.XMPPClient.user_data.log (`From jid) ("Removal of " ^ bare_jid ^ " successful") ;
-                       return_unit))
-   with e -> failure e)
+          | None -> fail XMPPClient.BadRequest
+          | Some jid ->
+            s.XMPPClient.user_data.log (`From jid) ("Removal of " ^ bare_jid ^ " successful"))) >|= fun () -> `Ok state
 
 let print_otr_policy cfg =
   let policies = String.concat ", "
@@ -757,18 +895,16 @@ let adjust_otr_policy default_cfg cfg contact data =
     _ -> (["unable to parse argument"], None, None)
 
 let tell_user (log:(User.direction * string) -> unit) jid ?(prefix:string option) (from:string) (msg:string) =
-  let f = match prefix with
-    | None -> from
-    | Some x -> x ^ "; " ^ from
-  in
+  let f = Utils.option from (fun x -> x ^ "; " ^ from) prefix in
   log (`Local (jid, f), msg)
 
-let handle_join s my_nick buddies room err =
+let handle_join state s my_nick buddies room err =
   match Xjid.string_to_jid room with
   | Some (`Bare room_jid) ->
      let room = Muc.new_room ~jid:room_jid ~my_nick () in
      Contact.replace_room buddies room ;
-     Xmpp_callbacks.Xep_muc.enter_room s (Xjid.jid_to_xmpp_jid (`Bare room_jid))
+     Xmpp_callbacks.Xep_muc.enter_room s (Xjid.jid_to_xmpp_jid (`Bare room_jid)) >>= fun () ->
+     Lwt.return (`Ok state)
   | _ -> err "not a bare jid"
 
 let handle_leave buddy reason =
@@ -777,14 +913,16 @@ let handle_leave buddy reason =
      let nick = r.Muc.my_nick
      and jid = `Bare r.Muc.room_jid
      in
-     let clos s _failure =
-       Xmpp_callbacks.Xep_muc.leave_room s ?reason ~nick (Xjid.jid_to_xmpp_jid jid)
+     let clos state s =
+       Xmpp_callbacks.Xep_muc.leave_room s ?reason ~nick (Xjid.jid_to_xmpp_jid jid) >|= fun () ->
+       `Ok state
      in
      let r = `Room { r with Muc.last_status = false } in
      (["leaving room"], Some r, Some clos)
   | _ -> (["not a chatroom"], None, None)
 
-let exec input state term contact session isself failure log redraw =
+let exec input state contact isself p =
+  let log (direction, msg) = add_status state direction msg in
   let msg = tell_user log state.active_contact in
   let err = msg "error" in
   let own_session = selfsession state in
@@ -793,61 +931,63 @@ let exec input state term contact session isself failure log redraw =
     | _ -> None
   in
 
+  let ok s = Lwt.return (`Ok s) in
+
   let global_things = ["add";"status";"priority";"join"] in
   match cmd_arg input with
   (* completely independent *)
-  | ("help" , x) -> handle_help (msg ?prefix:None) x ; Lwt.return_unit
+  | ("help" , x) -> handle_help (msg ?prefix:None) x ; ok state
 
   | other ->
-     let err msg = err msg ; Lwt.return_unit in
+     let err msg = err msg ; ok state in
      match other, !xmpp_session with
      (* connect *)
-     | ("connect", _), None   -> handle_connect state log redraw failure
+     | ("connect", _), None   -> handle_connect p state.connect_mvar >>= fun () -> ok state
      | ("connect", _), Some _ -> err "already connected"
 
      (* disconnect *)
-     | ("disconnect", _), Some _ -> handle_disconnect (msg ?prefix:None)
+     | ("disconnect", _), Some _ -> handle_disconnect (msg ?prefix:None) >>= fun () -> ok state
      | ("disconnect", _), None   -> err "not connected"
 
      (* commands not using active_contact *)
      | (x, _), None when List.mem x global_things -> err "not connected"
      | (x, None), _ when List.mem x global_things ->
-        handle_help (msg ~prefix:"argument required") (Some x) ; Lwt.return_unit
+        handle_help (msg ~prefix:"argument required") (Some x) ; ok state
 
      (* add *)
-     | ("add", Some a), Some s -> handle_add s a (msg ?prefix:None) failure
+     | ("add", Some a), Some s -> handle_add s a (msg ?prefix:None) >>= fun () -> ok state
 
      (* status *)
      | ("status", Some arg), Some s ->
         (match handle_status own_session arg with
-         | None -> handle_help (msg ~prefix:"unknown argument") (Some "status") ; Lwt.return_unit
+         | None -> handle_help (msg ~prefix:"unknown argument") (Some "status") ; ok state
          | Some p ->
             Lwt_mvar.put state.connect_mvar (Presence p) >>= fun () ->
-            send_status s p failure)
+            send_status s p >>= fun () ->
+            ok state)
 
      (* priority *)
      | ("priority", Some p), Some s ->
         (match handle_priority own_session p with
-         | None   -> handle_help (msg ~prefix:"unknown argument") (Some "priority") ; Lwt.return_unit
+         | None   -> handle_help (msg ~prefix:"unknown argument") (Some "priority") ; ok state
          | Some p ->
             Lwt_mvar.put state.connect_mvar (Presence p) >>= fun () ->
-            send_status s p failure)
+            send_status s p >>= fun () ->
+            ok state)
 
      (* multi user chat *)
      | ("join", Some a), Some s ->
         let my_nick = fst (fst state.config.Xconfig.jid) in
-        handle_join s my_nick state.contacts a err
+        handle_join state s my_nick state.contacts a err
 
 
      (* commands using active_contact as context *)
      | other, s ->
         let err str =
           msg "error" str ; ([], None, None)
-        in
-        let handle_help msg arg =
+        and handle_help msg arg =
           handle_help msg arg ; ([], None, None)
-        in
-        let need_user f =
+        and need_user f =
           Utils.option
             (["not applicable"], None, None)
             (fun x -> let (d, u, c) = f x in
@@ -856,8 +996,7 @@ let exec input state term contact session isself failure log redraw =
         in
 
         let datas, u, clos = match other, s with
-          | ("clear", _), _ ->
-             ([], Some (Contact.clear_messages contact), None)
+          | ("clear", _), _ -> ([], Some (Contact.clear_messages contact), None)
 
           | ("log", None), _ -> handle_help (msg ~prefix:"argument required") (Some "log")
           | ("log", Some a), _ when a = "on"  -> handle_log contact true a state.config_directory
@@ -904,11 +1043,10 @@ let exec input state term contact session isself failure log redraw =
                  match handle_authorization a with
                  | None   -> handle_help (msg ~prefix:"unknown argument") (Some "authorization")
                  | Some (kind, m) ->
-                    let clos = fun s failure ->
-                      (try_lwt
-                       let jid_to = Xjid.jid_to_xmpp_jid (`Bare u.User.bare_jid) in
-                           Xmpp_callbacks.XMPPClient.send_presence s ~jid_to ~kind ()
-                           with e -> failure e)
+                    let clos state s =
+                      let jid_to = Xjid.jid_to_xmpp_jid (`Bare u.User.bare_jid) in
+                      Xmpp_callbacks.XMPPClient.send_presence s ~jid_to ~kind () >|= fun () ->
+                      `Ok state
                     in
                     ([m], None, Some clos))
 
@@ -965,7 +1103,7 @@ let exec input state term contact session isself failure log redraw =
                   (match split_ws a with
                    | "abort", _ -> handle_smp_abort u session
                    | "shared", Some arg -> handle_smp_shared u session arg
-                   | "question", Some question -> handle_smp_question term state.contacts u session question
+                   | "question", Some question -> handle_smp_question u session question
                    | "answer", Some arg -> handle_smp_answer u session arg
                    | _ -> handle_help (msg ~prefix:"argument required") (Some "smp"))
                | _ -> err "need a secure session, use /otr start first")
@@ -991,6 +1129,6 @@ let exec input state term contact session isself failure log redraw =
             (* TODO: this is slightly too eager (too many writes) *)
             Lwt_mvar.put state.contact_mvar u) >>= fun () ->
         match clos, !xmpp_session with
-        | Some x, Some s -> x s failure
-        | Some _, None -> msg "error" "not connected" ; Lwt.return_unit
-        | None, _ -> Lwt.return_unit
+        | Some x, Some s -> x state s
+        | Some _, None -> msg "error" "not connected" ; Lwt.return (`Ok state)
+        | None, _ -> Lwt.return (`Ok state)

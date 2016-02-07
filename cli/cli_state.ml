@@ -1,3 +1,4 @@
+open Lwt.Infix
 
 type display_mode =
   | BuddyList
@@ -23,30 +24,51 @@ type connect_v =
   | Reconnect
   | Presence of (User.presence * string option * int option)
 
+type input = int list * int list
+
 type state = {
-  config_directory            : string                     ; (* set initially *)
-  config                      : Xconfig.t                  ; (* set initially *)
+  (* set only initially *)
+  config_directory : string ;
+  config : Xconfig.t ;
 
-  state_mvar                  : notify_v Lwt_mvar.t        ; (* set initially *)
-  contact_mvar                : Contact.contact Lwt_mvar.t ; (* set initially *)
-  connect_mvar                : connect_v Lwt_mvar.t       ; (* set initially *)
+  state_mvar : notify_v Lwt_mvar.t ;
+  contact_mvar : Contact.contact Lwt_mvar.t ;
+  connect_mvar : connect_v Lwt_mvar.t ;
 
-  contacts                    : Contact.contacts           ; (* read from disk, extended by xmpp callbacks *)
+  (* initially filled by on-disk-data, modified by xmpp callbacks *)
+  contacts : Contact.contacts ;
 
-  mutable active_contact      : Xjid.t                     ; (* modified by scrolling *)
-  mutable last_active_contact : Xjid.t                     ; (* modified by scrolling *)
+  (* list of jid to blink *)
+  notifications : Xjid.t list ;
 
-  mutable notifications       : Xjid.t list                ; (* list to blink *)
+  (* initially yourself, modified by key presses (page up/page down/C-x/C-q) *)
+  active_contact : Xjid.t ;
+  last_active_contact : Xjid.t ;
 
-  mutable show_offline        : bool                       ; (* F5 stuff *)
-  mutable window_mode         : display_mode               ; (* F12 stuff *)
-  mutable scrollback          : int                        ; (* scroll-pgup/down state *)
+  (* UI toggles, modified by keys *)
+  show_offline : bool ;
+  window_mode : display_mode ;
+  scrollback : int ;
+  log_height : int ;
+  buddy_width : int ;
 
-  mutable last_status         : (User.direction * string)  ; (* internal use only *)
-
-  mutable log_height          : int                        ;
-  mutable buddy_width         : int                        ;
+  (* current input buffer *)
+  input : input ;
 }
+
+let add_status state dir msg =
+  match Contact.find_user state.contacts (fst state.config.Xconfig.jid) with
+  | None -> assert false
+  | Some self ->
+     let self = User.insert_message self dir false true msg in
+     Contact.replace_user state.contacts self
+
+let selflog mvar from message =
+  let c s =
+    add_status s (`Local ((`Full s.config.Xconfig.jid), from)) message ;
+    Lwt.return (`Ok s)
+  in
+  Lwt_mvar.put mvar c
 
 module Notify = struct
   type notify_writer_s = Q | D | C | D_N | C_N
@@ -59,7 +81,6 @@ module Notify = struct
     | C_N -> "connected_notifications"
 
   let notify_writer jid cb fname =
-    let open Lwt.Infix in
     let mvar = Lwt_mvar.create Disconnected in
     let write_file buf =
       let open Lwt_unix in
@@ -101,14 +122,14 @@ module Notify = struct
     mvar
 end
 
+let (reading : bool ref) = ref true
+
 let (xmpp_session : Xmpp_callbacks.user_data Xmpp_callbacks.XMPPClient.session_data option ref) = ref None
 
 module Connect = struct
-  open Lwt.Infix
-
   let disconnect () =
-    Xmpp_callbacks.cancel_keepalive () ;
-    Xmpp_callbacks.keepalive_running := false ;
+    Xmpp_callbacks.Keepalive.cancel_keepalive () ;
+    Xmpp_callbacks.Keepalive.keepalive_running := false ;
     match !xmpp_session with
     | Some s ->
        Xmpp_callbacks.close s >|= fun () ->
@@ -116,7 +137,7 @@ module Connect = struct
     | None   ->
        Lwt.return_unit
 
-  let resolve config log =
+  let resolve config ui_mvar =
     let domain = JID.to_idn (Xjid.jid_to_xmpp_jid (`Full config.Xconfig.jid))
     and hostname = config.Xconfig.hostname
     and port = config.Xconfig.port
@@ -127,17 +148,17 @@ module Connect = struct
            Unix.string_of_inet_addr inet_addr ^ " on port " ^ string_of_int port
         | Unix.ADDR_UNIX str -> str
       in
-      log (`Local (`Full config.Xconfig.jid, "connecting"), "to " ^ domain ^ " (" ^ addr ^ ")") ;
+      selflog ui_mvar "connecting" ("to " ^ domain ^ " (" ^ addr ^ ")")
     in
-    Xmpp_callbacks.resolve hostname port domain >|= fun sa ->
-    report sa ;
+    Xmpp_callbacks.resolve hostname port domain >>= fun sa ->
+    report sa >|= fun () ->
     sa
 
-  let connect_me config log state_mvar users =
+  let connect_me config ui_mvar state_mvar users =
     let mvar = Lwt_mvar.create Cancel in
     let failure reason =
       disconnect () >>= fun () ->
-      log (`Local (`Full config.Xconfig.jid, "session error"), Printexc.to_string reason) ;
+      selflog ui_mvar "session error" (Printexc.to_string reason) >>= fun () ->
       let conn = fun () -> Lwt_mvar.put mvar Reconnect in
       ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async conn)) ;
       Lwt.return_unit
@@ -146,41 +167,44 @@ module Connect = struct
       match config.Xconfig.password with
       | None -> failure (Invalid_argument "no password provided, please restart")
       | Some password ->
-         try_lwt
-           (resolve config log >>= fun sockaddr ->
-            let certname = match config.Xconfig.certificate_hostname with
-              | None -> JID.to_idn (Xjid.jid_to_xmpp_jid (`Full config.Xconfig.jid))
-              | Some x -> x
-            in
-            (match config.Xconfig.authenticator with
-             | `Trust_anchor x -> X509_lwt.authenticator (`Ca_file x)
-             | `Fingerprint fp ->
-                let time = Unix.gettimeofday () in
-                let fp =
-                  Nocrypto.Uncommon.Cs.of_hex
-                    (String.map (function ':' -> ' ' | x -> x) fp)
+        Lwt.catch (fun () ->
+          (resolve config ui_mvar >>= fun sockaddr ->
+           let certname = match config.Xconfig.certificate_hostname with
+             | None -> JID.to_idn (Xjid.jid_to_xmpp_jid (`Full config.Xconfig.jid))
+             | Some x -> x
+           in
+           (match config.Xconfig.authenticator with
+            | `Trust_anchor x -> X509_lwt.authenticator (`Ca_file x)
+            | `Fingerprint fp ->
+              let time = Unix.gettimeofday () in
+              let fp =
+                Nocrypto.Uncommon.Cs.of_hex
+                  (String.map (function ':' -> ' ' | x -> x) fp)
+              in
+              let fingerprints = [(certname, fp)]
+              and hash = `SHA256
+              in
+              let auth = X509.Authenticator.server_cert_fingerprint ~time ~hash ~fingerprints in
+              Lwt.return auth) >>= fun authenticator ->
+           let kind, show = Xmpp_callbacks.presence_to_xmpp p in
+           Xmpp_callbacks.connect
+             sockaddr
+             config.Xconfig.jid certname password
+             (kind, show, s, prio) authenticator user_data
+             (fun session ->
+                Lwt_mvar.put mvar (Success user_data) >>= fun () ->
+                let users =
+                  Contact.fold
+                    (fun k v acc ->
+                       match v with
+                       | `Room r when r.Muc.last_status -> k :: acc
+                       | _ -> acc)
+                    users []
                 in
-                let fingerprints = [(certname, fp)]
-                and hash = `SHA256
-                in
-                let auth = X509.Authenticator.server_cert_fingerprint ~time ~hash ~fingerprints in
-                Lwt.return auth) >>= fun authenticator ->
-            let kind, show = Xmpp_callbacks.presence_to_xmpp p in
-            Xmpp_callbacks.connect
-              sockaddr
-              config.Xconfig.jid certname password
-              (kind, show, s, prio) authenticator user_data
-              (fun session ->
-                 Lwt_mvar.put mvar (Success user_data) >>= fun () ->
-                 let users = Contact.fold (fun k v acc ->
-                                match v with
-                                | `Room r when r.Muc.last_status -> k :: acc
-                                | _ -> acc) users []
-                 in
-                 Lwt_list.iter_s (fun x -> Xmpp_callbacks.Xep_muc.enter_room session (Xjid.jid_to_xmpp_jid (`Bare x))) users)) >|= fun session ->
-               xmpp_session := Some session ;
-               Lwt.async (fun () -> Xmpp_callbacks.parse_loop session)
-      with exn -> failure exn
+                Lwt_list.iter_s (fun x -> Xmpp_callbacks.Xep_muc.enter_room session (Xjid.jid_to_xmpp_jid (`Bare x))) users)) >|= fun session ->
+          xmpp_session := Some session ;
+          Lwt.async (fun () -> Xmpp_callbacks.parse_loop session))
+        (fun exn -> failure exn)
     in
     let rec reconnect_loop user_data presence =
       Lwt_mvar.take mvar >>= function
@@ -206,7 +230,6 @@ end
 
 let empty_state config_directory config contacts connect_mvar state_mvar =
   let contact_mvar = Persistency.notify_user config_directory
-  and last_status = (`Local (`Full config.Xconfig.jid, ""), "")
   and active = `Bare (fst config.Xconfig.jid)
   in
   {
@@ -228,22 +251,31 @@ let empty_state config_directory config contacts connect_mvar state_mvar =
     window_mode         = BuddyList ;
     scrollback          = 0         ;
 
-    last_status                     ;
-
     log_height          = 6         ;
     buddy_width         = 24        ;
+    input               = ([], [])
 }
 
 
-let add_status state dir msg =
-  match Contact.find_user state.contacts (fst state.config.Xconfig.jid) with
-  | None -> assert false
-  | Some self ->
-     let self = User.insert_message self dir false true msg in
-     Contact.replace_user state.contacts self
+let send s session ?kind jid id body =
+  let x, req =
+    match kind with
+    | Some Xmpp_callbacks.XMPPClient.Groupchat -> (false, false)
+    | _ ->
+      Utils.option
+        (false, false)
+        (fun s -> match s.User.receipt with
+           | `Unknown -> (false, true)
+           | `Supported -> (true, false)
+           | _ -> (false, false))
+        session
+  in
+  Xmpp_callbacks.send_msg s ?kind jid x id body >>= fun () ->
+  if req then
+    Xmpp_callbacks.request_disco s jid
+  else
+    Lwt.return_unit
 
-let send s ?kind jid id body fail =
-  Xmpp_callbacks.send_msg s ?kind jid id body fail
 
 let random_string () =
   let open Nocrypto in
@@ -256,9 +288,9 @@ let notify state jid =
     List.exists (Xjid.jid_matches jid) state.notifications ||
       (Xjid.jid_matches state.active_contact jid && state.scrollback = 0)
   then
-    ()
+    state
   else
-    state.notifications <- jid :: state.notifications
+    { state with notifications = jid :: state.notifications }
 
 let active state =
   match Contact.find_contact state.contacts (Xjid.t_to_bare state.active_contact) with
@@ -275,10 +307,10 @@ let isnotified state jid =
   List.exists (Xjid.jid_matches jid) state.notifications
 
 let notified state =
-  let leftover = List.filter (fun x -> not (isactive state x)) state.notifications in
-  state.notifications <- leftover ;
-  if List.length state.notifications = 0 then
-    Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear)
+  let notifications = List.filter (fun x -> not (isactive state x)) state.notifications in
+  if List.length notifications = 0 then
+    Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) ;
+  { state with notifications }
 
 let active_contacts state =
   let active jid =
@@ -363,11 +395,16 @@ let selfsession state =
 let activate_contact state active =
   let find x = Contact.find_contact state.contacts (Xjid.t_to_bare x)
   and r_jid c id = if Contact.expanded c then id else `Bare (Contact.bare c)
-  and update ojid njid =
-    state.last_active_contact <- ojid ;
-    state.active_contact      <- njid ;
-    state.scrollback          <- 0 ;
-    state.window_mode         <- BuddyList ;
+  and update old ojid now njid =
+    Contact.replace_contact state.contacts (Contact.set_input_buffer old state.input) ;
+    let state =
+      { state with
+        last_active_contact = ojid ;
+        active_contact      = njid ;
+        scrollback          = 0 ;
+        window_mode         = BuddyList ;
+        input               = Contact.input_buffer now }
+    in
     notified state
   in
   match find state.active_contact, find active with
@@ -375,14 +412,14 @@ let activate_contact state active =
      let ojid = r_jid cur state.active_contact
      and njid = r_jid now active
      in
-     if ojid <> njid then update state.active_contact njid
+     if ojid <> njid then update cur state.active_contact now njid else state
   | None, Some now ->
-     let old = match find state.last_active_contact with
-       | Some c -> r_jid c state.last_active_contact
-       | None -> `Bare (fst state.config.Xconfig.jid)
+     let old, ojid = match find state.last_active_contact with
+       | Some c -> (c, r_jid c state.last_active_contact)
+       | None -> (`User (self state), `Bare (fst state.config.Xconfig.jid))
      and njid = r_jid now active
      in
-     update old njid
+     update old ojid now njid
   | _, None -> assert false
 
 let update_notifications state user oldr newr =
@@ -392,5 +429,5 @@ let update_notifications state user oldr newr =
     | `Full (jid, r) when bare = jid && r = oldr -> `Full (jid, newr)
     | `Full _ as x -> x
   in
-  let nots = List.map update state.notifications in
-  state.notifications <- nots
+  let notifications = List.map update state.notifications in
+  { state with notifications }

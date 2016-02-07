@@ -1,8 +1,10 @@
 S src/
 S cli/
+S bin/
 
 B _build/src
 B _build/cli
+B _build/bin
 
 PKG erm_xmpp
 PKG otr
@@ -14,8 +16,10 @@ PKG sexplib
 PKG sexplib.syntax
 PKG hex
 PKG nocrypto
-PKG lambda-term
 PKG react
+PKG notty
+PKG ptime
+PKG ptime.clock.os
 
 EXT sexplib
 EXT lwt

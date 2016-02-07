@@ -61,10 +61,10 @@ but has a
 First be aware that this is unreleased alpha software.  Bug reports are
 welcome (pull requests as well).
 
-Get OCaml (4.02.1 preferred), get opam (1.2),
+Get OCaml (>= 4.02), get opam (1.2),
 [aspcud](http://www.cs.uni-potsdam.de/wv/aspcud/) and
 [gmp](http://gmplib.org/) are also required.
-If you have an older OCaml compiler, run `opam switch 4.02.1`.
+If you have an older OCaml compiler, run `opam switch 4.02.3`.
 
 Run the following commands:
 - `opam repo add xmpp-dev git://github.com/hannesm/xmpp-opam`
@@ -72,7 +72,8 @@ Run the following commands:
 - `opam install jackline`
 
 Now you should have a `~/.opam/system/bin/jackline` (or
-`~/.opam/4.02.1/bin/jackline`), which should be in your `PATH`.
+`~/.opam/4.02.3/bin/jackline`), which should be in your `PATH` (if you
+executed ``eval `opam config env` ``).
 
 To update, simply run `opam update` followed by `opam upgrade`.  This
 will get you the latest version (git master).
@@ -151,8 +152,8 @@ Active keys:
 - `Ctrl-PgUp`, `Ctrl-PgDown` scrolls chat window
 - `<tab>` tab completion (largest prefix)
 - `Ctrl-a` (jump to beginning of line), `Ctrl-e` (jump to end of line), `Ctrl-k` (kill text to the right of cursor), `Ctrl-u` (kill text to the left of cursor), `Ctrl-left` (jump word backwards), `Ctrl-right` (jump word forwards), `Ctrl-f` (forward one character), `Ctrl-b` (backward one character)
-- `Ctrl-space` (mark, indicated by underline), `Ctrl-w` (cut), `Ctrl-y` (yank)
-- `Ctrl-_` undo
+- `Ctrl-space` (mark, indicated by underline), `Ctrl-w` (cut), `Ctrl-y` (yank) [currently broken]
+- `Ctrl-_` undo [currently broken]
 
 `/help` prints the available commands, `/help command` more detailed help of the given command.
 
@@ -177,13 +178,6 @@ status line
 - How do I prevent jackline from doing DNS lookups? -- Interactive configuration or specify `(hostname ("146.255.57.229"))` in `config.sexp`.
 - The server certificate does not match the server name, how do I fix this? -- Interactive configuration or specify `(cert_hostname ("blabla.com"))` in `config.sexp`.
 - Keys do not work on MacOSX -- [This](https://github.com/timothybasanov/terminal-app-function-keys#full-list-of-all-bindings) might be useful.
-- `Ctrl-D` terminates a session, this is insane. -- Create a `~/.lambda-term-inputrc` with the following content:
-
- ````
- [read-line]
- C-d: goto-eol
- ````
-
 - I want to receive notifications. -- There are two ways at the moment: `notification.state` contains the current state (written on every change) and a hook script can be defined during interactive configuration or `(notification_callback (/my/favorite/script.sh))` in `config.sexp`.  It is executed with two arguments: the jabber id and state.
 - I want a systray icon. -- there are two projects, [posiputt/jackification](https://github.com/posiputt/jackification), and [cfcs/misc](https://github.com/cfcs/misc/blob/master/jackline_systray.py)
 - I want to have notifications on MacOSX. - Andrej wrote [a script](https://github.com/schoeke/notline) using terminal notifier; otherwise [this guide](https://gist.github.com/prebenlm/5562656) might help.
