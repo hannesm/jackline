@@ -58,7 +58,7 @@ but has a
 
 ### Installing jackline
 
-First be aware that this is unreleased alpha software.  Bug reports are
+First be aware that this is unreleased β software.  Bug reports are
 welcome (pull requests as well).
 
 Get OCaml (>= 4.02), get opam (1.2),
