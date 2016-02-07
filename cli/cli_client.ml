@@ -290,12 +290,15 @@ let render_state (width, height) state =
       let msgfmt = format_message tz_offset_s now active resource
       and msgfilter = msgfilter active state.active_contact
       and msgs msgfilter msgfmt =
-        (* this is an upper limit *)
-        let data = Utils.take_rev ((succ state.scrollback) * main_height) (Contact.messages active) in
-        let data, fmt = match active with
-          | `User x when x.User.self -> (data, logfmt)
-          | _ -> (List.filter msgfilter data, msgfmt)
+        let filter, fmt = match active with
+          | `User x when x.User.self -> ((fun _ -> true), logfmt)
+          | _ -> (msgfilter, msgfmt)
         in
+        let max =
+          (* this is an upper limit *)
+          (succ state.scrollback) * main_height
+        in
+        let data = Utils.take_rev max (List.filter filter (Contact.messages active)) in
         let image = render_wrapped_list chat_width fmt data in
         let bottom = state.scrollback * main_height in
         I.vsnap ~align:`Bottom main_height (I.vcrop 0 bottom image)
