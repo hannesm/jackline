@@ -1,9 +1,6 @@
-
-open Lwt.Infix
-
 open Notty
 
-module T = Notty_lwt.Term
+(* Some utilities on top of Notty which I need (might be useful elsewhere?) *)
 
 let wrap w image =
   let w1 = I.width image in
@@ -16,21 +13,35 @@ let wrap w image =
   let vs = go 0 in
   I.vcat vs
 
-let rewrap term above below (prefix, inp, inp2) (width, _) =
-  let content = wrap width I.(prefix <|> inp <|> inp2) in
-  let above = I.vcat (List.map (wrap width) above) in
-  let below = I.vcat (List.map (wrap width) below) in
-  let image = I.(above <-> content <-> below) in
-  T.image term image >>= fun () ->
-  let col, row =
-    let col = I.width prefix + I.width inp in
-    let h =
-      let content = wrap width I.(prefix <|> inp) in
-      I.(height (above <-> content)) in
-    let height = if col mod width = 0 then succ h else h in
-    (succ (col mod width), height)
+let render_wrapped_list width fmt entries =
+  let formatted = List.map fmt entries in
+  I.vcat (List.map (wrap width) formatted)
+
+let v_space a uchar width left right =
+  let len = width - I.(width left + width right) in
+  if len <= 0 then
+    I.hpad 0 len I.(left <|> right)
+  else
+    let fill = I.uchar a uchar len 1 in
+    I.hcat [ left ; fill ; right ]
+
+let v_center left right width =
+  let lw = I.width left
+  and rw = I.width right
   in
-  T.cursor term (Some (col, row))
+  match rw, lw >= width with
+  | 0, true -> (I.hcrop (lw - width + 1) 0 left, width)
+  | 0, false -> (left, succ lw)
+  | _, _ ->
+    if lw + rw >= width then
+      let leftw = min (max (width - rw) (width / 2)) lw in
+      let rightw = width - leftw in
+      let l = I.hcrop (lw - leftw) 0 left
+      and r = I.hcrop 0 (rw - rightw) right
+      in
+      (I.(l <|> r), succ leftw)
+    else
+      (I.(left <|> right), succ lw)
 
 let readline_input = function
   | `Key (`Backspace, []) ->
@@ -86,56 +97,3 @@ let char_list_to_str xs =
   let buf = Buffer.create (Array.length inp) in
   Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
   Buffer.contents buf
-
-let read_line ?(above = []) ?(prefix = "") ?default ?(below = []) term =
-  let rec go (pre, post) =
-    let iprefix = I.string A.empty prefix
-    and iinp =
-      let inp = Array.of_list pre in
-      I.uchars A.(st reverse) inp
-    and iinp2 =
-      let inp2 = Array.of_list post in
-      I.uchars A.(st reverse) inp2
-    in
-    rewrap term above below (iprefix, iinp, iinp2) (T.size term) >>= fun () ->
-    Lwt_stream.next (T.events term) >>= fun e ->
-    match readline_input e with
-    | `Ok f -> go (f (pre, post))
-    | `Unhandled k ->
-      match emacs_bindings k with
-      | `Ok f -> go (f (pre, post))
-      | `Unhandled k ->
-        match k with
-        | `Key (`Enter, []) -> Lwt.return (char_list_to_str (pre @ post))
-        | `Key (`Uchar 0x43, [`Ctrl]) -> Lwt.fail (Invalid_argument "Ctrl-c")
-        | `Key (`Uchar 0x44, [`Ctrl]) -> Lwt.fail (Invalid_argument "Ctrl-d")
-        | _ -> go (pre, post)
-  in
-  let pre = Utils.option [] str_to_char_list default in
-  go (pre, [])
-
-let read_password ?(above = []) ?(prefix = "") ?(below = []) term =
-  let rec go pre =
-    let w = I.(width (uchars A.empty (Array.of_list pre))) in
-    let input = I.uchar A.(st reverse) 0x2605 w 1 in
-    let prefix = I.string A.empty prefix in
-    rewrap term above below (prefix, input, I.empty) (T.size term) >>= fun () ->
-    Lwt_stream.next (T.events term) >>= function
-      | `Key (`Enter, []) -> Lwt.return (char_list_to_str pre)
-      | `Key (`Backspace, []) ->
-         (match List.rev pre with
-          | [] -> go pre
-          | _::tl -> go (List.rev tl))
-      | `Key (`Uchar chr, []) -> go (pre @ [chr])
-      | _ -> go pre
-  in
-  go []
-
-let rec read_yes_no ?above ?prefix ?below def term =
-  let default = if def then "yes" else "no" in
-  read_line ?above ?below ?prefix ~default term >>= function
-    | "" -> Lwt.return def
-    | "y" | "Y" | "yes" | "Yes" | "YES" -> Lwt.return true
-    | "n" | "N" | "no" | "No" | "NO" -> Lwt.return false
-    | _ -> read_yes_no ?above ?prefix ?below def term
-

@@ -154,7 +154,6 @@ let completion input =
 
 open Lwt
 
-
 let handle_help msg = function
   | Some arg when Commands.mem commands arg ->
     let cmd = Commands.find commands arg in

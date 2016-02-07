@@ -41,6 +41,30 @@ T  mutable c_echok : bool; 	(* Echo KILL (to erase the current line). *)
 \019  mutable c_vstop : char; 	(* Stop character (usually ctrl-S). *)
 *)
 
+let init_system ui_mvar =
+  let open Cli_state in
+  let err r m =
+    Lwt.async (fun () ->
+        Connect.disconnect () >>= fun () ->
+        let handle s =
+          add_status s (`Local ((`Full s.config.Xconfig.jid), "async error")) m ;
+          if r then
+            Lwt.return (`Failure s)
+          else
+            Lwt.return (`Disconnect s)
+        in
+        Lwt_mvar.put ui_mvar handle)
+  in
+  Lwt.async_exception_hook := (function
+      | Tls_lwt.Tls_failure `Error (`AuthenticationFailure _) as exn ->
+        err false (Printexc.to_string exn)
+      | Unix.Unix_error (Unix.EBADF, _, _ ) as exn ->
+        xmpp_session := None ; err false (Printexc.to_string exn) (* happens on /disconnect *)
+      | Unix.Unix_error (Unix.EINVAL, "select", _ ) as exn ->
+        xmpp_session := None ; err true (Printexc.to_string exn) (* not sure whether true should be false *)
+      | exn -> err true (Printexc.to_string exn)
+  )
+
 let start_client cfgdir debug () =
   Sys.(set_signal sigpipe Signal_ignore) ;
 
@@ -76,7 +100,7 @@ let start_client cfgdir debug () =
   ( match config.Xconfig.password with
     | None ->
        let jid = Xjid.full_jid_to_string config.Xconfig.jid in
-       Cli_support.read_password ~prefix:("Password (" ^ jid ^ "): ") term >|= fun password ->
+       Cli_config.read_password ~prefix:("Password (" ^ jid ^ "): ") term >|= fun password ->
        Some password
     | Some x -> Lwt.return (Some x)) >>= fun password ->
   let config = { config with Xconfig.password = password } in
@@ -142,10 +166,10 @@ let start_client cfgdir debug () =
     Lwt_engine.on_timer 600. true (fun _ -> Lwt.async dump)
   in
 
-  Cli_client.init_system ui_mvar ;
+  init_system ui_mvar ;
 
   let input_mvar = Lwt_mvar.create_empty () in
-  Lwt.async (Cli_client.read_terminal term ui_mvar input_mvar) ;
+  Lwt.async (Cli_input.read_terminal term ui_mvar input_mvar) ;
   (* main loop *)
   Cli_client.loop term ui_mvar input_mvar state >>= fun state ->
 

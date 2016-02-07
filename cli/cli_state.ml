@@ -167,7 +167,7 @@ module Connect = struct
       match config.Xconfig.password with
       | None -> failure (Invalid_argument "no password provided, please restart")
       | Some password ->
-        try_lwt
+        Lwt.catch (fun () ->
           (resolve config ui_mvar >>= fun sockaddr ->
            let certname = match config.Xconfig.certificate_hostname with
              | None -> JID.to_idn (Xjid.jid_to_xmpp_jid (`Full config.Xconfig.jid))
@@ -203,8 +203,8 @@ module Connect = struct
                 in
                 Lwt_list.iter_s (fun x -> Xmpp_callbacks.Xep_muc.enter_room session (Xjid.jid_to_xmpp_jid (`Bare x))) users)) >|= fun session ->
           xmpp_session := Some session ;
-          Lwt.async (fun () -> Xmpp_callbacks.parse_loop session)
-        with exn -> failure exn
+          Lwt.async (fun () -> Xmpp_callbacks.parse_loop session))
+        (fun exn -> failure exn)
     in
     let rec reconnect_loop user_data presence =
       Lwt_mvar.take mvar >>= function
