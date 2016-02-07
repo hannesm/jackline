@@ -22,7 +22,10 @@ let format_log tz_offset_s now log =
     | `Local (_, x) -> "*** " ^ x ^ " ***"
     | `To _ -> ">>>"
   in
-  I.string A.empty (time ^ from ^ " " ^ message)
+  let pre = I.string A.empty (time ^ from ^ " ") in
+  match split_on_nl A.empty message with
+  | [] -> pre
+  | x::xs -> I.vcat (I.(pre <|> x) :: xs)
 
 let format_message tz_offset_s now buddy resource { User.direction ; encrypted ; received ; timestamp ; message ; _ } =
   let time = print_time ~now ~tz_offset_s timestamp
@@ -63,14 +66,10 @@ let format_message tz_offset_s now buddy resource { User.direction ; encrypted ;
     | `Default -> A.empty
     | `Highlight -> A.(st bold)
   in
-  let m = Astring.String.cuts ~sep:"\n" ~empty:false message
-  and a = to_style style
-  in
+  let a = to_style style in
   let pre = I.string a (time ^ pre) in
-  let datas = List.map (I.string a) m in
-  match datas with
-  | [] -> I.empty
-  | [x] -> I.(pre <|> x)
+  match split_on_nl a message with
+  | [] -> pre
   | x::xs -> I.vcat (I.(pre <|> x)::xs)
 
 let buddy_to_color = function
@@ -162,9 +161,15 @@ let horizontal_line buddy resource a scrollback width =
   and presence_status =
     let tr p s =
       let status =
-        Utils.option "" (fun x -> Utils.option x fst (Astring.String.cut ~sep:"\n" x) ^ " ") s
+        Utils.option
+          I.empty
+          (fun x ->
+             match split_on_nl a x with
+             | [] -> I.empty
+             | x::_ -> I.(x <|> string a " "))
+          s
       in
-      I.string a (" " ^ User.presence_to_string p ^ " " ^ status ^ "─")
+      I.(string a (" " ^ User.presence_to_string p ^ " ") <|> status <|> string a "─")
     in
     Utils.option
       I.empty
@@ -282,11 +287,7 @@ let render_state (width, height) state =
       | FullScreen -> msgs msgfilter msgfmt
       | Raw ->
         let p m = match m.User.direction with `From _ -> true | _ -> false
-        and msgfmt x =
-          match Astring.String.cuts ~sep:"\n" ~empty:false x.User.message with
-          | [] -> I.empty
-          | [m] -> I.string A.empty m
-          | xs -> I.vcat (List.map (I.string A.empty) xs)
+        and msgfmt x = I.vcat (split_on_nl A.empty x.User.message)
         in
         msgs p msgfmt
     and bottom =

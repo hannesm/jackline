@@ -17,6 +17,9 @@ let render_wrapped_list width fmt entries =
   let formatted = List.map fmt entries in
   I.vcat (List.map (wrap width) formatted)
 
+let split_on_nl a m =
+  List.map (I.string a) (Astring.String.cuts ~sep:"\n" ~empty:false m)
+
 let v_space a uchar width left right =
   let len = width - I.(width left + width right) in
   if len <= 0 then
