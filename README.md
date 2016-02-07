@@ -61,10 +61,10 @@ but has a
 First be aware that this is unreleased alpha software.  Bug reports are
 welcome (pull requests as well).
 
-Get OCaml (4.02.1 preferred), get opam (1.2),
+Get OCaml (>= 4.02), get opam (1.2),
 [aspcud](http://www.cs.uni-potsdam.de/wv/aspcud/) and
 [gmp](http://gmplib.org/) are also required.
-If you have an older OCaml compiler, run `opam switch 4.02.1`.
+If you have an older OCaml compiler, run `opam switch 4.02.3`.
 
 Run the following commands:
 - `opam repo add xmpp-dev git://github.com/hannesm/xmpp-opam`
@@ -72,7 +72,8 @@ Run the following commands:
 - `opam install jackline`
 
 Now you should have a `~/.opam/system/bin/jackline` (or
-`~/.opam/4.02.1/bin/jackline`), which should be in your `PATH`.
+`~/.opam/4.02.3/bin/jackline`), which should be in your `PATH` (if you
+executed ``eval `opam config env` ``).
 
 To update, simply run `opam update` followed by `opam upgrade`.  This
 will get you the latest version (git master).
@@ -151,8 +152,8 @@ Active keys:
 - `Ctrl-PgUp`, `Ctrl-PgDown` scrolls chat window
 - `<tab>` tab completion (largest prefix)
 - `Ctrl-a` (jump to beginning of line), `Ctrl-e` (jump to end of line), `Ctrl-k` (kill text to the right of cursor), `Ctrl-u` (kill text to the left of cursor), `Ctrl-left` (jump word backwards), `Ctrl-right` (jump word forwards), `Ctrl-f` (forward one character), `Ctrl-b` (backward one character)
-- `Ctrl-space` (mark, indicated by underline), `Ctrl-w` (cut), `Ctrl-y` (yank)
-- `Ctrl-_` undo
+- `Ctrl-space` (mark, indicated by underline), `Ctrl-w` (cut), `Ctrl-y` (yank) [currently broken]
+- `Ctrl-_` undo [currently broken]
 
 `/help` prints the available commands, `/help command` more detailed help of the given command.
 
