@@ -121,6 +121,7 @@ let send_msg t state active_user message =
   in
   maybe_send ?kind jid session out user_out
 
+(*
 let m_to_s ms =
   let rec to_s acc = function
     | [] -> String.concat " " acc
@@ -148,9 +149,10 @@ let k_to_s = function
   | `Key (`Page `Down, ms) -> "page down:" ^ m_to_s ms
   | `Key (`Function x, ms) -> "function " ^ string_of_int x ^ ":" ^ m_to_s ms
   | _ -> "unknown"
+*)
 
 let read_terminal term mvar input_mvar () =
-  (* XXX: emacs key bindings: C-left/right [word forward/backward] C- wy[mark, kill, yank] C-_-[undo/redo] *)
+  (* XXX: emacs key bindings: C- wy[mark, kill, yank] C-_-[undo/redo] *)
   let p = Lwt_mvar.put mvar
   and ok s = Lwt.return (`Ok s)
   in
@@ -263,11 +265,14 @@ let read_terminal term mvar input_mvar () =
           | `Key (`Function 11, [`Shift]) -> p (fun s -> ok { s with buddy_width = max 0 (pred s.buddy_width) }) >>= fun () -> loop ()
           | `Key (`Function 12, []) -> p (fun s -> ok { s with window_mode = next_display_mode s.window_mode }) >>= fun () -> loop ()
 
-          | `Resize _ -> p (fun s -> ok s) >>= fun () -> loop ()
+          | `Resize _ -> p ok >>= fun () -> loop ()
 
+          | _ -> p ok >>= fun () -> loop ()
+
+(*
           | k ->
             let k = k_to_s k in
             p (fun s -> add_status s (`Local (`Full s.config.Xconfig.jid, "key")) k ; ok s) >>= fun () ->
-            loop ()
+            loop () *)
   in
   loop ()
