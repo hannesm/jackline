@@ -53,4 +53,4 @@ let validate_utf8 txt =
   let nln = `Readline 0x000A in
   loop (Uutf.decoder ~nln ~encoding:`UTF_8 (`String txt)) (Buffer.create (String.length txt))
 
-let version = "8ca1b3f validate_utf8 (dirty)"
+let version = "%%VERSION%%"
