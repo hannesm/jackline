@@ -87,8 +87,8 @@ let v_space a uchar width left right =
   if len <= 0 then
     I.hpad 0 len I.(left <|> right)
   else
-  let fill = I.uchar a uchar len 1 in
-  I.hcat [ left ; fill ; right ]
+    let fill = I.uchar a uchar len 1 in
+    I.hcat [ left ; fill ; right ]
 
 let format_buddy state width s contact resource =
   let jid = Contact.jid contact resource in
