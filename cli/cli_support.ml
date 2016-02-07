@@ -43,6 +43,15 @@ let v_center left right width =
     else
       (I.(left <|> right), succ lw)
 
+let str_to_char_list str =
+  Astring.String.fold_right (fun ch acc -> int_of_char ch :: acc) str []
+
+let char_list_to_str xs =
+  let inp = Array.of_list xs in
+  let buf = Buffer.create (Array.length inp) in
+  Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
+  Buffer.contents buf
+
 let readline_input = function
   | `Key (`Backspace, []) ->
     `Ok (fun (pre, post) ->
@@ -87,13 +96,41 @@ let emacs_bindings = function
         | [] -> ([], post)
         | hd::tl -> (List.rev tl, hd :: post))
 
+  | `Key (`Arrow `Left, [`Ctrl]) ->
+    `Ok (fun (pre, post) ->
+        let inp, middle = match List.rev pre with
+          | ws::xs -> (xs, [ws])
+          | [] -> ([], [])
+        in
+        let _, pre, prep =
+          List.fold_left (fun (found, rp, rpp) char ->
+              if found then
+                (found, char :: rp, rpp)
+              else if Uucp.White.is_white_space char then
+                (true, char :: rp, rpp)
+              else
+                (false, rp, char :: rpp) )
+            (false, [], [])
+            inp
+        in
+        (pre, prep @ middle @ post))
+  | `Key (`Arrow `Right, [`Ctrl]) ->
+    `Ok (fun (pre, post) ->
+        let inp, middle = match post with
+          | ws::xs -> (xs, [ws])
+          | [] -> ([], [])
+        in
+        let _, prep, post =
+          List.fold_left (fun (found, rp, rpp) char ->
+              if found then
+                (found, rp, char :: rpp)
+              else if Uucp.White.is_white_space char then
+                (true, rp, char :: rpp)
+              else
+                (false, char :: rp, rpp) )
+            (false, [], [])
+            inp
+        in
+        (pre @ middle @ (List.rev prep), List.rev post))
+
   | k -> `Unhandled k
-
-let str_to_char_list str =
-  Astring.String.fold_right (fun ch acc -> int_of_char ch :: acc) str []
-
-let char_list_to_str xs =
-  let inp = Array.of_list xs in
-  let buf = Buffer.create (Array.length inp) in
-  Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
-  Buffer.contents buf
