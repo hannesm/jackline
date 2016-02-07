@@ -69,6 +69,9 @@ let compare_bare_jid (u, d) (u', d') =
    -AAAA AAAAB (size increases/decreases (because some use random and print without leading 0s))
    -23d22ef2-6bf9-4531-abb2-e42418a4713b, 22fa77f2-9333-41b9-81e1-4cebf042ac18 (agl/xmpp-client)
 
+   also, if a client does not provide a resource when connecting to a server,
+   the server hands out some in a random fashion...
+
    thus I have some magic here to uniquify sessions... the idea is
    (read: hand-wavy):
     if two resources share a common prefix and have some random hex numbers,
@@ -119,7 +122,7 @@ let resource_similar a b =
   let alen = String.length a
   and blen = String.length b
   in
-  if abs (alen - blen) > 2 then
+  if abs (alen - blen) > 4 then
     false (* they're a bit too much off *)
   else if is_uuid a && is_uuid b then
     true
