@@ -7,10 +7,10 @@ let today () =
   let date, _ = Ptime.to_date_time now in
   date
 
-let rec find_index id i = function
-  | []                              -> 0
-  | x::_ when Xjid.jid_matches id x -> i
-  | _::xs                           -> find_index id (succ i) xs
+let rec find_index p id i = function
+  | []               -> 0
+  | x::_ when p id x -> i
+  | _::xs            -> find_index p id (succ i) xs
 
 let rec drop x l =
   match x, l with
@@ -53,4 +53,4 @@ let validate_utf8 txt =
   let nln = `Readline 0x000A in
   loop (Uutf.decoder ~nln ~encoding:`UTF_8 (`String txt)) (Buffer.create (String.length txt))
 
-let version = "%%VERSION%%"
+let version = "8ca1b3f validate_utf8 (dirty)"

@@ -24,6 +24,7 @@ let jid_to_string = function
   | `Bare bare -> bare_jid_to_string bare
 
 let string_to_jid_helper s =
+  let s = Utils.validate_utf8 s in
   match Astring.String.cut ~sep:"@" s with
   | None -> None
   | Some (_, rest) when rest = "" -> None
@@ -151,6 +152,10 @@ let jid_matches jid jid' =
 
 let xmpp_jid_to_jid jid =
   let { JID.lnode ; JID.ldomain ; JID.lresource ; _ } = jid in
+  let lnode = Utils.validate_utf8 lnode
+  and ldomain = Utils.validate_utf8 ldomain
+  and lresource = Utils.validate_utf8 lresource
+  in
   let bare = (lnode, ldomain) in
   if lresource = "" then
     `Bare bare
