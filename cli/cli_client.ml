@@ -117,7 +117,7 @@ let render_buddy_list (w, h) state =
     if h >= l then
       0
     else
-      let focus = Utils.find_index state.active_contact 0 flattened in
+      let focus = Utils.find_index Xjid.jid_matches state.active_contact 0 flattened in
       let up, down = (h / 2, (h + 1) / 2) in
       match focus - up >= 0, focus + down > l with
       | true, true -> l - h

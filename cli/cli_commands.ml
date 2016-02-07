@@ -162,21 +162,6 @@ let handle_help msg = function
     let cmds = String.concat " " (keys ()) in
     msg "available commands (/help [cmd])" cmds
 
-let validate_utf8 txt =
-  let rec loop d buf = match Uutf.decode d with
-    | `Await -> assert false
-    | `End -> Buffer.contents buf
-    | `Malformed _ -> Uutf.Buffer.add_utf_8 buf 0xFFFD ; loop d buf
-    | `Uchar x when x = 0x0009 || x = 0x000A -> (* accept tab and newline *)
-       Uutf.Buffer.add_utf_8 buf x ; loop d buf
-    | `Uchar 0x000D -> loop d buf (* ignore carriage return *)
-    | `Uchar x when x < 0x20 -> Uutf.Buffer.add_utf_8 buf 0xFFFD ; loop d buf (* replace other control characters *)
-    (* clearly: DEL 0x7F, vertical tabs, bom, left-to-right, ... *)
-    | `Uchar x -> Uutf.Buffer.add_utf_8 buf x ; loop d buf
-  in
-  let nln = `Readline 0x000A in
-  loop (Uutf.decoder ~nln ~encoding:`UTF_8 (`String txt)) (Buffer.create (String.length txt))
-
 let notify_user jid ctx inc_fp verify_fp = function
   | `Established_encrypted_session ssid ->
      let raw_fp = match User.otr_fingerprint ctx with Some fp -> fp | _ -> assert false in
@@ -307,7 +292,7 @@ let handle_connect p c_mvar =
       let user, mark = List.fold_left
           (fun (u, n) (dir, enc, m) ->
              let m =
-               let m = validate_utf8 m in
+               let m = Utils.validate_utf8 m in
                let m = Escape.strip_tags m in
                Escape.unescape m
              in
@@ -332,6 +317,7 @@ let handle_connect p c_mvar =
     p exec
   and group_message jid timestamp topic body _data id =
     let exec state =
+      let body = Utils.option None (fun x -> Some (Utils.validate_utf8 x)) body in
       let state, room = find_room state (Xjid.t_to_bare jid) in
       let room = Utils.option room (fun x -> { room with Muc.topic = Some x }) topic in
       let state, room = match body with
@@ -375,6 +361,7 @@ let handle_connect p c_mvar =
 
   and subscription jid smod status =
     let exec state =
+      let status = Utils.option None (fun x -> Some (Utils.validate_utf8 x)) status in
       let bare = Xjid.t_to_bare jid in
       let state, user = find_user state bare in
       let post = Utils.option "" (fun x -> " - " ^ x) status in
@@ -393,6 +380,7 @@ let handle_connect p c_mvar =
     p exec
   and presence jid presence priority status =
     let exec state =
+      let status = Utils.option None (fun x -> Some (Utils.validate_utf8 x)) status in
       let msg old =
         let presence_char = User.presence_to_char presence
         and presence_string = User.presence_to_string presence
@@ -427,6 +415,7 @@ let handle_connect p c_mvar =
     p exec
   and group_presence jid presence status data =
     let exec state =
+      let status = Utils.option None (fun x -> Some (Utils.validate_utf8 x)) status in
       match jid with
       | `Bare _ -> Lwt.return (`Ok state) (* XXX sth more sensible *)
       | `Full (bare, nickname) ->

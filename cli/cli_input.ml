@@ -34,7 +34,7 @@ let navigate_buddy_list state direction =
   let set_active idx =
     let user = List.nth userlist idx in
     activate_contact state user
-  and active_idx = Utils.find_index state.active_contact 0 userlist
+  and active_idx = Utils.find_index Xjid.jid_matches state.active_contact 0 userlist
   in
   let l = List.length userlist in
   match direction with

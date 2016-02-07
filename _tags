@@ -7,7 +7,7 @@ true : warn(+A-4-6-7-9-40-42-44-48)
 <src/xconfig.ml>: package(sexplib), package(otr), package(sexplib.syntax), \
   syntax(camlp4o)
 <src/escape.ml>: package(astring)
-<src/utils.ml>: package(ptime.clock.os)
+<src/utils.ml>: package(ptime.clock.os), package(uutf)
 <src/persistency.ml>: package(sexplib), package(lwt), package(lwt.syntax), \
   package(nocrypto), syntax(camlp4o)
 <src/xjid.{ml,mli}>: package(sexplib), package(sexplib.syntax), \
@@ -32,7 +32,7 @@ true : warn(+A-4-6-7-9-40-42-44-48)
 <cli/cli_input.ml>: package(notty), package(lwt), package(erm_xmpp), \
   package(otr)
 <cli/cli_commands.ml>: package(astring), package(lwt), \
-  package(otr), package(erm_xmpp), package(uutf)
+  package(otr), package(erm_xmpp)
 <cli/cli_config.ml>: package(lwt), package(nocrypto), \
   package(otr), package(react), package(notty), package(tls.lwt)
 <cli/cli_state.ml>: package(hex), package(lwt), package(nocrypto), \
