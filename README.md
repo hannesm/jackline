@@ -11,7 +11,7 @@ This goal is achieved with clean-slate libraries (OCaml-TLS,
 OCaml-OTR) and few features: no support for HTML markup, avatars,
 which music you're playing, timezone you're living in, ...
 
-This is beta software... feedback welcome!  Security audits are
+This is β software... feedback welcome!  Security audits are
 needed, please contact me if you plan to do any or already did some.
 The OCaml-TLS implementation received some preliminary black box and
 white box testing.
@@ -59,7 +59,8 @@ but has a
 ### Installing jackline
 
 First be aware that this is unreleased β software.  Bug reports are
-welcome (pull requests as well).
+welcome (pull requests as well).  There might be a release later in
+2016 (XML/XMPP library needs some refactoring first).
 
 Get OCaml (>= 4.02), get opam (1.2),
 [aspcud](http://www.cs.uni-potsdam.de/wv/aspcud/) and
