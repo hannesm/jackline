@@ -67,7 +67,7 @@ let format_message tz_offset_s now buddy resource { User.direction ; encrypted ;
     | `Default -> A.empty
     | `Highlight -> A.(st bold)
   in
-  let m = Astring.String.cuts ~sep:"\n" message
+  let m = Astring.String.cuts ~sep:"\n" ~empty:false message
   and a = to_style style
   in
   let pre = I.string a (time ^ pre) in
@@ -312,7 +312,11 @@ let render_state (width, height) state =
       | FullScreen -> msgs msgfilter msgfmt
       | Raw ->
         let p m = match m.User.direction with `From _ -> true | _ -> false
-        and msgfmt x = I.string A.empty x.User.message
+        and msgfmt x =
+          match Astring.String.cuts ~sep:"\n" ~empty:false x.User.message with
+          | [] -> I.empty
+          | [m] -> I.string A.empty m
+          | xs -> I.vcat (List.map (I.string A.empty) xs)
         in
         msgs p msgfmt
     and bottom =
@@ -380,7 +384,16 @@ let rec loop term mvar input_mvar state =
     try
       render_state size state
     with
-      e -> (I.string A.(fg red) (Printexc.to_string e), 1)
+      e ->
+      let e = I.string A.(fg red) (Printexc.to_string e)
+      and note = I.string A.empty
+          "While trying to render the UI.  Try to scroll to another buddy (Page \
+           Up/Down), switch rendering of buddy list (F12), or clear this \
+           buddies messages (by typing /clear<ret>); please report this bug \
+           (including the offending characters and the error message)"
+      in
+      let w = fst size in
+      (I.(wrap w e <-> wrap w note), 1)
   in
   T.image term image >>= fun () ->
   T.cursor term (Some (cursorc, snd size)) >>= fun () ->
