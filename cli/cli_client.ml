@@ -302,7 +302,8 @@ let render_state (width, height) state =
           | `User x when x.User.self -> (fun x -> render_wrapped_list x logfmt)
           | _ -> (fun x -> render_messages x msgfilter msgfmt)
         in
-        let image = r chat_width (List.rev (Contact.messages active)) in
+        let msgs = Utils.take_rev ((succ state.scrollback) * main_height) (Contact.messages active) in
+        let image = r chat_width msgs in
         cut_scroll state.scrollback main_height image
       in
       match state.window_mode with
@@ -324,7 +325,8 @@ let render_state (width, height) state =
           I.empty
         else
           let logs =
-            let l = render_wrapped_list width logfmt (List.rev self.User.message_history) in
+            let msgs = Utils.take_rev log_height self.User.message_history in
+            let l = render_wrapped_list width logfmt msgs in
             I.vsnap ~align:`Bottom log_height l
           and hline = horizontal_line active resource a state.scrollback width
           in
