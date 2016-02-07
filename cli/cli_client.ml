@@ -146,7 +146,7 @@ let render_buddy_list (w, h) state =
     Utils.take h fst
   in
   let formatted = I.vcat to_render in
-  I.vlimit ~align:`Top h formatted
+  I.vsnap ~align:`Top h formatted
 
 let horizontal_line buddy resource a scrollback width =
   let pre = I.string a "── "
@@ -205,7 +205,7 @@ let status_line self mysession notify log a width =
 
 let cut_scroll scrollback height image =
   let bottom = scrollback * height in
-  I.vlimit ~align:`Bottom height (I.vcrop 0 bottom image)
+  I.vsnap ~align:`Bottom height (I.vcrop 0 bottom image)
 
 let render_messages width p msgfmt data =
   let data = List.filter p data in
@@ -325,7 +325,7 @@ let render_state (width, height) state =
         else
           let logs =
             let l = render_wrapped_list width logfmt (List.rev self.User.message_history) in
-            I.vlimit ~align:`Bottom log_height l
+            I.vsnap ~align:`Bottom log_height l
           and hline = horizontal_line active resource a state.scrollback width
           in
           I.(hline <-> logs)
