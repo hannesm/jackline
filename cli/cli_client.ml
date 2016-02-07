@@ -203,14 +203,6 @@ let status_line self mysession notify log a width =
   in
   v_space a 0x2015 width I.(notify <|> jid) status
 
-let cut_scroll scrollback height image =
-  let bottom = scrollback * height in
-  I.vsnap ~align:`Bottom height (I.vcrop 0 bottom image)
-
-let render_messages width p msgfmt data =
-  let data = List.filter p data in
-  render_wrapped_list width msgfmt data
-
 let msgfilter active jid m =
   let o = User.jid_of_direction m.User.direction in
   if Contact.expanded active then
@@ -298,13 +290,15 @@ let render_state (width, height) state =
       let msgfmt = format_message tz_offset_s now active resource
       and msgfilter = msgfilter active state.active_contact
       and msgs msgfilter msgfmt =
-        let r = match active with
-          | `User x when x.User.self -> (fun x -> render_wrapped_list x logfmt)
-          | _ -> (fun x -> render_messages x msgfilter msgfmt)
+        (* this is an upper limit *)
+        let data = Utils.take_rev ((succ state.scrollback) * main_height) (Contact.messages active) in
+        let data, fmt = match active with
+          | `User x when x.User.self -> (data, logfmt)
+          | _ -> (List.filter msgfilter data, msgfmt)
         in
-        let msgs = Utils.take_rev ((succ state.scrollback) * main_height) (Contact.messages active) in
-        let image = r chat_width msgs in
-        cut_scroll state.scrollback main_height image
+        let image = render_wrapped_list chat_width fmt data in
+        let bottom = state.scrollback * main_height in
+        I.vsnap ~align:`Bottom main_height (I.vcrop 0 bottom image)
       in
       match state.window_mode with
       | BuddyList ->
