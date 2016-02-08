@@ -29,15 +29,15 @@ let take_rev x l =
 
 let take x l = List.rev (take_rev x l)
 
+let unicode : bool ref = ref true
+
 let validate_utf8 txt =
   let rec loop d buf = match Uutf.decode d with
-    | `Await -> assert false
+    | `Await -> Buffer.contents buf
     | `End -> Buffer.contents buf
-    | `Malformed _ -> Uutf.Buffer.add_utf_8 buf 0xFFFD ; loop d buf
+    | `Malformed _ -> if !unicode then Uutf.Buffer.add_utf_8 buf 0xFFFD; loop d buf
     | `Uchar x when x = 0x0009 || x = 0x000A -> (* tab and newline *) Uutf.Buffer.add_utf_8 buf x ; loop d buf
-    | `Uchar 0x000D | `Uchar 0x007F -> loop d buf (* ignore carriage return and DEL *)
-    | `Uchar x when x < 0x20 -> Uutf.Buffer.add_utf_8 buf 0xFFFD ; loop d buf (* replace other control characters *)
-
+    | `Uchar 0x000D | `Uchar 0x007F (* carriage return and DEL *)
     (* See https://en.wikipedia.org/wiki/Unicode_control_characters / https://en.wikipedia.org/wiki/Bi-directional_text *)
     | `Uchar 0x200E | `Uchar 0x200F (* left-to-right / right-to-left *)
     | `Uchar 0x202A | `Uchar 0x202D (* left-to-right embedding / override *)
@@ -45,8 +45,14 @@ let validate_utf8 txt =
     | `Uchar 0x202C  (* pop directional format *)
     | `Uchar 0x2066 | `Uchar 0x2067 (* l-t-r isolate r-t-l isolate *)
     | `Uchar 0x2068 | `Uchar 0x2069 (* first strong isolate / pop directional isolate *)
-    | `Uchar 0x2028 | `Uchar 0x2029 -> loop d buf (* line separator / page separator *)
-    | `Uchar x when x >= 0x0080 && x <= 0x009F -> loop d buf (* ctrl chars used in conjunction with ISO 8859 character sets (C0/C1) *)
+    | `Uchar 0x2028 | `Uchar 0x2029 (* line separator / page separator *) ->
+      if !unicode then Uutf.Buffer.add_utf_8 buf 0xFFFD ; loop d buf
+    | `Uchar x when x < 0x20 ->
+      (* other control characters *)
+      if !unicode then Uutf.Buffer.add_utf_8 buf 0xFFFD ; loop d buf
+    | `Uchar x when x >= 0x0080 && x <= 0x009F ->
+      (* ctrl chars used in conjunction with ISO 8859 character sets (C0/C1) *)
+      if !unicode then Uutf.Buffer.add_utf_8 buf 0xFFFD ; loop d buf
 
     | `Uchar x -> Uutf.Buffer.add_utf_8 buf x ; loop d buf
   in
