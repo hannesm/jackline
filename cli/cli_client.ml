@@ -213,11 +213,14 @@ let tz_offset_s () =
 
 let render_state (width, height) state =
   let log_height, main_height =
-    let s = state.log_height in
-    if s + 10 > height then
+    let lh =
+      let s = state.log_height in
+      if s + 10 > height then 0 else s
+    in
+    if lh = 0 then
       (0, height - 2)
     else
-      (s, height - s - 3)
+      (lh, height - lh - 3)
   and buddy_width, chat_width =
     let b = state.buddy_width in
     match state.window_mode with
@@ -260,8 +263,7 @@ let render_state (width, height) state =
         | _ -> iinp2
       in
       v_center iinp r width
-    in
-    let main =
+    and main =
       let msgfmt = format_message tz_offset_s now active resource
       and msgfilter = msgfilter active state.active_contact
       and msgs msgfilter msgfmt =
@@ -292,27 +294,25 @@ let render_state (width, height) state =
         msgs p msgfmt
     and bottom =
       let self = self state in
-      let hline_log =
-        if log_height = 0 then
-          I.empty
-        else
-          let logs =
-            let msgs = Utils.take_rev log_height self.User.message_history in
-            let l = render_wrapped_list width logfmt msgs in
-            I.vsnap ~align:`Bottom log_height l
-          and hline = horizontal_line active resource a state.scrollback width
-          in
-          I.(hline <-> logs)
-      and status =
+      let status =
         let notify = List.length state.notifications > 0
         and log = Contact.preserve_messages active
         and mysession = selfsession state
         in
         status_line self mysession notify log a width
       in
-      I.vcat [ hline_log ; status ; input ]
+      if log_height = 0 then
+        status
+      else
+        let logs =
+          let msgs = Utils.take_rev log_height self.User.message_history in
+          let l = render_wrapped_list width logfmt msgs in
+          I.vsnap ~align:`Bottom log_height l
+        and hline = horizontal_line active resource a state.scrollback width
+        in
+        I.(hline <-> logs <-> status)
     in
-    (I.(main <-> bottom), cursorc)
+    (I.(main <-> bottom <-> input), cursorc)
 
 let quit state =
   Utils.option
