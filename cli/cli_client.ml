@@ -92,7 +92,7 @@ let format_buddy state width s contact resource =
     match isnotified state jid, Contact.expanded contact with
     | true, true -> I.char a '*' 1 1
     | false, false -> I.char a (if potentially_visible_resource state contact then '+' else ' ') 1 1
-    | true, false -> I.uchar a 0x2600 1 1
+    | true, false -> star a 1
     | false, true -> I.char a ' ' 1 1
   and data = if s then Contact.oneline contact None else Contact.oneline contact resource
   in
@@ -134,9 +134,6 @@ let render_buddy_list (w, h) state =
   in
   let formatted = I.vcat to_render in
   I.vsnap ~align:`Top h formatted
-
-let hdash a w = I.uchar a 0x2500 w 1
-and vdash a h = I.uchar a 0x2502 1 h
 
 let horizontal_line buddy resource a scrollback width =
   let pre = I.(hdash a 2 <|> I.char a ' ' 1 1)

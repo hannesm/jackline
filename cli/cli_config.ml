@@ -55,7 +55,7 @@ let read_line ?(above = []) ?(prefix = "") ?default ?(below = []) term =
 let read_password ?(above = []) ?(prefix = "") ?(below = []) term =
   let rec go pre =
     let w = I.(width (uchars A.empty (Array.of_list pre))) in
-    let input = I.uchar A.(st reverse) 0x2605 w 1 in
+    let input = star A.(st reverse) w in
     let prefix = I.string A.empty prefix in
     rewrap term above below (prefix, input, I.empty) (Notty_lwt.Term.size term) >>= fun () ->
     Lwt_stream.next (Notty_lwt.Term.events term) >>= function
