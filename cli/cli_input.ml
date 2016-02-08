@@ -245,7 +245,9 @@ let read_terminal term mvar input_mvar () =
           | `Key (`Page `Down, []) -> p (fun s -> ok (navigate_buddy_list s Down)) >>= fun () -> loop ()
 
           | `Key (`Page `Up, [`Ctrl]) -> p (fun s -> ok (navigate_message_buffer s Up)) >>= fun () -> loop ()
+          | `Key (`Uchar 0x50, [`Ctrl]) (* C-p *) -> p (fun s -> ok (navigate_message_buffer s Up)) >>= fun () -> loop ()
           | `Key (`Page `Down, [`Ctrl]) -> p (fun s -> ok (navigate_message_buffer s Down)) >>= fun () -> loop ()
+          | `Key (`Uchar 0x4E, [`Ctrl]) (* C-n *) -> p (fun s -> ok (navigate_message_buffer s Down)) >>= fun () -> loop ()
 
           | `Key (`Uchar 0x58, [`Ctrl]) (* C-x *) -> p (fun s -> ok (activate_contact s s.last_active_contact)) >>= fun () -> loop ()
           | `Key (`Uchar 0x51, [`Ctrl]) (* C-q *) ->
@@ -261,8 +263,10 @@ let read_terminal term mvar input_mvar () =
           | `Key (`Function 5, []) -> p (fun s -> ok { s with show_offline = not s.show_offline }) >>= fun () -> loop ()
           | `Key (`Function 10, []) -> p (fun s -> ok { s with log_height = succ s.log_height }) >>= fun () -> loop ()
           | `Key (`Function 10, [`Shift]) -> p (fun s -> ok { s with log_height = max 0 (pred s.log_height) }) >>= fun () -> loop ()
+          | `Key (`Function 10, [`Ctrl]) -> p (fun s -> ok { s with log_height = max 0 (pred s.log_height) }) >>= fun () -> loop ()
           | `Key (`Function 11, []) -> p (fun s -> ok { s with buddy_width = succ s.buddy_width }) >>= fun () -> loop ()
           | `Key (`Function 11, [`Shift]) -> p (fun s -> ok { s with buddy_width = max 0 (pred s.buddy_width) }) >>= fun () -> loop ()
+          | `Key (`Function 11, [`Ctrl]) -> p (fun s -> ok { s with buddy_width = max 0 (pred s.buddy_width) }) >>= fun () -> loop ()
           | `Key (`Function 12, []) -> p (fun s -> ok { s with window_mode = next_display_mode s.window_mode }) >>= fun () -> loop ()
 
           | `Resize _ -> p ok >>= fun () -> loop ()
