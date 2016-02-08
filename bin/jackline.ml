@@ -202,7 +202,7 @@ let _ =
     | [] -> false
     | x::xs -> try utf (Unix.getenv x) with Not_found -> tst xs
   in
-  if not (tst [ "LANG" ; "LC_ALL" ; "LC_ALL" ]) then
+  if not (tst [ "LC_ALL" ; "LC_CTYPE" ; "LANG" ]) then
     ascii := true
 
 let usage = "usage " ^ Sys.argv.(0)
