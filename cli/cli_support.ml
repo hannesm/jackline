@@ -20,12 +20,12 @@ let render_wrapped_list width fmt entries =
 let split_on_nl a m =
   List.map (I.string a) (Astring.String.cuts ~sep:"\n" ~empty:false m)
 
-let v_space a uchar width left right =
+let v_space f width left right =
   let len = width - I.(width left + width right) in
   if len <= 0 then
     I.hpad 0 len I.(left <|> right)
   else
-    let fill = I.uchar a uchar len 1 in
+    let fill = I.tile len 1 f in
     I.hcat [ left ; fill ; right ]
 
 let v_center left right width =

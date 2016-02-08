@@ -97,7 +97,7 @@ let format_buddy state width s contact resource =
   and data = if s then Contact.oneline contact None else Contact.oneline contact resource
   in
   let buddy = I.(first <|> string a data) in
-  v_space a 0x20 width buddy I.empty
+  v_space (I.char a ' ' 1 1) width buddy I.empty
 
 let format_buddies state w buddies =
   (* where buddies is (contact * resource list) list *)
@@ -135,8 +135,11 @@ let render_buddy_list (w, h) state =
   let formatted = I.vcat to_render in
   I.vsnap ~align:`Top h formatted
 
+let hdash a w = I.uchar a 0x2500 w 1
+and vdash a h = I.uchar a 0x2502 1 h
+
 let horizontal_line buddy resource a scrollback width =
-  let pre = I.string a "── "
+  let pre = I.(hdash a 2 <|> I.char a ' ' 1 1)
   and scroll = if scrollback = 0 then I.empty else I.string a ("*scrolling " ^ string_of_int scrollback ^ "* ")
   and jid =
     let p = match buddy with
@@ -156,7 +159,7 @@ let horizontal_line buddy resource a scrollback width =
            (User.verification_status_to_color vs, User.verification_status_to_string vs))
           (User.otr_fingerprint s.User.otr)
       in
-      I.(string a " " <|> string A.(a ++ buddy_to_color col) data <|> string a " ─")
+      I.(string a " " <|> string A.(a ++ buddy_to_color col) (data ^ " ") <|> hdash a 1)
     | _ -> I.empty
   and presence_status =
     let tr p s =
@@ -169,7 +172,7 @@ let horizontal_line buddy resource a scrollback width =
              | x::_ -> I.(x <|> string a " "))
           s
       in
-      I.(string a (" " ^ User.presence_to_string p ^ " ") <|> status <|> string a "─")
+      I.(string a (" " ^ User.presence_to_string p ^ " ") <|> status <|> hdash a 1)
     in
     Utils.option
       I.empty
@@ -178,11 +181,11 @@ let horizontal_line buddy resource a scrollback width =
         | `Member m -> tr m.Muc.presence m.Muc.status)
       resource
   in
-  v_space a 0x2015 width (I.hcat [ pre ; scroll ; jid ]) I.(otr <|> presence_status)
+  v_space (hdash a 1) width (I.hcat [ pre ; scroll ; jid ]) I.(otr <|> presence_status)
 
 let status_line self mysession notify log a width =
   let a = A.(a ++ st bold) in
-  let notify = if notify then I.string A.(a ++ st blink ++ fg cyan) "##" else I.string a "──"
+  let notify = if notify then I.string A.(a ++ st blink ++ fg cyan) "##" else hdash a 2
   and jid =
     let data = User.userid self mysession
     and a' = if log then A.(st reverse) else a
@@ -192,9 +195,9 @@ let status_line self mysession notify log a width =
     let data = User.presence_to_string mysession.User.presence
     and color = if mysession.User.presence = `Offline then `Bad else `Good
     in
-    I.(string a "[ " <|> string A.(buddy_to_color color ++ a) data <|> string a " ]─")
+    I.(string a "[ " <|> string A.(buddy_to_color color ++ a) data <|> string a " ]" <|> hdash a 1)
   in
-  v_space a 0x2015 width I.(notify <|> jid) status
+  v_space (hdash a 1) width I.(notify <|> jid) status
 
 let msgfilter active jid m =
   let o = User.jid_of_direction m.User.direction in
@@ -281,7 +284,7 @@ let render_state (width, height) state =
       match state.window_mode with
       | BuddyList ->
         let buddies = render_buddy_list (buddy_width, main_height) state
-        and vline = I.uchar a 0x2502 1 main_height
+        and vline = vdash a main_height
         in
         I.(buddies <|> vline <|> msgs msgfilter msgfmt)
       | FullScreen -> msgs msgfilter msgfmt
