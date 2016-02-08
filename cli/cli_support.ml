@@ -1,10 +1,23 @@
 open Notty
 
 (* Some utilities on top of Notty which I need (might be useful elsewhere?) *)
-
-let hdash a w = I.uchar a 0x2500 w 1
-and vdash a h = I.uchar a 0x2502 1 h
-and star a w = I.uchar a 0x2605 w 1
+module Char = struct
+  let hdash a w =
+    if !Utils.unicode then
+      I.uchar a 0x2500 w 1
+    else
+      I.char a '-' w 1
+  and vdash a h =
+    if !Utils.unicode then
+      I.uchar a 0x2502 1 h
+    else
+      I.char a '|' 1 h
+  and star a w =
+    if !Utils.unicode then
+      I.uchar a 0x2605 w 1
+    else
+      I.char a '*' w 1
+end
 
 let wrap w image =
   let w1 = I.width image in
