@@ -182,7 +182,7 @@ let horizontal_line buddy resource a scrollback width =
 
 let status_line self mysession notify log a width =
   let a = A.(a ++ st bold) in
-  let notify = if notify then I.string A.(a ++ st blink) "##" else I.string a "──"
+  let notify = if notify then I.string A.(a ++ st blink ++ fg cyan) "##" else I.string a "──"
   and jid =
     let data = User.userid self mysession
     and a' = if log then A.(st reverse) else a
