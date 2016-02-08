@@ -194,7 +194,7 @@ let read_terminal term mvar input_mvar () =
               and s = { s with input = ([], []) }
               in
               let err msg = add_status s (`Local ((`Full s.config.Xconfig.jid), "error")) msg in
-              match input with
+              match String.trim input with
               | "/quit" -> Lwt.return (`Quit s)
               | "" ->
                 let active = active s in
