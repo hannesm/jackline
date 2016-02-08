@@ -65,7 +65,7 @@ let init_system ui_mvar =
       | exn -> err true (Printexc.to_string exn)
   )
 
-let start_client cfgdir debug () =
+let start_client cfgdir debug unicode () =
   Sys.(set_signal sigpipe Signal_ignore) ;
 
   Printexc.register_printer (function
@@ -74,6 +74,8 @@ let start_client cfgdir debug () =
       | _ -> None) ;
 
   Nocrypto_entropy_lwt.initialize () >>= fun () ->
+
+  Utils.unicode := unicode ;
 
   Lwt_unix.tcgetattr Lwt_unix.stdin >>= fun saved_tc ->
   Lwt_unix.(tcsetattr stdin TCSANOW { saved_tc with c_ignbrk = true ; c_isig = false ; c_icanon = false ; c_echo = false ; c_vstart = '\255' ; c_vstop = '\255' ; c_verase = '\255' }) >>= fun () ->
@@ -187,22 +189,33 @@ let start_client cfgdir debug () =
 let config_dir = ref ""
 let debug = ref false
 let rest = ref []
+let ascii = ref false
 
 let _ =
   let home = Unix.getenv "HOME" in
   let cfgdir = Filename.concat home ".config" in
   config_dir := Filename.concat cfgdir "ocaml-xmpp-client"
 
+let _ =
+  let utf s = Astring.String.is_infix ~affix:"UTF" (String.uppercase s) in
+  let rec tst = function
+    | [] -> false
+    | x::xs -> try utf (Unix.getenv x) with Not_found -> tst xs
+  in
+  if not (tst [ "LANG" ; "LC_ALL" ; "LC_ALL" ]) then
+    ascii := true
+
 let usage = "usage " ^ Sys.argv.(0)
 
 let arglist = [
   ("-f", Arg.String (fun d -> config_dir := d), "configuration directory (defaults to ~/.config/ocaml-xmpp-client/)") ;
-  ("-d", Arg.Bool (fun d -> debug := d), "log to out.txt in current working directory")
+  ("-d", Arg.Bool (fun d -> debug := d), "log to out.txt in current working directory") ;
+  ("-a", Arg.Bool (fun a -> ascii := a), "ASCII only output")
 ]
 
 let _ =
   try
     Arg.parse arglist (fun x -> rest := x :: !rest) usage ;
-    Lwt_main.run (start_client !config_dir !debug ())
+    Lwt_main.run (start_client !config_dir !debug (not !ascii) ())
   with
   | Sys_error s -> print_endline s
