@@ -30,6 +30,10 @@ Supported features:
 - _no_ import of OTR keys or configuration
 - _no_ plaintext connections to XMPP server
 
+NB: jackline and
+[torsocks](https://trac.torproject.org/projects/tor/wiki/doc/torsocks) are
+friends: `torify jackline` works.
+
 The interface is inspired by [mcabber](http://mcabber.com).
 
 Trusted code base is at the moment:
