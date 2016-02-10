@@ -1,11 +1,11 @@
 
-open Lwt
+open Lwt.Infix
 
 let (debug_out : Lwt_unix.file_descr option ref) = ref None
 
 let dbg data =
   match !debug_out with
-  | None -> return ()
+  | None -> Lwt.return ()
   | Some x ->
     let now = Unix.localtime (Unix.time ()) in
     let msg =
@@ -16,8 +16,6 @@ let dbg data =
 
 module PlainSocket =
 struct
-  open Lwt
-
   type 'a z = 'a Lwt.t
 
   type fd = Lwt_unix.file_descr
@@ -30,7 +28,7 @@ struct
     let open Lwt_unix in
     let fd = socket PF_INET SOCK_STREAM 0 in
     connect fd sockaddr >>= fun () ->
-    return fd
+    Lwt.return fd
 
   let read fd buf start len =
     Lwt_unix.read fd buf start len >>= fun size ->
@@ -43,7 +41,7 @@ struct
     let rec aux_send start =
       Lwt_unix.write fd str start (len - start) >>= fun sent ->
       if sent = 0 then
-        return ()
+        Lwt.return ()
       else
         aux_send (start + sent)
     in
@@ -56,8 +54,6 @@ end
 
 module TLSSocket =
 struct
-  open Lwt
-
   let read s buf start len =
     let cs = Cstruct.create len in
     Tls_lwt.Unix.read s cs >>= fun size ->
@@ -65,7 +61,7 @@ struct
         (String.blit (Cstruct.to_string cs) 0 buf start size ;
          dbg ("IN TLS: " ^ (String.sub buf start size)))
       else
-        return () ) >|= fun () ->
+        Lwt.return () ) >|= fun () ->
     size
 
   let write s str =

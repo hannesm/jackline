@@ -1,5 +1,7 @@
 open Cli_state
 
+open Lwt.Infix
+
 let string_normalize_fingerprint fpstr =
   let fpstr = String.lowercase fpstr in
   Astring.String.fold_right
@@ -151,8 +153,6 @@ let completion input =
     | _ -> []
   else
     []
-
-open Lwt
 
 let handle_help msg = function
   | Some arg when Commands.mem commands arg ->
@@ -770,13 +770,13 @@ let handle_smp_question user session question =
                 in
                 Contact.replace_user state.contacts user ;
                 match out with
-                | None      -> return (`Ok state)
+                | None      -> Lwt.return (`Ok state)
                 | Some body -> send s (Some session) jid None body >|= fun () -> `Ok state
           in
           Lwt_mvar.put ui_mvar handle) ;
       Lwt.return { state with input = (Cli_support.str_to_char_list (p ^ " "), []) }
     in
-    return (`Ask handle)
+    Lwt.return (`Ask handle)
   in
   ([], None, Some clos)
 
@@ -813,9 +813,9 @@ let handle_remove user =
       (fun ?jid_from ?jid_to ?lang el ->
         ignore jid_to ; ignore lang ; ignore el ;
         match jid_from with
-        | None -> fail XMPPClient.BadRequest
+        | None -> Lwt.fail XMPPClient.BadRequest
         | Some x -> match Xjid.string_to_jid x with
-          | None -> fail XMPPClient.BadRequest
+          | None -> Lwt.fail XMPPClient.BadRequest
           | Some jid ->
             s.XMPPClient.user_data.log (`From jid) ("Removal of " ^ bare_jid ^ " successful"))) >|= fun () -> `Ok state
 

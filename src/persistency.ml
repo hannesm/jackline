@@ -1,4 +1,4 @@
-open Lwt
+open Lwt.Infix
 open Sexplib
 
 let read_data fd =
@@ -8,7 +8,7 @@ let read_data fd =
   let rec read start =
     let len = size - start in
     Lwt_unix.read fd buf start len >>= function
-    | x when x = len -> return buf
+    | x when x = len -> Lwt.return buf
     | x -> read (start + x)
   in
   read 0
@@ -27,20 +27,20 @@ let read dir file =
          (fun () ->
             Lwt_unix.access dir [ Unix.F_OK ] >|= fun () ->
             Some dir)
-         (fun _ -> return None) >>= function
+         (fun _ -> Lwt.return None) >>= function
        | Some f ->
          Lwt_unix.stat f >>= fun stat ->
          if stat.Lwt_unix.st_kind = Lwt_unix.S_DIR then
-           return None
+           Lwt.return None
          else
-           fail (Invalid_argument "given path is not a directory")
-       | None -> return None )
+           Lwt.fail (Invalid_argument "given path is not a directory")
+       | None -> Lwt.return None )
 
 let write_data fd data =
   let rec write start =
     let len = Bytes.length data - start in
     Lwt_unix.write fd data start len >>= function
-    | n when n = len -> return ()
+    | n when n = len -> Lwt.return ()
     | n              -> write (start + n)
   in
   write 0
@@ -63,7 +63,7 @@ let delete file =
   Lwt.catch (fun () ->
       Lwt_unix.access file [ Unix.F_OK ; Unix.W_OK ] >>= fun () ->
       Lwt_unix.unlink file)
-    (fun _ -> return ())
+    (fun _ -> Lwt.return ())
 
 let write dir filename buf =
   ensure_create dir >>= fun () ->
@@ -74,7 +74,7 @@ let write dir filename buf =
   write_data fd buf >>= fun () ->
   Lwt_unix.close fd >>= fun () ->
   Lwt_unix.rename file f >>= fun () ->
-  return ()
+  Lwt.return ()
 
 let config = "config.sexp"
 let users = "users.sexp"
