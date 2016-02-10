@@ -102,7 +102,7 @@ let empty_session ~resource ?(presence=`Offline) ?otr ?config ?(priority=0) ?(st
 open Sexplib
 open Sexplib.Conv
 
-type verify = [ `Manual | `SMP ] with sexp
+type verify = [ `Manual | `SMP ] [@@deriving sexp]
 
 let verify_to_string = function
   | `Manual -> "manual"
@@ -171,7 +171,7 @@ type subscription = [
   | `To
   | `Both
   | `Remove
-] with sexp
+] [@@deriving sexp]
 
 let subscription_to_string = function
   | `Both   -> "both"
@@ -189,7 +189,7 @@ let subscription_to_chars = function
 
 type property = [
   | `Pending | `PreApproved
-] with sexp
+] [@@deriving sexp]
 
 let property_to_string = function
   | `Pending -> "pending"
@@ -199,7 +199,7 @@ type direction = [
   | `From of Xjid.t
   | `To of Xjid.t * string (* id *)
   | `Local of Xjid.t * string
-] with sexp
+] [@@deriving sexp]
 
 let jid_of_direction = function
   | `From j -> j
@@ -209,7 +209,7 @@ let jid_of_direction = function
 type chatkind = [
   | `Chat
   | `GroupChat
-] with sexp
+] [@@deriving sexp]
 
 type message = {
   direction  : direction ;

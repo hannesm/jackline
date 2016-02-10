@@ -90,7 +90,10 @@ val jid_of_direction : direction -> Xjid.t
 type chatkind = [
   | `Chat
   | `GroupChat
-] with sexp
+]
+
+val chatkind_of_sexp : Sexplib.Type.t -> chatkind
+val sexp_of_chatkind : chatkind -> Sexplib.Type.t
 
 type message = {
   direction  : direction ;
@@ -100,7 +103,10 @@ type message = {
   message    : string ;
   kind       : chatkind ;
   mutable persistent : bool ; (* internal use only (mark whether this needs to be written) *)
-} with sexp
+}
+
+val message_of_sexp : Sexplib.Type.t -> message
+val sexp_of_message : message -> Sexplib.Type.t
 
 val message : ?timestamp:Ptime.t -> ?kind:chatkind -> direction -> bool -> bool -> string -> message
 

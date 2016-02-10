@@ -4,20 +4,17 @@ true : warn(+A-4-6-7-9-40-42-44-48)
 "src" : include
 "cli" : include
 
-<src/xconfig.ml>: package(sexplib), package(otr), package(sexplib.syntax), \
-  syntax(camlp4o)
+<src/xconfig.ml>: package(sexplib), package(otr), package(ppx_sexp_conv)
 <src/escape.ml>: package(astring)
 <src/utils.ml>: package(uutf)
 <src/persistency.ml>: package(sexplib), package(lwt), package(nocrypto)
-<src/xjid.{ml,mli}>: package(sexplib), package(sexplib.syntax), \
-  package(astring), package(erm_xmpp), syntax(camlp4o)
-<src/user.{ml,mli}>: package(sexplib), package(sexplib.syntax), package(otr), \
-  package(erm_xmpp), package(otr), package(hex), package(ptime), \
-  package(ptime.clock.os), syntax(camlp4o)
-<src/muc.{ml,mli}>: package(sexplib), package(sexplib.syntax), \
-  package(erm_xmpp), package(hex), syntax(camlp4o)
-<src/contact.{ml,mli}>: package(sexplib), package(sexplib.syntax), \
-  package(erm_xmpp), package(hex), syntax(camlp4o)
+<src/xjid.{ml,mli}>: package(ppx_sexp_conv), package(sexplib), \
+  package(astring), package(erm_xmpp)
+<src/user.{ml,mli}>: package(ppx_sexp_conv), package(sexplib), \
+  package(otr), package(otr), package(hex), package(ptime), \
+  package(ptime.clock.os)
+<src/muc.{ml,mli}>: package(sexplib)
+<src/contact.{ml,mli}>: package(sexplib)
 <src/xmpp_callbacks.ml>: package(erm_xmpp), package(lwt), \
   package(tls), package(tls.lwt), package(ptime)
 <src/xmpp_connection.ml>: package(erm_xmpp), package(lwt), \
@@ -31,12 +28,11 @@ true : warn(+A-4-6-7-9-40-42-44-48)
 <cli/cli_commands.ml>: package(astring), package(lwt), \
   package(otr), package(erm_xmpp)
 <cli/cli_config.ml>: package(lwt), package(nocrypto), \
-  package(otr), package(react), package(notty), package(tls.lwt)
+  package(otr), package(notty), package(tls.lwt)
 <cli/cli_state.ml>: package(hex), package(lwt), package(nocrypto), \
   package(erm_xmpp), package(tls.lwt)
 
 <bin/jackline.{ml,byte,native}>: package(astring), package(erm_xmpp), \
   package(hex), package(lwt), package(notty), package(notty.lwt), \
-  package(nocrypto), package(otr), package(react), \
-  package(sexplib), package(sexplib.syntax), package(tls), package(tls.lwt), \
-  package(ptime), package(ptime.clock.os), syntax(camlp4o)
+  package(nocrypto), package(otr), package(sexplib), package(tls), \
+  package(tls.lwt), package(ptime), package(ptime.clock.os)

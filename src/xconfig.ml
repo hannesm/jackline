@@ -5,7 +5,7 @@ open Sexplib.Conv
 type auth = [
   | `Fingerprint of string
   | `Trust_anchor of string
-] with sexp
+] [@@deriving sexp]
 
 type t = {
   version : int ;

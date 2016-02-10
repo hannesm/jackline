@@ -24,8 +24,7 @@ depends: [
   "ptime" {>= "0.8.0"}
   "notty"
   "react"
-  "type_conv"
-  "sexplib"
+  "ppx_sexp_conv"
   "hex"
 ]
-available: [ ocaml-version >= "4.02.0" ]
+available: [ ocaml-version >= "4.02.3" ]

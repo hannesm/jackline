@@ -1,12 +1,12 @@
 open Sexplib.Conv
 
-type bare_jid = string * string with sexp
-type full_jid = bare_jid * string with sexp
+type bare_jid = string * string [@@deriving sexp]
+type full_jid = bare_jid * string [@@deriving sexp]
 
 type t = [
   | `Full of full_jid
   | `Bare of bare_jid
-] with sexp
+] [@@deriving sexp]
 
 let t_to_bare = function
   | `Full (b, _) -> b
