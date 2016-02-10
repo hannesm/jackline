@@ -23,7 +23,6 @@ depends: [
   "astring"
   "ptime" {>= "0.8.0"}
   "notty"
-  "react"
   "sexplib"
   "ppx_sexp_conv"
   "hex"
