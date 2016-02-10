@@ -11,15 +11,10 @@ PKG otr
 PKG tls
 PKG tls.lwt
 PKG lwt
-PKG lwt.syntax
 PKG sexplib
-PKG sexplib.syntax
 PKG hex
 PKG nocrypto
-PKG react
 PKG notty
 PKG ptime
 PKG ptime.clock.os
-
-EXT sexplib
-EXT lwt
+PKG ppx_sexp_conv
