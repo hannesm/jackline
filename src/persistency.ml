@@ -132,17 +132,19 @@ let load_user_dir cfgdir users =
   user_dir cfgdir >>= fun dir ->
   Lwt_unix.opendir dir >>= fun dh ->
   let rec loadone () =
-    try_lwt
-      (Lwt_unix.readdir dh >>= fun f ->
-       if f = "." || f = ".." then
-         loadone ()
-       else
-         load_user dir f >>= fun x ->
-         (match x with
-          | None -> Printf.printf "something went wrong while loading %s/%s\n" dir f
-          | Some x -> Contact.replace_user users x) ;
-         loadone ())
-    with End_of_file -> Lwt_unix.closedir dh
+    Lwt.catch (fun () ->
+        Lwt_unix.readdir dh >>= fun f ->
+        if f = "." || f = ".." then
+          loadone ()
+        else
+          load_user dir f >>= fun x ->
+          (match x with
+           | None -> Printf.printf "something went wrong while loading %s/%s\n" dir f
+           | Some x -> Contact.replace_user users x) ;
+          loadone ())
+      (function
+        | End_of_file -> Lwt_unix.closedir dh
+        | e -> Printf.printf "problem while loading a user %s\n" (Printexc.to_string e) ; Lwt.return_unit)
   in
   loadone ()
 
