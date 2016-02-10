@@ -2,11 +2,6 @@ let option none some = function
   | None   -> none
   | Some x -> some x
 
-let today () =
-  let now = Ptime_clock.now () in
-  let date, _ = Ptime.to_date_time now in
-  date
-
 let rec find_index p id i = function
   | []               -> 0
   | x::_ when p id x -> i

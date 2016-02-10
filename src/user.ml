@@ -368,8 +368,13 @@ let replace_fp u fp =
   in
   { u with otr_fingerprints }
 
+let today () =
+  let now = Ptime_clock.now () in
+  let date, _ = Ptime.to_date_time now in
+  date
+
 let verify_fp user fp m =
-  let now = Utils.today () in
+  let now = today () in
   let verified = match fp.verified with
     | `Verified xs -> `Verified ((m, now) :: xs)
     | _ -> `Verified [(m, now)]
@@ -377,7 +382,7 @@ let verify_fp user fp m =
   replace_fp user { fp with verified }
 
 let revoke_fp user fp =
-  let now = Utils.today () in
+  let now = today () in
   replace_fp user { fp with verified = `Revoked now }
 
 let used_fp user fp resource =
@@ -391,14 +396,14 @@ let used_fp user fp resource =
     fp with
     session_count = succ fp.session_count ;
     resources ;
-    last = Utils.today ()
+    last = today ()
   }
   in
   replace_fp user fp
 
 let find_raw_fp u raw =
   try List.find (fun x -> x.data = raw) u.otr_fingerprints with
-    Not_found -> { data = raw ; verified = `Unverified ; resources = []; session_count = 0 ; first = Utils.today () ; last = Utils.today () }
+    Not_found -> { data = raw ; verified = `Unverified ; resources = []; session_count = 0 ; first = today () ; last = today () }
 
 let verified_fp u raw =
   let fps = find_raw_fp u raw in
