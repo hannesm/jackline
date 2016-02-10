@@ -39,5 +39,4 @@ true : warn(+A-4-6-7-9-40-42-44-48)
   package(hex), package(lwt), package(notty), package(notty.lwt), \
   package(nocrypto), package(otr), package(react), \
   package(sexplib), package(sexplib.syntax), package(tls), package(tls.lwt), \
-  package(ptime), package(ptime.clock.os), package(rresult), \
-  syntax(camlp4o)
+  package(ptime), package(ptime.clock.os), syntax(camlp4o)

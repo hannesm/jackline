@@ -13,7 +13,7 @@ build: [
                            "native-dynlink=%{ocaml-native-dynlink}%" ]
 ]
 depends: [
-  "ocamlfind"
+  "ocamlfind" {build}
   "erm_xmpp" {>= "0.3"}
   "tls" {>= "0.7.0"}
   "nocrypto" {>= "0.5.0"}
@@ -22,7 +22,6 @@ depends: [
   "otr" {>= "0.2.1"}
   "astring"
   "ptime" {>= "0.8.0"}
-  "rresult"
   "notty"
   "react"
   "type_conv"
