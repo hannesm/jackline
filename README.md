@@ -152,9 +152,9 @@ Active keys:
 - `Ctrl-x` jumps to last active user
 - `F5` toggles display of offline contacts
 - `F12` toggles between display of contact list, full screen chat, and raw (only received messages)
-- `F11` and `Shift-F11` increases and decreases width of contact list
-- `F10` and `Shift-F10` increases and decreases height of log window
-- `Ctrl-PgUp`, `Ctrl-PgDown` scrolls chat window
+- `F11` and `Shift-F11` (or `Ctrl-F11`) increases and decreases width of contact list
+- `F10` and `Shift-F10` (or `Ctrl-F10`) increases and decreases height of log window
+- `Ctrl-PgUp` (or `Ctrl-p`), `Ctrl-PgDown` (or `Ctrl-n`) scrolls chat window
 - `<tab>` tab completion (largest prefix)
 - `Ctrl-a` (jump to beginning of line), `Ctrl-e` (jump to end of line), `Ctrl-k` (kill text to the right of cursor), `Ctrl-u` (kill text to the left of cursor), `Ctrl-left` (jump word backwards), `Ctrl-right` (jump word forwards), `Ctrl-f` (forward one character), `Ctrl-b` (backward one character)
 - `Ctrl-space` (mark, indicated by underline), `Ctrl-w` (cut), `Ctrl-y` (yank) [currently broken]
