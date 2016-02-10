@@ -194,28 +194,31 @@ let read_terminal term mvar input_mvar () =
               and s = { s with input = ([], []) }
               in
               let err msg = add_status s (`Local ((`Full s.config.Xconfig.jid), "error")) msg in
-              match String.trim input with
-              | "/quit" -> Lwt.return (`Quit s)
-              | "" ->
+              if String.length (String.trim input) = 0 then
                 let active = active s in
                 let exp = Contact.expanded active in
                 ok (if exp || potentially_visible_resource s active then
                       (Contact.replace_contact s.contacts (Contact.expand active) ;
-                       if exp then { s with active_contact = `Bare (Contact.bare active) }
-                       else s)
+                       if exp then
+                         { s with active_contact = `Bare (Contact.bare active) }
+                       else
+                         s)
                     else
                       s)
-              | cmd when String.get cmd 0 = '/' ->
-                let active = clear_input (active s) cmd in
-                Cli_commands.exec cmd s active self p
-              | _ when self ->
-                err "try `M-x doctor` in emacs instead" ;
-                ok s
-              | message ->
-                let active = clear_input (active s) message in
+              else if String.get input 0 = '/' then
+                match String.trim input with
+                | "/quit" -> Lwt.return (`Quit s)
+                | cmd ->
+                  let active = clear_input (active s) cmd in
+                  Cli_commands.exec cmd s active self p
+              else if self then
+                (err "try `M-x doctor` in emacs instead" ;
+                 ok s)
+              else
+                let active = clear_input (active s) input in
                 (match !xmpp_session with
                  | None -> err "no active session, try to connect first" ; Lwt.return_unit
-                 | Some t -> send_msg t s active message) >>= fun () ->
+                 | Some t -> send_msg t s active input) >>= fun () ->
                 ok s
             in
             p handler >>= fun () ->
