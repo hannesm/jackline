@@ -63,8 +63,9 @@ let v_center left right width =
     else
       (I.(left <|> right), succ lw)
 
-let str_to_char_list str =
-  Astring.String.fold_right (fun ch acc -> int_of_char ch :: acc) str []
+let str_to_char_list str : int list =
+  let open Uutf in
+  List.rev (String.fold_utf_8 (fun acc _ -> function `Uchar i -> i :: acc | `Malformed _ -> acc) [] str)
 
 let char_list_to_str xs =
   let inp = Array.of_list xs in
