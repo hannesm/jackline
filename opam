@@ -28,4 +28,4 @@ depends: [
   "ppx_sexp_conv"
   "hex"
 ]
-available: [ ocaml-version >= "4.02.3" ]
+available: [ ocaml-version >= "4.02.2" ]
