@@ -49,7 +49,9 @@ let validate_utf8 txt =
       (* ctrl chars used in conjunction with ISO 8859 character sets (C0/C1) *)
       if !unicode then Uutf.Buffer.add_utf_8 buf 0xFFFD ; loop d buf
 
-    | `Uchar x -> Uutf.Buffer.add_utf_8 buf x ; loop d buf
+    | `Uchar x ->
+      let c = if !unicode then x else if x > 0xff then 0x3f else x in
+      Uutf.Buffer.add_utf_8 buf c ; loop d buf
   in
   let nln = `Readline 0x000A in
   loop (Uutf.decoder ~nln ~encoding:`UTF_8 (`String txt)) (Buffer.create (String.length txt))
