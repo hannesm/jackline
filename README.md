@@ -66,7 +66,7 @@ First be aware that this is unreleased β software.  Bug reports are
 welcome (pull requests as well).  There might be a release later in
 2016 (XML/XMPP library needs some refactoring first).
 
-Get OCaml (>= 4.02.2), get opam (1.2),
+Get OCaml (>= 4.02.3), get opam (1.2),
 [aspcud](http://www.cs.uni-potsdam.de/wv/aspcud/) and
 [gmp](http://gmplib.org/) are also required.
 If you have an older OCaml compiler, run `opam switch 4.02.3`.
