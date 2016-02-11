@@ -121,7 +121,6 @@ let send_msg t state active_user message =
   in
   maybe_send ?kind jid session out user_out
 
-(*
 let m_to_s ms =
   let rec to_s acc = function
     | [] -> String.concat " " acc
@@ -149,7 +148,6 @@ let k_to_s = function
   | `Key (`Page `Down, ms) -> "page down:" ^ m_to_s ms
   | `Key (`Function x, ms) -> "function " ^ string_of_int x ^ ":" ^ m_to_s ms
   | _ -> "unknown"
-*)
 
 let read_terminal term mvar input_mvar () =
   (* XXX: emacs key bindings: C- wy[mark, kill, yank] C-_-[undo/redo] *)
@@ -274,12 +272,11 @@ let read_terminal term mvar input_mvar () =
 
           | `Resize _ -> p ok >>= fun () -> loop ()
 
-          | _ -> p ok >>= fun () -> loop ()
+  (*          | _ -> p ok >>= fun () -> loop ()*)
 
-(*
           | k ->
             let k = k_to_s k in
             p (fun s -> add_status s (`Local (`Full s.config.Xconfig.jid, "key")) k ; ok s) >>= fun () ->
-            loop () *)
+            loop ()
   in
   loop ()
