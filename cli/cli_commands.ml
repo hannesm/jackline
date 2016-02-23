@@ -43,6 +43,9 @@ let _ =
   new_command
     "quit" "/quit" "exits this client" [] ;
 
+  new_command
+    "logheight" "/logheight [number]" "adjusts height of log to n" [] ;
+
   (* global roster commands *)
   new_command
     "add" "/add [jid]"
@@ -937,6 +940,13 @@ let exec input state contact isself p =
      (* disconnect *)
      | ("disconnect", _), Some _ -> handle_disconnect (msg ?prefix:None) >>= fun () -> ok state
      | ("disconnect", _), None   -> err "not connected"
+
+     (* log height *)
+     | ("logheight", Some x), _ ->
+       (match try Some (int_of_string x) with Failure _ -> None with
+         | Some log_height when log_height >= 0 -> ok { state with log_height }
+         | _ -> err "not a positive number")
+     | ("logheight", _), _ -> err "requires argument"
 
      (* commands not using active_contact *)
      | (x, _), None when List.mem x global_things -> err "not connected"
