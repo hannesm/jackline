@@ -36,7 +36,7 @@ let start_client cfgdir debug unicode () =
 
   Utils.unicode := unicode ;
 
-  let term = Notty_lwt.Term.create ~input:Lwt_unix.stdin ~mouse:false () in
+  let term = Notty_lwt.Term.create ~mouse:false () in
 
   let tc = Unix.(tcgetattr stdin) in
   Unix.(tcsetattr stdin TCSANOW { tc with c_isig = false ; c_ixon = false ; c_ixoff = false }) ;
