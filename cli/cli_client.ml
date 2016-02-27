@@ -27,7 +27,7 @@ let format_log tz_offset_s now log =
   | [] -> pre
   | x::xs -> I.vcat (I.(pre <|> x) :: xs)
 
-let format_message tz_offset_s now buddy resource { User.direction ; encrypted ; received ; timestamp ; message ; _ } =
+let format_message tz_offset_s now self buddy resource { User.direction ; encrypted ; received ; timestamp ; message ; _ } =
   let time = print_time ~now ~tz_offset_s timestamp
   and style, pre =
     match buddy with
@@ -67,8 +67,19 @@ let format_message tz_offset_s now buddy resource { User.direction ; encrypted ;
     | `Highlight -> A.(st bold)
   in
   let a = to_style style in
-  let pre = I.string a (time ^ pre) in
-  match split_on_nl a message with
+  let pre, msg =
+    if String.length message >= 3 && String.sub message 0 3 = "/me" then
+      let n = fst (match direction with
+          | `From jid -> Xjid.t_to_bare jid
+          | `To _ -> self.User.bare_jid
+          | `Local (jid, _) -> Xjid.t_to_bare jid)
+      in
+      (I.string a n,
+       String.sub message 3 (String.length message - 3))
+    else
+      (I.string a (time ^ pre), message)
+  in
+  match split_on_nl a msg with
   | [] -> pre
   | x::xs -> I.vcat (I.(pre <|> x)::xs)
 
@@ -264,7 +275,7 @@ let render_state (width, height) state =
       in
       v_center iinp r width
     and main =
-      let msgfmt = format_message tz_offset_s now active resource
+      let msgfmt = format_message tz_offset_s now (self state) active resource
       and msgfilter = msgfilter active state.active_contact
       and msgs msgfilter msgfmt =
         let filter, fmt = match active with

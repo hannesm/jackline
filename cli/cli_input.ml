@@ -210,6 +210,7 @@ let read_terminal term mvar input_mvar () =
                 (* copy-paste: treat as text if line starts with "/*" or "// " *)
                 && not String.(length input >= 2 && get input 1 = '*')
                 && not String.(length input >= 3 && sub input 1 2 = "/ ")
+                && not String.(length input >= 3 && sub input 1 2 = "me")
               then
                 match String.trim input with
                 | "/quit" -> Lwt.return (`Quit s)
