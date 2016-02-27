@@ -238,7 +238,19 @@ let read_terminal term mvar input_mvar () =
                 match Cli_commands.completion input with
                 | [] -> pre
                 | [x] -> pre @ str_to_char_list (x ^ " ")
-                | _ -> pre
+                | x::xs ->
+                  let shortest = List.fold_left (fun l x -> min l (String.length x)) (String.length x) xs in
+                  let rec prefix idx =
+                    if idx >= shortest then
+                      idx
+                    else
+                      let c = String.get x idx in
+                      if List.for_all (fun s -> String.get s idx = c) xs then
+                        prefix (succ idx)
+                      else
+                        idx
+                  in
+                  pre @ str_to_char_list (String.sub x 0 (prefix 0))
               in
               ok ({ s with input = (pre, post) })
             in
