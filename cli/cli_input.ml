@@ -277,7 +277,7 @@ let read_terminal term mvar input_mvar () =
           | `Key (`Function 11, [`Ctrl]) -> p (fun s -> ok { s with buddy_width = max 0 (pred s.buddy_width) }) >>= fun () -> loop ()
           | `Key (`Function 12, []) -> p (fun s -> ok { s with window_mode = next_display_mode s.window_mode }) >>= fun () -> loop ()
 
-          | `Resize _ -> p ok >>= fun () -> loop ()
+          | `Resize size -> p (fun _ -> Lwt.return (`Resize size)) >>= fun () -> loop ()
 
           | _ -> p ok >>= fun () -> loop ()
 

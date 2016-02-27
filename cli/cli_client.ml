@@ -343,12 +343,11 @@ let quit state =
     !xmpp_session
 
 (* this is rendering and drawing stuff to terminal, waiting for updates of the ui_mvar... *)
-let rec loop term mvar input_mvar state =
+let rec loop term size mvar input_mvar state =
   let reset state =
     let buddies = Contact.fold (fun _ b acc -> Contact.reset b :: acc) state.contacts [] in
     List.iter (Contact.replace_contact state.contacts) buddies
   in
-  let size = Notty_lwt.Term.size term in
   let image, cursorc =
     try
       render_state size state
@@ -370,16 +369,17 @@ let rec loop term mvar input_mvar state =
     (fun exn ->
        add_status state (`Local ((`Full state.config.Xconfig.jid), "error")) (Printexc.to_string exn) ;
        Lwt.return (`Failure state)) >>= function
-  | `Ok state -> loop term mvar input_mvar state
-  | `Disconnect state -> reset state ; loop term mvar input_mvar state
+  | `Ok state -> loop term size mvar input_mvar state
+  | `Resize size -> loop term size mvar input_mvar state
+  | `Disconnect state -> reset state ; loop term size mvar input_mvar state
   | `Failure state ->
     reset state ;
     ignore (Lwt_engine.on_timer 10. false
               (fun _ -> Lwt.async (fun () -> Lwt_mvar.put state.connect_mvar Reconnect))) ;
-    loop term mvar input_mvar state
+    loop term size mvar input_mvar state
   | `Ask c ->
     c state input_mvar mvar >>= fun s ->
-    loop term mvar input_mvar s
+    loop term size mvar input_mvar s
   | `Quit state ->
     quit state >>= fun () ->
     Lwt.return state
