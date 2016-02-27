@@ -128,16 +128,19 @@ let might_match cmd prefix =
 
 let completion input =
   let open Astring.String in
-  let l = length input in
+  let l = length input
+  and ws = try String.index input ' ' > 0 with Not_found -> false
+  in
   if l > 0 && get input 0 = '/' then
     match cmd_arg input with
-    | (cmd, None) when Commands.mem commands cmd ->
-      let command = Commands.find commands cmd in
-      command.subcommands
+    | (cmd, None) when ws && Commands.mem commands cmd ->
+      (Commands.find commands cmd).subcommands
     | (cmd, None) ->
       let cmds = keys () in
-      List.map (fun x -> drop ~max:(pred l) x)
-        (List.filter (fun f -> might_match f cmd) cmds)
+      (match List.filter (fun f -> might_match f cmd) cmds with
+       | [] -> []
+       | [_] when Commands.mem commands cmd -> (Commands.find commands cmd).subcommands
+       | xs -> List.map (fun x -> drop ~max:(pred l) x) xs)
     | (cmd, Some arg) when Commands.mem commands cmd ->
       let command = Commands.find commands cmd in
       List.map (fun x -> drop ~max:(pred l) (cmd ^ " " ^ x))
