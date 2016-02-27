@@ -269,8 +269,8 @@ let render_state (width, height) state =
           let input = char_list_to_str pre in
           ( match Cli_commands.completion input with
             | [] -> I.empty
-            | [x] -> I.string A.(fg (gray 20)) x
-            | xs -> I.string A.(fg (gray 20)) (String.concat "|" xs) )
+            | [x] -> I.string A.(fg (gray 18)) x
+            | xs -> I.string A.(fg (gray 18)) (String.concat "|" xs) )
         | _ -> iinp2
       in
       v_center iinp r width
