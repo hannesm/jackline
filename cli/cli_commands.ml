@@ -101,21 +101,10 @@ let _ =
     (keys ())
 
 let split_ws s =
-  let l = String.length s in
-  let ws = try String.index s ' ' with Not_found -> l in
-  let arg =
-    if ws = l then
-      None
-    else
-      let ws' = succ ws in
-      let str = String.sub s ws' (l - ws') in
-      let arg = String.trim str in
-      if arg = "" then
-        None
-      else
-        Some arg
-  in
-  (String.sub s 0 ws, arg)
+  match Astring.String.cut ~sep:" " s with
+  | None -> (s, None)
+  | Some (x, y) when y = "" -> (x, None)
+  | Some (x, y) -> (x, Some y)
 
 let cmd_arg input =
   let open String in

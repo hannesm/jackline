@@ -373,13 +373,8 @@ let session state =
                   | `Bare _ -> User.active_session user
                   | `Full (_, r) -> User.find_session user r
 
-let member state =
-  match active state with
-  | `Room r -> Muc.member r state.active_contact
-  | `User _ -> None
-
 let resource state = match active state with
-  | `Room _ -> Utils.option None (fun m -> Some (`Member m)) (member state)
+  | `Room r -> Utils.option None (fun m -> Some (`Member m)) (Muc.member r state.active_contact)
   | `User _ -> Utils.option None (fun s -> Some (`Session s))  (session state)
 
 let self state =
