@@ -69,12 +69,20 @@ let format_message tz_offset_s now self buddy resource { User.direction ; encryp
   let a = to_style style in
   let pre, msg =
     if String.length message >= 3 && String.sub message 0 3 = "/me" then
-      let n = fst (match direction with
-          | `From jid -> Xjid.t_to_bare jid
-          | `To _ -> self.User.bare_jid
-          | `Local (jid, _) -> Xjid.t_to_bare jid)
+      let n = match buddy with
+        | `User _ -> fst (match direction with
+            | `From jid -> Xjid.t_to_bare jid
+            | `To _ -> self.User.bare_jid
+            | `Local (jid, _) -> Xjid.t_to_bare jid)
+        | `Room r -> (match direction with
+            | `From (`Full (_, r)) -> r
+            | `To _ -> r.Muc.my_nick
+            | _ -> "local")
+      and p =
+        (if received then "-" else "?") ^
+        (if encrypted then "O" else "-") ^ " *"
       in
-      (I.string a n,
+      (I.string a (time ^ p ^ n ^ "*"),
        String.sub message 3 (String.length message - 3))
     else
       (I.string a (time ^ pre), message)
