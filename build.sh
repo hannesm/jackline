@@ -11,7 +11,8 @@ action ()
 {
     case $1 in
         default)
-            GIT=$(git log --abbrev-commit --oneline -1 | tr -d '/')
+            GIT="$(git log --abbrev-commit --oneline -1 | tr -d '/' \
+                 | sed -e 's:\\:\\\\\\\\:g' -e 's#"#\\\\"#g' )"
             DIRTY=$(git status -bs --porcelain | wc -l)
             if [ $DIRTY -eq 1 ]; then
                 cat src/utils.ml | sed -e "s/%%VERSION%%/$GIT/g" > src/utils.ml.tmp
