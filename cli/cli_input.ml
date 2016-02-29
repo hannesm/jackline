@@ -15,9 +15,18 @@ let navigate_message_buffer state direction =
 
 let history state dir =
   let active = active state in
-  let hitems = "" :: Contact.readline_history active
-  and cursor = Contact.history_position active
+  let cursor = Contact.history_position active in
+  let active =
+    let input =
+      let pre, post = state.input in
+      char_list_to_str (pre@post)
+    in
+    if List.mem input (Contact.readline_history active) then
+      active
+    else
+      Contact.add_readline_history active input
   in
+  let hitems = Contact.readline_history active in
   let l = List.length hitems in
   let activate p =
     let c = Contact.set_history_position active p in
@@ -188,6 +197,7 @@ let read_terminal term mvar input_mvar () =
               let clear_input b message =
                 let b = Contact.add_readline_history b message in
                 let b = Contact.set_input_buffer b ([], []) in
+                let b = Contact.set_history_position b 0 in
                 Contact.replace_contact s.contacts b ;
                 b
               and self = Xjid.jid_matches (`Bare (fst s.config.Xconfig.jid)) s.active_contact
