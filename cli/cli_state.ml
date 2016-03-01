@@ -148,7 +148,9 @@ module Connect = struct
            Unix.string_of_inet_addr inet_addr ^ " on port " ^ string_of_int port
         | Unix.ADDR_UNIX str -> str
       in
-      selflog ui_mvar "connecting" ("to " ^ domain ^ " (" ^ addr ^ ")")
+      selflog ui_mvar "connecting" ("to " ^ domain ^
+        " (" ^ (match hostname with None -> "" | Some n -> n ^ ": ")
+        ^ addr ^ ")")
     in
     Xmpp_callbacks.resolve hostname port domain >>= fun sa ->
     report sa >|= fun () ->
