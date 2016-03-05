@@ -410,8 +410,7 @@ let resolve (hostname : string option) (port : int option) (jid_idn : string) =
   | Some x -> to_ipv4 x
   | None -> resolve jid_idn
 
-let connect sockaddr myjid certname password presence authenticator user_data mvar =
-  PlainSocket.open_connection sockaddr >>= fun socket_data ->
+let connect socket_data myjid certname password presence authenticator user_data mvar =
   let module Socket_module =
     struct type t = PlainSocket.socket
            let socket = socket_data
@@ -420,7 +419,7 @@ let connect sockaddr myjid certname password presence authenticator user_data mv
   in
 
   let tls_socket () =
-    TLSSocket.switch (PlainSocket.get_fd socket_data) certname authenticator >>= fun socket_data ->
+    TLSSocket.switch socket_data certname authenticator >>= fun socket_data ->
     user_data.locallog "TLS session info" (tls_epoch_to_line socket_data) >>= fun () ->
     let module TLS_module =
       struct type t = Tls_lwt.Unix.t

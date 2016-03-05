@@ -173,43 +173,48 @@ module Connect = struct
       | None -> failure (Invalid_argument "no password provided, please restart")
       | Some password ->
         Lwt.catch (fun () ->
-          (resolve config ui_mvar >>= fun sockaddr ->
-           let certname = match config.Xconfig.certificate_hostname with
-             | None -> JID.to_idn (Xjid.jid_to_xmpp_jid (`Full config.Xconfig.jid))
-             | Some x -> x
-           in
-           (match config.Xconfig.authenticator with
-            | `Trust_anchor x -> X509_lwt.authenticator (`Ca_file x)
-            | `Fingerprint fp ->
-              let time = Unix.gettimeofday () in
-              let fp =
-                Nocrypto.Uncommon.Cs.of_hex
-                  (String.map (function ':' -> ' ' | x -> x) fp)
-              in
-              let fingerprints = [(certname, fp)]
-              and hash = `SHA256
-              in
-              let auth = X509.Authenticator.server_cert_fingerprint ~time ~hash ~fingerprints in
-              Lwt.return auth) >>= fun authenticator ->
-           let kind, show = Xmpp_callbacks.presence_to_xmpp p in
-           Xmpp_callbacks.connect
-             sockaddr
-             config.Xconfig.jid certname password
-             (kind, show, s, prio) authenticator user_data
-             (fun session ->
-                Lwt_mvar.put mvar (Success user_data) >>= fun () ->
-                let users =
-                  Contact.fold
-                    (fun k v acc ->
-                       match v with
-                       | `Room r when r.Muc.last_status -> k :: acc
-                       | _ -> acc)
-                    users []
-                in
-                Lwt_list.iter_s (fun x -> Xmpp_callbacks.Xep_muc.enter_room session (Xjid.jid_to_xmpp_jid (`Bare x))) users)) >|= fun session ->
-          xmpp_session := Some session ;
-          Lwt.async (fun () -> Xmpp_callbacks.parse_loop session))
-        (fun exn -> failure exn)
+          resolve config ui_mvar >>= fun sockaddr ->
+          let certname = match config.Xconfig.certificate_hostname with
+            | None -> JID.to_idn (Xjid.jid_to_xmpp_jid (`Full config.Xconfig.jid))
+            | Some x -> x
+          in
+          (match config.Xconfig.authenticator with
+           | `Trust_anchor x -> X509_lwt.authenticator (`Ca_file x)
+           | `Fingerprint fp ->
+             let time = Unix.gettimeofday () in
+             let fp =
+               Nocrypto.Uncommon.Cs.of_hex
+                 (String.map (function ':' -> ' ' | x -> x) fp)
+             in
+             let fingerprints = [(certname, fp)]
+             and hash = `SHA256
+             in
+             let auth = X509.Authenticator.server_cert_fingerprint ~time ~hash ~fingerprints in
+             Lwt.return auth) >>= fun authenticator ->
+          let kind, show = Xmpp_callbacks.presence_to_xmpp p in
+          let socket = Lwt_unix.(socket PF_INET SOCK_STREAM 0) in
+          Lwt.catch (fun () ->
+            Lwt_unix.connect socket sockaddr >>= fun () ->
+            Xmpp_callbacks.connect
+              socket
+              config.Xconfig.jid certname password
+              (kind, show, s, prio) authenticator user_data
+              (fun session ->
+                 Lwt_mvar.put mvar (Success user_data) >>= fun () ->
+                 let users =
+                   Contact.fold
+                     (fun k v acc ->
+                        match v with
+                        | `Room r when r.Muc.last_status -> k :: acc
+                        | _ -> acc)
+                     users []
+                 in
+                 let rooms = List.map (fun x -> Xjid.jid_to_xmpp_jid (`Bare x)) users in
+                 Lwt_list.iter_s (Xmpp_callbacks.Xep_muc.enter_room session) rooms) >|= fun session ->
+            xmpp_session := Some session ;
+            Lwt.async (fun () -> Xmpp_callbacks.parse_loop session))
+            (fun exn -> Lwt_unix.close socket >>= fun () -> failure exn))
+          (fun exn -> failure exn)
     in
     let rec reconnect_loop user_data presence =
       Lwt_mvar.take mvar >>= function

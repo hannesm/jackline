@@ -22,14 +22,6 @@ struct
 
   type socket = fd
 
-  let get_fd fd = fd
-
-  let open_connection sockaddr =
-    let open Lwt_unix in
-    let fd = socket PF_INET SOCK_STREAM 0 in
-    connect fd sockaddr >>= fun () ->
-    Lwt.return fd
-
   let read fd buf start len =
     Lwt_unix.read fd buf start len >>= fun size ->
     dbg ("IN: " ^ (String.sub buf start size)) >|= fun () ->
