@@ -132,8 +132,10 @@ module Connect = struct
     Xmpp_callbacks.Keepalive.keepalive_running := false ;
     match !xmpp_session with
     | Some s ->
-       Xmpp_callbacks.close s >|= fun () ->
-       xmpp_session := None
+       xmpp_session := None ;
+       Lwt.catch
+         (fun () -> Xmpp_callbacks.close s)
+         (fun _ -> Lwt.return_unit)
     | None   ->
        Lwt.return_unit
 
