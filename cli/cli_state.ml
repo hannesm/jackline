@@ -149,8 +149,11 @@ module Connect = struct
         | Unix.ADDR_INET (inet_addr, port) ->
            Unix.string_of_inet_addr inet_addr ^ " on port " ^ string_of_int port
         | Unix.ADDR_UNIX str -> str
+      and host = match hostname with
+        | Some x -> x
+        | None -> domain
       in
-      Lwt.async (fun () -> selflog ui_mvar "connecting" ("to " ^ domain ^ " (" ^ addr ^ ")"))
+      Lwt.async (fun () -> selflog ui_mvar "connecting" ("to " ^ host ^ " (" ^ addr ^ ")"))
     in
     Xmpp_callbacks.resolve hostname port domain >|= fun sa ->
     report sa ;
