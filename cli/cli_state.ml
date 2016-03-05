@@ -150,18 +150,18 @@ module Connect = struct
            Unix.string_of_inet_addr inet_addr ^ " on port " ^ string_of_int port
         | Unix.ADDR_UNIX str -> str
       in
-      selflog ui_mvar "connecting" ("to " ^ domain ^ " (" ^ addr ^ ")")
+      Lwt.async (fun () -> selflog ui_mvar "connecting" ("to " ^ domain ^ " (" ^ addr ^ ")"))
     in
-    Xmpp_callbacks.resolve hostname port domain >>= fun sa ->
-    report sa >|= fun () ->
+    Xmpp_callbacks.resolve hostname port domain >|= fun sa ->
+    report sa ;
     sa
 
   let connect_me config ui_mvar state_mvar users =
     let mvar = Lwt_mvar.create Cancel in
     let failure reason =
       disconnect () >>= fun () ->
-      selflog ui_mvar "session error" (Printexc.to_string reason) >>= fun () ->
-      let conn = fun () -> Lwt_mvar.put mvar Reconnect in
+      Lwt.async (fun () -> selflog ui_mvar "session error" (Printexc.to_string reason)) ;
+      let conn () = Lwt_mvar.put mvar Reconnect in
       ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async conn)) ;
       Lwt.return_unit
     in
