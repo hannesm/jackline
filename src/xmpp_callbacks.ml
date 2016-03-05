@@ -419,7 +419,7 @@ let connect sockaddr myjid certname password presence authenticator user_data mv
     end
   in
 
-  let make_tls () =
+  let tls_socket () =
     TLSSocket.switch (PlainSocket.get_fd socket_data) certname authenticator >>= fun socket_data ->
     user_data.locallog "TLS session info" (tls_epoch_to_line socket_data) >>= fun () ->
     let module TLS_module =
@@ -435,7 +435,7 @@ let connect sockaddr myjid certname password presence authenticator user_data mv
     ~user_data
     ~myjid
     ~plain_socket:(module Socket_module : XMPPClient.Socket)
-    ~tls_socket:make_tls
+    ~tls_socket
     ~password
     (session_callback presence mvar)
 
