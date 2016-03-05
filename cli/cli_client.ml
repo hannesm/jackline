@@ -373,7 +373,7 @@ let rec loop term size mvar input_mvar state =
       and note = I.string A.empty
           "While trying to render the UI.  Try to scroll to another buddy (Page \
            Up/Down), switch rendering of buddy list (F12), or clear this \
-           buddies messages (by typing /clear<ret>); please report this bug \
+           buddies messages (/clear<ret>); please report this bug \
            (including the offending characters and the error message)"
       in
       let w = fst size in
