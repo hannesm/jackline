@@ -179,7 +179,7 @@ status line
 
 ### FAQ
 
-- How do I update the fingerprint of the server certificate (getting authentication failure messages)? -- Currently you have to edit `config.sexp`:  find the `(Fingerprint XXX)` data, and replace XXX with the new fingerprint (`openssl s_client -connect SERVER:5222 -starttls xmpp | openssl x509 -fingerprint -sha256 -noout` might be useful (or [tlsclient](https://github.com/hannesm/tlsclient)).
+- How do I update the fingerprint of the server certificate (getting authentication failure messages)? -- Currently you have to edit `config.sexp`:  find the `(Fingerprint XXX)` data, and replace XXX with the new fingerprint (`openssl s_client -connect SERVER:5222 -starttls xmpp | openssl x509 -fingerprint -sha256 -noout` might be useful (or [tlsclient](https://github.com/hannesm/tlsclient) using `tlsclient --starttls xmpp -z SERVER:5222`).
 - How do I prevent jackline from doing DNS lookups? -- Interactive configuration or specify `(hostname ("146.255.57.229"))` in `config.sexp`.
 - The server certificate does not match the server name, how do I fix this? -- Interactive configuration or specify `(cert_hostname ("blabla.com"))` in `config.sexp`.
 - Keys do not work on MacOSX -- [This](https://github.com/timothybasanov/terminal-app-function-keys#full-list-of-all-bindings) might be useful.
