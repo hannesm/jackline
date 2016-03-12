@@ -183,8 +183,10 @@ let configure term () =
         Utils.option dom (fun x -> x) hostname ^ ":" ^
         string_of_int (Utils.option 5222 (fun x -> x) port)
       in
-      "run `openssl s_client -connect " ^ hostport ^
-      " -starttls xmpp | openssl x509 -sha256 -fingerprint -noout`"
+      "If you have `tlsclient` installed, you can run: "
+      ^ "`tlsclient -z --starttls=xmpp " ^ hostport ^ "`\n"
+      ^ "Alternatively: `openssl s_client -connect " ^ hostport
+      ^ " -starttls xmpp | openssl x509 -sha256 -fingerprint -noout`"
     in
     [I.string A.empty str]
   and transform fp =
