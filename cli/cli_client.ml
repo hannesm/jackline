@@ -312,7 +312,7 @@ let render_state (width, height) state =
     and bottom =
       let self = self state in
       let status =
-        let notify = List.length state.notifications > 0
+        let notify = has_any_notifications state
         and log = Contact.preserve_messages active
         and mysession = selfsession state
         in
