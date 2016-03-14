@@ -40,6 +40,7 @@ type state = {
 
   (* list of jid to blink *)
   notifications : Xjid.t list ;
+  gui_has_focus : bool ;
 
   (* initially yourself, modified by key presses (page up/page down/C-x/C-q) *)
   active_contact : Xjid.t ;
@@ -80,15 +81,10 @@ module Notify = struct
     | D_N -> "disconnected_notifications"
     | C_N -> "connected_notifications"
 
-  let notify_writer jid cb fname =
+  let notify_writer jid cb =
     let mvar = Lwt_mvar.create Disconnected in
-    let write_file buf =
+    let notify_call buf =
       let open Lwt_unix in
-      Lwt.catch (fun () ->
-          openfile fname [O_WRONLY ; O_TRUNC ; O_CREAT ] 0o600 >>= fun fd ->
-          Persistency.write_data fd buf >>= fun () ->
-          close fd)
-        (fun _ -> Lwt.return_unit) >>= fun () ->
       match cb with
       | None -> Lwt.return_unit
       | Some x ->
@@ -112,7 +108,7 @@ module Notify = struct
         | Clear, D_N -> D
         | _, _ -> s0
       in
-      write_file (to_string s1) >>= fun () ->
+      notify_call (to_string s1) >>= fun () ->
       if s1 = Q then
         Lwt.return_unit
       else
@@ -256,6 +252,7 @@ let empty_state config_directory config contacts connect_mvar state_mvar =
     last_active_contact = active    ;
 
     notifications       = []        ;
+    gui_has_focus       = true      ;
 
     show_offline        = true      ;
     window_mode         = BuddyList ;
@@ -292,16 +289,6 @@ let random_string () =
   let rnd = Rng.generate 12 in
   Cstruct.to_string (Base64.encode rnd)
 
-let notify state jid =
-  Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Notifications) ;
-  if
-    List.exists (Xjid.jid_matches jid) state.notifications ||
-      (Xjid.jid_matches state.active_contact jid && state.scrollback = 0)
-  then
-    state
-  else
-    { state with notifications = jid :: state.notifications }
-
 let active state =
   match Contact.find_contact state.contacts (Xjid.t_to_bare state.active_contact) with
   | None -> assert false
@@ -313,14 +300,38 @@ let isactive state jid =
   | `User u when not u.User.expand -> Xjid.jid_matches (`Bare bare) jid
   | _ -> jid = state.active_contact
 
+let contact_has_user_focus state jid =
+  state.gui_has_focus && (isactive state jid)
+
+let has_any_notifications state = List.length state.notifications > 0
+
+let notify state jid =
+  if contact_has_user_focus state jid then
+    (* TODO(infinity0): perhaps do a no-op notification as well *)
+    state
+  else (
+    Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Notifications) ;
+    if
+      List.exists (Xjid.jid_matches jid) state.notifications ||
+      (Xjid.jid_matches state.active_contact jid && state.scrollback = 0)
+    then
+      state
+    else
+      { state with notifications = jid :: state.notifications }
+  )
+
 let has_notifications state jid =
   List.exists (Xjid.jid_matches jid) state.notifications
 
+(* TODO(infinity0): call this whenever gui_has_focus turns true *)
 let maybe_clear state =
-  let notifications = List.filter (fun x -> not (isactive state x)) state.notifications in
-  if List.length notifications = 0 then
-    Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) ;
-  { state with notifications }
+  if not state.gui_has_focus then
+    state
+  else
+    let notifications = List.filter (fun x -> not (isactive state x)) state.notifications in
+    if not (has_any_notifications state) then
+      Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) ;
+    { state with notifications }
 
 let active_contacts state =
   let active jid =

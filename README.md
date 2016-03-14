@@ -131,8 +131,7 @@ highest priority.
 
 When a new message is received, this is indicated by blinking of the
 contact, a prepended `*` (or `☀` in case of collapsed contact), a blue
-`#` in the bottom left corner, execution of `notification_callback`,
-and modification of `notification.state`.
+`#` in the bottom left corner and execution of `notification_callback`.
 
 A message is sent to the active contact by typing it followed by
 `return`.
@@ -183,7 +182,7 @@ status line
 - How do I prevent jackline from doing DNS lookups? -- Interactive configuration or specify `(hostname ("146.255.57.229"))` in `config.sexp`.
 - The server certificate does not match the server name, how do I fix this? -- Interactive configuration or specify `(cert_hostname ("blabla.com"))` in `config.sexp`.
 - Keys do not work on MacOSX -- [This](https://github.com/timothybasanov/terminal-app-function-keys#full-list-of-all-bindings) might be useful.
-- I want to receive notifications. -- There are two ways at the moment: `notification.state` contains the current state (written on every change) and a hook script can be defined during interactive configuration or `(notification_callback (/my/favorite/script.sh))` in `config.sexp`.  It is executed with two arguments: the jabber id and state.
+- I want to receive notifications. -- A hook script can be defined during interactive configuration or `(notification_callback (/my/favorite/script.sh))` in `config.sexp`.  It is executed with two (or more) arguments: the local user's jabber id, a summary of the state of jackline; see `cli/cli_state.ml` search for `module Notify` for details.
 - I want a systray icon. -- there are two projects, [posiputt/jackification](https://github.com/posiputt/jackification), and [cfcs/misc](https://github.com/cfcs/misc/blob/master/jackline_systray.py)
 - I want to have notifications on MacOSX. - Andrej wrote [a script](https://github.com/schoeke/notline) using terminal notifier; otherwise [this guide](https://gist.github.com/prebenlm/5562656) might help.
 - Support? -- join us at jackline@conference.jabber.ccc.de

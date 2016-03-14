@@ -94,8 +94,7 @@ let start_client cfgdir debug unicode () =
   let ui_mvar = Lwt_mvar.create_empty () in
 
   let state_mvar =
-    let file = Filename.concat cfgdir "notification.state" in
-    Cli_state.Notify.notify_writer myjid config.Xconfig.notification_callback file
+    Cli_state.Notify.notify_writer myjid config.Xconfig.notification_callback
   in
   let connect_mvar = Cli_state.Connect.connect_me config ui_mvar state_mvar users in
   let state = Cli_state.empty_state cfgdir config users connect_mvar state_mvar in
