@@ -64,6 +64,28 @@ let add_status state dir msg =
      let self = User.insert_message self dir false true msg in
      Contact.replace_user state.contacts self
 
+let active state =
+  match Contact.find_contact state.contacts (Xjid.t_to_bare state.active_contact) with
+  | None -> assert false
+  | Some x -> x
+
+let isactive state jid =
+  let bare = Xjid.t_to_bare state.active_contact in
+  match active state with
+  | `User u when not u.User.expand -> Xjid.jid_matches (`Bare bare) jid
+  | _ -> jid = state.active_contact
+
+let has_any_notifications state = List.length state.notifications > 0
+
+let maybe_clear state =
+  if not state.gui_has_focus then
+    state
+  else
+    let notifications = List.filter (fun x -> not (isactive state x)) state.notifications in
+    if not (has_any_notifications state) then
+      Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) ;
+    { state with notifications }
+
 let selflog mvar from message =
   let c s =
     add_status s (`Local ((`Full s.config.Xconfig.jid), from)) message ;
@@ -80,6 +102,40 @@ module Notify = struct
     | C -> "connected"
     | D_N -> "disconnected_notifications"
     | C_N -> "connected_notifications"
+
+  let to_gui_focus line = match line with
+    | "gui_focus true" -> true
+    | "gui_focus false" -> false
+    | _ -> true
+
+  let channel_of_int fd =
+    (* OCaml does not provide a library method to get the nth file descriptor of
+       a process, so we instead open /dev/fd/n which is portable across most
+       popular modern Unixes including Linux and *BSD, see
+
+       https://unix.stackexchange.com/questions/123602/portability-of-file-descriptor-links
+
+       We could also use ExtUnix which provides file_descr_of_int but this seems
+       a bit excessive just for this. *)
+    let ufd = Unix.openfile ("/dev/fd/" ^ string_of_int fd) [] 0 in
+    Lwt_io.of_fd ~mode:Lwt_io.input (Lwt_unix.of_unix_file_descr ~blocking:true ufd)
+
+  (* TODO(infinity0): perhaps log the exception somewhere *)
+  let catch_exn f = Lwt.catch f (fun _ -> Lwt.return_unit)
+
+  let gui_focus_reader fdo ui_mvar =
+    let mvar = Lwt_mvar.create true in
+    (match fdo with
+    | None -> ()
+    | Some fd ->
+      let chan = channel_of_int fd in
+      let rec loop () = catch_exn (fun () ->
+          Lwt_io.read_line chan
+          >>= (fun line -> Lwt_mvar.put ui_mvar (fun state ->
+              Lwt.return (`Ok (maybe_clear { state with gui_has_focus = (to_gui_focus line) })))))
+        >>= loop in
+      Lwt.async loop) ;
+    mvar
 
   let notify_writer jid cb =
     let mvar = Lwt_mvar.create Disconnected in
@@ -289,21 +345,8 @@ let random_string () =
   let rnd = Rng.generate 12 in
   Cstruct.to_string (Base64.encode rnd)
 
-let active state =
-  match Contact.find_contact state.contacts (Xjid.t_to_bare state.active_contact) with
-  | None -> assert false
-  | Some x -> x
-
-let isactive state jid =
-  let bare = Xjid.t_to_bare state.active_contact in
-  match active state with
-  | `User u when not u.User.expand -> Xjid.jid_matches (`Bare bare) jid
-  | _ -> jid = state.active_contact
-
 let contact_has_user_focus state jid =
   state.gui_has_focus && (isactive state jid)
-
-let has_any_notifications state = List.length state.notifications > 0
 
 let notify state jid =
   if contact_has_user_focus state jid then
@@ -322,16 +365,6 @@ let notify state jid =
 
 let has_notifications state jid =
   List.exists (Xjid.jid_matches jid) state.notifications
-
-(* TODO(infinity0): call this whenever gui_has_focus turns true *)
-let maybe_clear state =
-  if not state.gui_has_focus then
-    state
-  else
-    let notifications = List.filter (fun x -> not (isactive state x)) state.notifications in
-    if not (has_any_notifications state) then
-      Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) ;
-    { state with notifications }
 
 let active_contacts state =
   let active jid =
