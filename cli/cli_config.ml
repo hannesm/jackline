@@ -178,17 +178,17 @@ let configure term () =
   let prefix =
     "Certificate fingerprint (leave empty to instead specify CA file): "
   and below =
-    let str =
+    let str1, str2 =
       let hostport =
         Utils.option dom (fun x -> x) hostname ^ ":" ^
         string_of_int (Utils.option 5222 (fun x -> x) port)
       in
-      "If you have `tlsclient` installed, you can run: "
-      ^ "`tlsclient -z --starttls=xmpp " ^ hostport ^ "`\n"
-      ^ "Alternatively: `openssl s_client -connect " ^ hostport
-      ^ " -starttls xmpp | openssl x509 -sha256 -fingerprint -noout`"
+      ("If you have `tlsclient` installed, run: "
+      ^ "`tlsclient -z --starttls=xmpp " ^ hostport ^ "`",
+      "Alternatively: `openssl s_client -connect " ^ hostport
+      ^ " -starttls xmpp | openssl x509 -sha256 -fingerprint -noout`")
     in
-    [I.string A.empty str]
+    [I.(string A.empty str1 <-> string A.empty str2)]
   and transform fp =
     let dotted_hex_to_cs hex =
       try
