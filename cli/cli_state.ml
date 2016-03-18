@@ -108,7 +108,11 @@ module Notify = struct
     | "gui_focus false" -> false
     | _ -> true
 
-  let channel_of_int fd =
+  let flag_of_mode (type a) (mode:a Lwt_io.mode) = match mode with
+      | Lwt_io.Input -> Unix.O_RDONLY
+      | Lwt_io.Output -> Unix.O_WRONLY
+
+  let channel_of_int fd mode =
     (* OCaml does not provide a library method to get the nth file descriptor of
        a process, so we instead open /dev/fd/n which is portable across most
        popular modern Unixes including Linux and *BSD, see
@@ -117,8 +121,8 @@ module Notify = struct
 
        We could also use ExtUnix which provides file_descr_of_int but this seems
        a bit excessive just for this. *)
-    let ufd = Unix.openfile ("/dev/fd/" ^ string_of_int fd) [] 0 in
-    Lwt_io.of_fd ~mode:Lwt_io.input (Lwt_unix.of_unix_file_descr ~blocking:true ufd)
+    let ufd = Unix.openfile ("/dev/fd/" ^ string_of_int fd) [flag_of_mode mode] 0 in
+    Lwt_io.of_fd ~mode:mode (Lwt_unix.of_unix_file_descr ~blocking:true ufd)
 
   (* TODO(infinity0): perhaps log the exception somewhere *)
   let catch_exn f = Lwt.catch f (fun _ -> Lwt.return_unit)
@@ -128,7 +132,7 @@ module Notify = struct
     (match fdo with
     | None -> ()
     | Some fd ->
-      let chan = channel_of_int fd in
+      let chan = channel_of_int fd Lwt_io.input in
       let rec loop () = catch_exn (fun () ->
           Lwt_io.read_line chan
           >>= (fun line -> Lwt_mvar.put ui_mvar (fun state ->
@@ -137,17 +141,19 @@ module Notify = struct
       Lwt.async loop) ;
     mvar
 
-  let notify_writer jid cb =
+  let maybe_catch_and_return opt f = match opt with
+    | None -> Lwt.return_unit
+    | Some s -> catch_exn (fun () -> f s >>= fun _ -> Lwt.return_unit)
+
+  let notify_writer jid cb fdo =
     let mvar = Lwt_mvar.create Disconnected in
+    let chan_opt = match fdo with None -> None | Some fd -> Some (channel_of_int fd Lwt_io.output) in
     let notify_call buf =
       let open Lwt_unix in
-      match cb with
-      | None -> Lwt.return_unit
-      | Some x ->
-        Lwt.catch (fun () ->
-            system (x ^ " " ^ Xjid.full_jid_to_string jid ^ " " ^ buf) >>= fun _ ->
-            Lwt.return_unit)
-          (fun _ -> Lwt.return_unit)
+      (maybe_catch_and_return cb (fun x ->
+           system (x ^ " " ^ Xjid.full_jid_to_string jid ^ " " ^ buf))) >>= fun () ->
+      (maybe_catch_and_return chan_opt (fun chan ->
+           Lwt_io.write_line chan buf))
     in
     let rec loop s0 =
       Lwt_mvar.take mvar >>= fun v ->

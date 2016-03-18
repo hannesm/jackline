@@ -131,7 +131,8 @@ highest priority.
 
 When a new message is received, this is indicated by blinking of the
 contact, a prepended `*` (or `☀` in case of collapsed contact), a blue
-`#` in the bottom left corner and execution of `notification_callback`.
+`#` in the bottom left corner, execution of `notification_callback` and
+(if given) the nth file descriptor specified by --fd-nfy.
 
 A message is sent to the active contact by typing it followed by
 `return`.
