@@ -24,7 +24,7 @@ let init_system ui_mvar =
       | exn -> err true (Printexc.to_string exn)
   )
 
-let start_client cfgdir debug unicode fd_gui () =
+let start_client cfgdir debug unicode fd_gui fd_nfy () =
   Sys.(set_signal sigpipe Signal_ignore) ;
 
   Printexc.register_printer (function
@@ -94,7 +94,7 @@ let start_client cfgdir debug unicode fd_gui () =
   let ui_mvar = Lwt_mvar.create_empty () in
 
   let state_mvar =
-    Cli_state.Notify.notify_writer myjid config.Xconfig.notification_callback
+    Cli_state.Notify.notify_writer myjid config.Xconfig.notification_callback fd_nfy
   in
   let _ = Cli_state.Notify.gui_focus_reader fd_gui ui_mvar in
   let connect_mvar = Cli_state.Connect.connect_me config ui_mvar state_mvar users in
@@ -145,6 +145,7 @@ let start_client cfgdir debug unicode fd_gui () =
 let config_dir = ref ""
 let debug = ref false
 let fd_gui = ref None
+let fd_nfy = ref None
 let ascii = ref false
 let rest = ref []
 
@@ -168,12 +169,13 @@ let arglist = [
   ("-f", Arg.String (fun d -> config_dir := d), "configuration directory (defaults to ~/.config/ocaml-xmpp-client/)") ;
   ("-d", Arg.Bool (fun d -> debug := d), "log to out.txt in current working directory") ;
   ("-a", Arg.Bool (fun a -> ascii := a), "ASCII only output") ;
-  ("--fd-gui", Arg.Int (fun fd -> fd_gui := Some fd), "File descriptor to receive GUI focus updates on.")
+  ("--fd-gui", Arg.Int (fun fd -> fd_gui := Some fd), "File descriptor to receive GUI focus updates on.") ;
+  ("--fd-nfy", Arg.Int (fun fd -> fd_nfy := Some fd), "File descriptor to send notification updates on.")
 ]
 
 let _ =
   try
     Arg.parse arglist (fun x -> rest := x :: !rest) usage ;
-    Lwt_main.run (start_client !config_dir !debug (not !ascii) !fd_gui ())
+    Lwt_main.run (start_client !config_dir !debug (not !ascii) !fd_gui !fd_nfy ())
   with
   | Sys_error s -> print_endline s
