@@ -51,7 +51,7 @@ let _ =
     "add" "/add [jid]"
     "adds jid to your contact list, and sends a subscription request" (fun _ -> []) ;
 
-  new_command (* XXX needs dynamic completions! *)
+  new_command
     "go" "/go [jid]" "jump to contact jid" (fun s -> List.map Xjid.jid_to_string (all_jids s)) ;
 
   (* things affecting you *)
@@ -97,6 +97,8 @@ let _ =
     "join" "/join [?chatroom]" "joins chatroom (or active contact)" (fun _ -> []) ;
   new_command
     "leave" "/leave [?reason]" "leaves active chatroom (using reason)" (fun _ -> []) ;
+  new_command
+    "rooms" "/rooms [server]" "queries chatrooms on server" (fun _ -> []) ;
 
   (* nothing below here, please *)
   new_command
@@ -207,11 +209,11 @@ let handle_connect p c_mvar =
       let u = User.new_user ~jid:bare () in
       Contact.replace_user state.contacts u ;
       (state, u)
-  and find_room state bare =
-    match Contact.find_room state.contacts bare with
+  and find_room state jid autojoin =
+    match Contact.find_room state.contacts jid with
     | Some room -> (state, room)
     | None ->
-      let room = Muc.new_room ~jid:bare ~my_nick:(fst (fst state.config.Xconfig.jid)) () in
+      let room = Muc.new_room ~jid ~my_nick:(fst (fst state.config.Xconfig.jid)) ~autojoin () in
       Contact.replace_room state.contacts room ;
       (state, room)
   and find_session state user resource =
@@ -311,7 +313,7 @@ let handle_connect p c_mvar =
   and group_message jid timestamp topic body _data id =
     let exec state =
       let body = Utils.option None (fun x -> Some (Utils.validate_utf8 x)) body in
-      let state, room = find_room state (Xjid.t_to_bare jid) in
+      let state, room = find_room state (Xjid.t_to_bare jid) false in
       let room = Utils.option room (fun x -> { room with Muc.topic = Some x }) topic in
       let state, room = match body with
         | None -> (state, room)
@@ -432,10 +434,10 @@ let handle_connect p c_mvar =
       let status = Utils.option None (fun x -> Some (Utils.validate_utf8 x)) status in
       match jid with
       | `Bare bare ->
-        let state, _ = find_room state bare in
+        let state, _ = find_room state bare false in
         Lwt.return (`Ok state)
       | `Full (bare, nickname) ->
-        let state, r = find_room state bare in
+        let state, r = find_room state bare false in
         let real_jid, nick, affiliation, role =
           let open Xmpp_callbacks.Xep_muc in
           let to_affiliation = function
@@ -516,6 +518,12 @@ let handle_connect p c_mvar =
       Lwt.return (`Ok state)
     in
     p exec
+  and create_room bare autojoin =
+    let exec state =
+      let state, _ = find_room state bare autojoin in
+      Lwt.return (`Ok state)
+    in
+    p exec
   in
   let (user_data : Xmpp_callbacks.user_data) = {
       Xmpp_callbacks.log ;
@@ -530,6 +538,8 @@ let handle_connect p c_mvar =
       subscription ;
       presence ;
       group_presence ;
+
+      create_room ;
 
       reset_users ;
       update_users ;
@@ -903,17 +913,17 @@ let tell_user (log:(User.direction * string) -> unit) jid ?(prefix:string option
   let f = Utils.option from (fun x -> x ^ "; " ^ from) prefix in
   log (`Local (jid, f), msg)
 
-let handle_join my_nick room =
-  match Xjid.string_to_jid room with
-  | Some (`Bare room_jid) ->
-    let room = Muc.new_room ~jid:room_jid ~my_nick () in
+let handle_join my_nick r =
+  match Xjid.string_to_jid r with
+  | Some (`Bare jid) ->
+    let room = Muc.new_room ~jid ~my_nick () in
     let clos state s =
       Contact.replace_room state.contacts room ;
-      Xmpp_callbacks.Xep_muc.enter_room s (Xjid.jid_to_xmpp_jid (`Bare room_jid)) >|= fun () ->
+      Xmpp_callbacks.Xep_muc.enter_room s (Xjid.jid_to_xmpp_jid (`Bare jid)) >|= fun () ->
       `Ok state
     in
-    (["joining room"], None (* Some room *), Some clos)
-  | _ -> (["not a bare jid"], None, None)
+    (["joining room " ^ r], Some (`Room room), Some clos)
+  | _ -> ([r ^ " is not a bare jid"], None, None)
 
 let handle_leave buddy reason =
   match buddy with
@@ -925,9 +935,59 @@ let handle_leave buddy reason =
        Xmpp_callbacks.Xep_muc.leave_room s ?reason ~nick (Xjid.jid_to_xmpp_jid jid) >|= fun () ->
        `Ok state
      in
-     let r = `Room { r with Muc.autojoin = false } in
-     (["leaving room"], Some r, Some clos)
-  | _ -> (["not a chatroom"], None, None)
+     let r = { r with Muc.autojoin = false } in
+     (["leaving room " ^ Xjid.bare_jid_to_string r.Muc.room_jid], Some (`Room r), Some clos)
+  | _ -> ([Xjid.bare_jid_to_string (Contact.bare buddy) ^ " is not a chatroom"], None, None)
+
+let handle_rooms host =
+  let clos state s =
+    let open Xmpp_callbacks in
+    let callback ev jid_from _jid_to _lang () =
+      let jid_from = match jid_from with
+        | None -> `Bare ("", "none")
+        | Some x -> match Xjid.string_to_jid x with
+          | Some x -> x
+          | None -> `Bare ("", x)
+      in
+      match ev with
+      | XMPPClient.IQError _ -> s.XMPPClient.user_data.log (`From jid_from) "couldn't find any rooms"
+      | XMPPClient.IQResult el ->
+        match el with
+        | Some (Xml.Xmlelement ((ns, "query"), _, els)) when ns = Disco.ns_disco_items ->
+          let name_id = List.fold_left (fun acc ele ->
+              match ele with
+              | Xml.Xmlelement ((_, "item"), attrs, _) ->
+                (Xml.safe_get_attr_value "name" attrs, Xml.safe_get_attr_value "jid" attrs) :: acc
+              | _ -> acc) [] els
+          in
+          let rs, xs =
+            List.fold_left (fun (r, s) (name, jid) ->
+                match Xjid.string_to_bare_jid jid with
+                | None -> (r, (name, jid) :: s)
+                | Some bare -> ((bare, name) :: r, s))
+              ([], []) name_id
+          in
+          let servers things =
+             let str = String.concat ", " (List.map (fun (name, jid) -> name ^ " (" ^ jid ^ ")") things) in
+             s.XMPPClient.user_data.log (`From jid_from) ("servers: " ^ str)
+          and rooms rooms =
+             let str = String.concat ", " (List.map (fun ((user, _), name) -> name ^ " (" ^ user ^ "@)") rooms) in
+             s.XMPPClient.user_data.log (`From jid_from) ("rooms: " ^ str) >>= fun () ->
+             Lwt_list.iter_s
+               (fun id -> s.XMPPClient.user_data.create_room id false)
+               (List.map fst rooms)
+          in
+          (match rs, xs with
+           | [], xs -> servers xs
+           | rs, [] -> rooms rs
+           | rs, xs -> servers xs >>= fun () -> rooms rs)
+        | _ -> s.XMPPClient.user_data.log (`From jid_from) "no rooms"
+    in
+    XMPPClient.make_iq_request s ~jid_to:(JID.of_string host)
+      (XMPPClient.IQGet (Xml.make_element (Disco.ns_disco_items, "query") [] [])) callback >|= fun () ->
+    `Ok state
+  in
+  (["querying rooms at " ^ host], None, Some clos)
 
 let exec input state contact isself p =
   let log (direction, msg) = add_status state direction msg in
@@ -1043,6 +1103,7 @@ let exec input state contact isself p =
            | _ -> (["not a room"], None, None))
 
         | ("leave", reason), Some _ -> handle_leave contact reason
+        | ("rooms", Some host), Some _ -> handle_rooms host
 
         | ("remove", _), None -> err "not connected"
         | ("remove", _), Some _ -> need_user (fun u -> ([], None, Some (handle_remove u)))

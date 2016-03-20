@@ -6,15 +6,9 @@ B _build/src
 B _build/cli
 B _build/bin
 
-PKG erm_xmpp
-PKG otr
-PKG tls
-PKG tls.lwt
-PKG lwt
-PKG sexplib
-PKG hex
-PKG nocrypto
+PKG erm_xmpp otr tls tls.lwt
+PKG lwt sexplib hex nocrypto
 PKG notty notty.lwt
-PKG ptime
-PKG ptime.clock.os
+PKG ptime ptime.clock.os
 PKG ppx_sexp_conv
+PKG astring

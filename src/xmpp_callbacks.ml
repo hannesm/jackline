@@ -57,6 +57,8 @@ type user_data = {
   presence             : Xjid.t -> User.presence -> int -> string option -> unit Lwt.t ;
   group_presence       : Xjid.t -> User.presence -> string option -> Xep_muc.User.data -> unit Lwt.t ;
 
+  create_room          : Xjid.bare_jid -> bool -> unit Lwt.t ;
+
   (* this is to initialise all subscription information to `None before fetching the roster --
      this needs to be done, since a roster get will not return those not in your roster (and might have been modified by different client) *)
   reset_users          : unit -> unit Lwt.t ;
