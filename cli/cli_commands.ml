@@ -943,214 +943,206 @@ let exec input state contact isself p =
   | ("help" , x) -> handle_help (msg ?prefix:None) x ; ok state
 
   | other ->
-     let err msg = err msg ; ok state in
-     match other, !xmpp_session with
-     (* connect *)
-     | ("connect", _), None   -> handle_connect p state.connect_mvar >>= fun () -> ok state
-     | ("connect", _), Some _ -> err "already connected"
+    let err msg = err msg ; ok state in
+    match other, !xmpp_session with
+    (* connect *)
+    | ("connect", _), None   -> handle_connect p state.connect_mvar >>= fun () -> ok state
+    | ("connect", _), Some _ -> err "already connected"
 
-     (* disconnect *)
-     | ("disconnect", _), Some _ -> handle_disconnect (msg ?prefix:None) >>= fun () -> ok state
-     | ("disconnect", _), None   -> err "not connected"
+    (* disconnect *)
+    | ("disconnect", _), Some _ -> handle_disconnect (msg ?prefix:None) >>= fun () -> ok state
+    | ("disconnect", _), None   -> err "not connected"
 
-     (* log height *)
-     | ("logheight", Some x), _ ->
-       (match try Some (int_of_string x) with Failure _ -> None with
-         | Some log_height when log_height >= 0 -> ok { state with log_height }
-         | _ -> err "not a positive number")
-     | ("logheight", _), _ -> err "requires argument"
+    (* log height *)
+    | ("logheight", Some x), _ ->
+      (match try Some (int_of_string x) with Failure _ -> None with
+        | Some log_height when log_height >= 0 -> ok { state with log_height }
+        | _ -> err "not a positive number")
+    | ("logheight", _), _ -> err "requires argument"
+
+    | ("go", Some x), _ ->
+      (match Xjid.string_to_jid x with
+       | None -> err ("couldn't parse jid " ^ x)
+       | Some jid -> try ok (activate_contact state jid) with _ -> err ("jid " ^ x ^ " not found"))
+    | ("go", None), _ -> err "requires argument"
+
+    (* commands not using active_contact *)
+    | (x, _), None when List.mem x global_things -> err "not connected"
+    | (x, None), _ when List.mem x global_things ->
+      handle_help (msg ~prefix:"argument required") (Some x) ; ok state
+
+    (* add *)
+    | ("add", Some a), Some s -> handle_add s a (msg ?prefix:None) >>= fun () -> ok state
+
+    (* status *)
+    | ("status", Some arg), Some s ->
+      (match handle_status own_session arg with
+       | None -> handle_help (msg ~prefix:"unknown argument") (Some "status") ; ok state
+       | Some p ->
+         Lwt_mvar.put state.connect_mvar (Presence p) >>= fun () ->
+         send_status s p >>= fun () ->
+         ok state)
+
+    (* priority *)
+    | ("priority", Some p), Some s ->
+      (match handle_priority own_session p with
+       | None   -> handle_help (msg ~prefix:"unknown argument") (Some "priority") ; ok state
+       | Some p ->
+         Lwt_mvar.put state.connect_mvar (Presence p) >>= fun () ->
+         send_status s p >>= fun () ->
+         ok state)
+
+    (* multi user chat *)
+    | ("join", None), Some s ->
+      let my_nick = fst (fst state.config.Xconfig.jid) in
+      let r = Xjid.bare_jid_to_string (Contact.bare contact) in
+      handle_join state s my_nick state.contacts r err
+    | ("join", Some a), Some s ->
+      let my_nick = fst (fst state.config.Xconfig.jid) in
+      handle_join state s my_nick state.contacts a err
 
 
-     | ("go", Some x), _ ->
-       (match Xjid.string_to_jid x with
-        | None -> err ("couldn't parse jid " ^ x)
-        | Some jid -> try ok (activate_contact state jid) with _ -> err ("jid " ^ x ^ " not found"))
-     | ("go", None), _ -> err "requires argument"
+    (* commands using active_contact as context *)
+    | other, s ->
+      let err str =
+        msg "error" str ; ([], None, None)
+      and handle_help msg arg =
+        handle_help msg arg ; ([], None, None)
+      and need_user f =
+        Utils.option
+          (["not applicable"], None, None)
+          (fun x ->
+             let (d, u, c) = f x in
+             (d, Utils.option None (fun u -> Some (`User u)) u, c))
+          real_user
+      in
 
-     (* commands not using active_contact *)
-     | (x, _), None when List.mem x global_things -> err "not connected"
-     | (x, None), _ when List.mem x global_things ->
-        handle_help (msg ~prefix:"argument required") (Some x) ; ok state
+      let datas, u, clos = match other, s with
+        | ("clear", _), _ -> ([], Some (Contact.clear_messages contact), None)
 
-     (* add *)
-     | ("add", Some a), Some s -> handle_add s a (msg ?prefix:None) >>= fun () -> ok state
+        | ("log", None), _ -> handle_help (msg ~prefix:"argument required") (Some "log")
+        | ("log", Some a), _ when a = "on"  -> handle_log contact true a state.config_directory
+        | ("log", Some a), _ when a = "off" -> handle_log contact false a state.config_directory
+        | ("log", Some _), _ -> handle_help (msg ~prefix:"unknown argument") (Some "log")
 
-     (* status *)
-     | ("status", Some arg), Some s ->
-        (match handle_status own_session arg with
-         | None -> handle_help (msg ~prefix:"unknown argument") (Some "status") ; ok state
-         | Some p ->
-            Lwt_mvar.put state.connect_mvar (Presence p) >>= fun () ->
-            send_status s p >>= fun () ->
-            ok state)
-
-     (* priority *)
-     | ("priority", Some p), Some s ->
-        (match handle_priority own_session p with
-         | None   -> handle_help (msg ~prefix:"unknown argument") (Some "priority") ; ok state
-         | Some p ->
-            Lwt_mvar.put state.connect_mvar (Presence p) >>= fun () ->
-            send_status s p >>= fun () ->
-            ok state)
-
-     (* multi user chat *)
-     | ("join", None), Some s ->
-       let my_nick = fst (fst state.config.Xconfig.jid) in
-       let r = Xjid.bare_jid_to_string (Contact.bare contact) in
-       handle_join state s my_nick state.contacts r err
-     | ("join", Some a), Some s ->
-       let my_nick = fst (fst state.config.Xconfig.jid) in
-       handle_join state s my_nick state.contacts a err
-
-
-     (* commands using active_contact as context *)
-     | other, s ->
-        let err str =
-          msg "error" str ; ([], None, None)
-        and handle_help msg arg =
-          handle_help msg arg ; ([], None, None)
-        and need_user f =
-          Utils.option
-            (["not applicable"], None, None)
-            (fun x -> let (d, u, c) = f x in
-                      (d, Utils.option None (fun u -> Some (`User u)) u, c))
-            real_user
-        in
-
-        let datas, u, clos = match other, s with
-          | ("clear", _), _ -> ([], Some (Contact.clear_messages contact), None)
-
-          | ("log", None), _ -> handle_help (msg ~prefix:"argument required") (Some "log")
-          | ("log", Some a), _ when a = "on"  -> handle_log contact true a state.config_directory
-          | ("log", Some a), _ when a = "off" -> handle_log contact false a state.config_directory
-          | ("log", Some _), _ -> handle_help (msg ~prefix:"unknown argument") (Some "log")
-
-          | ("info", _), _ ->
-             let datas =
-               if isself then
-                 handle_own_info (self state) own_session state.config_directory state.config.Xconfig.dsa
-               else
-                 handle_info contact (resource state) state.config_directory
-             in
-             (datas, None, None)
-
-          | ("leave", reason), Some _ -> handle_leave contact reason
-
-         | ("remove", _), None -> err "not connected"
-         | ("remove", _), Some _ -> need_user (fun u -> ([], None, Some (handle_remove u)))
-
-         | ("fingerprint", None), _ ->
-            let datas =
-              handle_own_otr_info state.config.Xconfig.dsa @
-                current_otr_fp (session state)
-            in
-            (datas, None, None)
-         | ("fingerprint", Some fp), _ ->
+        | ("info", _), _ ->
+          let datas =
             if isself then
-              err "won't talk to myself"
+              handle_own_info (self state) own_session state.config_directory state.config.Xconfig.dsa
             else
-              need_user (fun u -> handle_fingerprint u err fp)
+              handle_info contact (resource state) state.config_directory
+          in
+          (datas, None, None)
 
-         | ("revoke", None), _ -> handle_help (msg ~prefix:"argument required") (Some "revoke")
-         | ("revoke", Some fp), _ -> need_user (fun u -> handle_revoke u err fp)
+        | ("leave", reason), Some _ -> handle_leave contact reason
 
-         | ("authorization", _), None -> err "not connected"
-         | ("authorization", None), _ -> handle_help (msg ~prefix:"argument required") (Some "authorization")
-         | ("authorization", Some a), Some _ ->
-            if isself then
-              err "won't authorize myself"
-            else
-              need_user
-                (fun u ->
-                 match handle_authorization a with
-                 | None   -> handle_help (msg ~prefix:"unknown argument") (Some "authorization")
-                 | Some (kind, m) ->
-                    let clos state s =
-                      let jid_to = Xjid.jid_to_xmpp_jid (`Bare u.User.bare_jid) in
-                      Xmpp_callbacks.XMPPClient.send_presence s ~jid_to ~kind () >|= fun () ->
-                      `Ok state
-                    in
-                    ([m], None, Some clos))
+        | ("remove", _), None -> err "not connected"
+        | ("remove", _), Some _ -> need_user (fun u -> ([], None, Some (handle_remove u)))
 
-         | ("otrpolicy", None), _ ->
-            need_user
-              (fun u -> let cfg = otr_config u state in
-                        (print_otr_policy cfg, None, None))
+        | ("fingerprint", None), _ ->
+          let datas =
+            handle_own_otr_info state.config.Xconfig.dsa @
+            current_otr_fp (session state)
+          in
+          (datas, None, None)
+        | ("fingerprint", Some fp), _ ->
+          if isself then
+            err "won't talk to myself"
+          else
+            need_user (fun u -> handle_fingerprint u err fp)
 
-         | ("otrpolicy", Some _), _ when isself -> err "cannot adjust own otr policy"
-         | ("otrpolicy", Some z), _ ->
-            need_user
-              (fun u -> let cfg = otr_config u state in
-                        adjust_otr_policy state.config.Xconfig.otr_config cfg u z)
+        | ("revoke", None), _ -> handle_help (msg ~prefix:"argument required") (Some "revoke")
+        | ("revoke", Some fp), _ -> need_user (fun u -> handle_revoke u err fp)
 
+        | ("authorization", _), None -> err "not connected"
+        | ("authorization", None), _ -> handle_help (msg ~prefix:"argument required") (Some "authorization")
+        | ("authorization", Some _), Some _ when isself-> err "won't authorize myself"
+        | ("authorization", Some a), Some _ ->
+          need_user
+            (fun u ->
+               match handle_authorization a with
+               | None   -> handle_help (msg ~prefix:"unknown argument") (Some "authorization")
+               | Some (kind, m) ->
+                 let clos state s =
+                   let jid_to = Xjid.jid_to_xmpp_jid (`Bare u.User.bare_jid) in
+                   Xmpp_callbacks.XMPPClient.send_presence s ~jid_to ~kind () >|= fun () ->
+                   `Ok state
+                 in
+                 ([m], None, Some clos))
 
-         | ("otr", None), _ ->
-            handle_help (msg ~prefix:"argument required") (Some "otr")
-         | ("otr", Some "info"), _  ->
-            need_user
-              (fun u -> if isself then
-                          (handle_own_otr_info state.config.Xconfig.dsa, None, None)
-                        else
-                          (handle_otr_info u (session state), None, None))
+        | ("otrpolicy", None), _ ->
+          need_user
+            (fun u ->
+               let cfg = otr_config u state in
+               (print_otr_policy cfg, None, None))
+        | ("otrpolicy", Some _), _ when isself -> err "cannot adjust own otr policy"
+        | ("otrpolicy", Some z), _ ->
+          need_user
+            (fun u ->
+               let cfg = otr_config u state in
+               adjust_otr_policy state.config.Xconfig.otr_config cfg u z)
 
-         | ("otr", Some _), None  -> err "not connected"
-         | ("otr", Some "start"), Some _ ->
-            need_user
-              (fun u ->
-               if isself then
-                 err "do not like to talk to myself"
-               else
-                 let cfg = otr_config u state in
-                 handle_otr_start u (session state) cfg state.config.Xconfig.dsa)
+        | ("otr", None), _ ->
+          handle_help (msg ~prefix:"argument required") (Some "otr")
+        | ("otr", Some "info"), _ when isself ->
+          (handle_own_otr_info state.config.Xconfig.dsa, None, None)
+        | ("otr", Some "info"), _ ->
+          need_user (fun u -> (handle_otr_info u (session state), None, None))
 
-         | ("otr", Some "stop"), Some _ ->
-            need_user
-              (fun u ->
-               if isself then
-                 err "do not like to talk to myself"
-               else
-                 handle_otr_stop u (session state) err)
+        | ("otr", Some _), None  -> err "not connected"
+        | ("otr", Some "start"), Some _ when isself ->
+          err "do not like to talk to myself"
+        | ("otr", Some "start"), Some _ ->
+          need_user
+            (fun u ->
+               let cfg = otr_config u state in
+               handle_otr_start u (session state) cfg state.config.Xconfig.dsa)
 
-         | ("otr", Some _), _ -> handle_help (msg ~prefix:"unknown argument") (Some "otr")
+        | ("otr", Some "stop"), Some _ when isself ->
+          err "do not like to talk to myself"
+        | ("otr", Some "stop"), Some _ ->
+          need_user (fun u -> handle_otr_stop u (session state) err)
 
-         | ("smp", _), _ when isself -> err "do not like to talk to myself"
-         | ("smp", None), _ -> handle_help (msg ~prefix:"argument required") (Some "smp")
-         | ("smp", _), None -> err "not connected"
+        | ("otr", Some _), _ -> handle_help (msg ~prefix:"unknown argument") (Some "otr")
 
-         | ("smp", Some a), Some _ ->
-            need_user
-              (fun u ->
+        | ("smp", _), _ when isself -> err "do not like to talk to myself"
+        | ("smp", None), _ -> handle_help (msg ~prefix:"argument required") (Some "smp")
+        | ("smp", _), None -> err "not connected"
+
+        | ("smp", Some a), Some _ ->
+          need_user
+            (fun u ->
                match session state with
                | Some session when User.encrypted session.User.otr ->
-                  (match split_ws a with
-                   | "abort", _ -> handle_smp_abort u session
-                   | "shared", Some arg -> handle_smp_shared u session arg
-                   | "question", Some question -> handle_smp_question u session question
-                   | "answer", Some arg -> handle_smp_answer u session arg
-                   | _ -> handle_help (msg ~prefix:"argument required") (Some "smp"))
+                 (match split_ws a with
+                  | "abort", _ -> handle_smp_abort u session
+                  | "shared", Some arg -> handle_smp_shared u session arg
+                  | "question", Some question -> handle_smp_question u session question
+                  | "answer", Some arg -> handle_smp_answer u session arg
+                  | _ -> handle_help (msg ~prefix:"argument required") (Some "smp"))
                | _ -> err "need a secure session, use /otr start first")
-         | _ -> handle_help (msg ~prefix:"unknown command") None
-        in
+        | _ -> handle_help (msg ~prefix:"unknown command") None
+      in
 
-        let user old =
-          let u = List.fold_left
-                    (fun c d ->
-                     let msg = User.message (`Local (state.active_contact, "")) false false d in
-                     Contact.new_message c msg)
-                    old datas
-          in
-          Contact.replace_contact state.contacts u ;
-          u
+      let user old =
+        let u = List.fold_left
+            (fun c d ->
+               let msg = User.message (`Local (state.active_contact, "")) false false d in
+               Contact.new_message c msg)
+            old datas
         in
-        (match u with
-         | None   ->
-            ignore (user contact) ;
-            Lwt.return_unit
-         | Some x ->
-            let u = user x in
-            (* TODO: this is slightly too eager (too many writes) *)
-            Lwt_mvar.put state.contact_mvar u) >>= fun () ->
-        match clos, !xmpp_session with
-        | Some x, Some s -> x state s
-        | Some _, None -> msg "error" "not connected" ; Lwt.return (`Ok state)
-        | None, _ -> Lwt.return (`Ok state)
+        Contact.replace_contact state.contacts u ;
+        u
+      in
+      (match u with
+       | None   ->
+         ignore (user contact) ;
+         Lwt.return_unit
+       | Some x ->
+         let u = user x in
+         (* TODO: this is slightly too eager (too many writes) *)
+         Lwt_mvar.put state.contact_mvar u) >>= fun () ->
+      match clos, !xmpp_session with
+      | Some x, Some s -> x state s
+      | Some _, None -> msg "error" "not connected" ; Lwt.return (`Ok state)
+      | None, _ -> Lwt.return (`Ok state)
