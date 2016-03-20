@@ -253,18 +253,13 @@ let handle_connect p c_mvar =
     in
     p exec
 
-  and message bare ?timestamp dir txt =
+  and message bare res ?timestamp txt =
     let exec state =
       let state, user = find_user state bare in
-      let user = User.insert_message ?timestamp user dir false true txt in
-      Contact.replace_user state.contacts user ;
-      let state = notify state (`Bare bare) in
-      Lwt.return (`Ok state)
-    in
-    p exec
-  and enc_message (bare, res) ?timestamp txt =
-    let exec state =
-      let state, user = find_user state bare in
+      let res = match res with
+        | Some r -> r
+        | None -> ""
+      in
       let state, session = find_session state user res in
       let ctx, out, ret = Otr.Engine.handle session.User.otr txt in
       let user = User.update_otr user session ctx in
@@ -386,30 +381,51 @@ let handle_connect p c_mvar =
         and statstring = Utils.option "" (fun x -> " - " ^ x) status
         in
         "[" ^ old ^ ">" ^ presence_char ^ "] (now " ^ presence_string ^ ")" ^ statstring
+      and update_session session =
+        { session with User.presence ; status ; priority }
       in
-      match jid with
-      | `Bare _ ->
-        let log = "presence " ^ msg "_" in
-        add_status state (`From jid) log ;
-        Lwt.return (`Ok state)
-      | `Full (b, r) ->
-        let state, user = find_user state b in
-        let state, session = find_session state user r in
-        if User.presence_unmodified session presence status priority then
-          Lwt.return (`Ok state)
-        else
-          let old = User.presence_to_char session.User.presence in
-          let session = { session with User.presence ; status ; priority } in
-          let user, removed = User.replace_session user session in
-          Contact.replace_user state.contacts user ;
-          add_status state (`From jid) (msg old) ;
-          let state =
-            if removed then
-              Utils.option state (fun x -> update_notifications state user x.User.resource r)  (User.find_similar_session user r)
-            else
-              state
+      let state, user, session =
+        match jid with
+        | `Bare b ->
+          (* this happens in several situations:
+             - if a@foo.com and b@bar.com are subscribed, a logs in: bar.com sends a "b is offline" presence
+             - in slack's xmpp server (likely others), nobody has a resource, but everything originates from the bare jid *)
+          let state, user = find_user state b in
+          let user, session = match User.sorted_sessions user with
+            | x::_ -> (user, x)
+            | [] ->
+              let otr_config = otr_config user state in
+              let u, s = User.create_session user "" otr_config state.config.Xconfig.dsa in
+              Contact.replace_user state.contacts u ;
+              (u, s)
           in
-          Lwt.return (`Ok state)
+          let active_sessions = List.map update_session user.User.active_sessions in
+          let user = { user with User.active_sessions } in
+          Contact.replace_user state.contacts user ;
+          (state, user, session)
+        | `Full (b, r) ->
+          let state, user = find_user state b in
+          let state, session = find_session state user r in
+          (state, user, session)
+      in
+      if User.presence_unmodified session presence status priority then
+        Lwt.return (`Ok state)
+      else
+        let old = User.presence_to_char session.User.presence in
+        let session = update_session session in
+        let user, removed = User.replace_session user session in
+        Contact.replace_user state.contacts user ;
+        add_status state (`From jid) (msg old) ;
+        let state =
+          if removed then
+            Utils.option
+              state
+              (fun x -> update_notifications state user x.User.resource session.User.resource)
+              (User.find_similar_session user session.User.resource)
+          else
+            state
+        in
+        Lwt.return (`Ok state)
     in
     p exec
   and group_presence jid presence status data =
@@ -505,7 +521,6 @@ let handle_connect p c_mvar =
       locallog ;
 
       message ;
-      enc_message ;
       group_message ;
 
       received_receipts ;

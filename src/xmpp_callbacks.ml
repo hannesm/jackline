@@ -47,8 +47,7 @@ type user_data = {
   log                  : User.direction -> string -> unit Lwt.t ;
   locallog             : string -> string -> unit Lwt.t ;
 
-  message              : Xjid.bare_jid -> ?timestamp:Ptime.t -> User.direction -> string -> unit Lwt.t ;
-  enc_message          : Xjid.full_jid -> ?timestamp:Ptime.t -> string -> unit Lwt.t ;
+  message              : Xjid.bare_jid -> string option -> ?timestamp:Ptime.t -> string -> unit Lwt.t ;
   group_message        : Xjid.t -> Ptime.t option -> string option -> string option -> Xep_muc.User.data option -> string option -> unit Lwt.t ;
 
   received_receipts    : Xjid.t -> string list -> unit Lwt.t ;
@@ -186,12 +185,12 @@ let message_callback (t : user_data session_data) stanza =
        | None, _, _ -> Lwt.return_unit
        | Some v, timestamp, `Bare b ->
          (* this is likely a message from the jabber server itself *)
-         t.user_data.message b ?timestamp (`From jid) v
-       | Some v, Some timestamp, `Full full ->
+         t.user_data.message b None ?timestamp v
+       | Some v, Some timestamp, `Full (bare, r) ->
          (* some delayed message (offline storage), don't send out receipt / OTR thingies *)
-         t.user_data.enc_message full ~timestamp v
-       | Some v, None, `Full full ->
-         t.user_data.enc_message full v >>= fun () ->
+         t.user_data.message bare (Some r) ~timestamp v
+       | Some v, None, `Full (bare, r) ->
+         t.user_data.message bare (Some r) v >>= fun () ->
          let answer_receipts =
            match stanza.id with
            | None -> []

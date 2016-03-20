@@ -287,14 +287,6 @@ let active_session user =
   let sorted = List.sort compare_session user.active_sessions
   and not_subscribed = List.mem user.subscription [`From ; `None]
   in
-  (* XXX: here be dragons: consider the other to be subscribed (i.e. in the roster),
-     but the s2s communication slightly broken: ends up in a pretty useless
-     dialogue (sending to bare, not having a otr context)
-
-     maybe a valuable strategy is to look whether R went (recently) from XXX to
-     offline?  what we really want to prevent is sending messages into the
-     nirvana (now that randomized resources are the way to go!?)
-   *)
   match List.filter (fun x -> x.presence <> `Offline) sorted, sorted with
   | x :: _, _ -> Some x
   | [], x :: _ when not_subscribed -> Some x
