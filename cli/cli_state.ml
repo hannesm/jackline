@@ -13,7 +13,7 @@ let next_display_mode = function
 type notify_v =
   | Disconnected
   | Connected
-  | Notifications
+  | Notification of bool (* if false, then this and all other notifications were immediately cleared *)
   | Clear
   | Quit
 
@@ -78,13 +78,16 @@ let isactive state jid =
 let has_any_notifications state = List.length state.notifications > 0
 
 let maybe_clear state =
-  if not state.gui_has_focus then
-    state
-  else
-    let notifications = List.filter (fun x -> not (isactive state x)) state.notifications in
-    if not (has_any_notifications state) then
-      Lwt.async (fun () -> Lwt_mvar.put state.notify_mvar Clear) ;
-    { state with notifications }
+  let newstate =
+    if not state.gui_has_focus then
+      state
+    else
+      let notifications = List.filter (fun x -> not (isactive state x)) state.notifications in
+      { state with notifications } in
+  if not (has_any_notifications newstate) && has_any_notifications state then
+    (* latter test is so that we don't notify every time the user changes contact *)
+    Lwt.async (fun () -> Lwt_mvar.put newstate.notify_mvar Clear) ;
+  newstate
 
 let selflog mvar from message =
   let c s =
@@ -94,14 +97,23 @@ let selflog mvar from message =
   Lwt_mvar.put mvar c
 
 module Notify = struct
-  type notify_writer_s = Q | D | C | D_N | C_N
+  type notify_state = Q | D | C | D_N | C_N
 
-  let to_string = function
-    | Q -> "quit"
-    | D -> "disconnected"
-    | C -> "connected"
-    | D_N -> "disconnected_notifications"
-    | C_N -> "connected_notifications"
+  let to_string s v =
+    let ss = match s with
+      | Q -> "quit"
+      | D -> "disconnected"
+      | C -> "connected"
+      | D_N -> "disconnected_notifications"
+      | C_N -> "connected_notifications" in
+    let vs = match v with
+      | Connected -> "connect"
+      | Disconnected -> "disconnect"
+      | Notification true -> "notify_contact"
+      | Notification false -> "notify_contact clear_all_notifications"
+      | Clear -> "clear_all_notifications"
+      | Quit -> "quit" in
+    ss ^ " " ^ vs
 
   let to_gui_focus line = match line with
     | "gui_focus true" -> true
@@ -164,13 +176,15 @@ module Notify = struct
         | Disconnected, C_N -> D_N
         | Connected, D -> C
         | Connected, D_N -> C_N
-        | Notifications, D -> D_N
-        | Notifications, C -> C_N
+        | Notification true, D -> D_N
+        | Notification false, D_N -> D
+        | Notification true, C -> C_N
+        | Notification false, C_N -> C
         | Clear, C_N -> C
         | Clear, D_N -> D
         | _, _ -> s0
       in
-      notify_call (to_string s1) >>= fun () ->
+      notify_call (to_string s1 v) >>= fun () ->
       if s1 = Q then
         Lwt.return_unit
       else
@@ -304,7 +318,7 @@ let empty_state config_directory config contacts connect_mvar notify_mvar =
     config_directory                ;
     config                          ;
 
-    notify_mvar                      ;
+    notify_mvar                     ;
     contact_mvar                    ;
     connect_mvar                    ;
 
@@ -355,19 +369,18 @@ let contact_has_user_focus state jid =
   state.gui_has_focus && (isactive state jid)
 
 let notify state jid =
-  if contact_has_user_focus state jid then
-    (* TODO(infinity0): perhaps do a no-op notification as well *)
-    state
-  else (
-    Lwt.async (fun () -> Lwt_mvar.put state.notify_mvar Notifications) ;
-    if
+  let newstate =
+    if contact_has_user_focus state jid then
+      state
+    else if
       List.exists (Xjid.jid_matches jid) state.notifications ||
       (Xjid.jid_matches state.active_contact jid && state.scrollback = 0)
     then
       state
     else
-      { state with notifications = jid :: state.notifications }
-  )
+      { state with notifications = jid :: state.notifications } in
+  Lwt.async (fun () -> Lwt_mvar.put newstate.notify_mvar (Notification (has_any_notifications newstate))) ;
+  newstate
 
 let has_notifications state jid =
   List.exists (Xjid.jid_matches jid) state.notifications
