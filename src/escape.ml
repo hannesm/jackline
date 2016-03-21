@@ -35,10 +35,15 @@ let rec strip_tags str =
             - <font>blablbala</font> --> find /font
             - <balbalbla>klklklkl --> ignore
             - <img src=... /> --> cut
+            - <a href=...>aaa</a>
        *)
        if get data (pred (length data)) = '/' then
          l ^ strip_tags r
        else
-         match cut ~sep:("</" ^ data ^ ">") r with
+         let s = match cut ~sep:" " data with
+           | None -> data
+           | Some (l, _) -> l
+         in
+         match cut ~sep:("</" ^ s ^ ">") r with
          | None -> l ^ "<" ^ data ^ ">" ^ strip_tags r
          | Some (btw, after) -> l ^ strip_tags btw ^ strip_tags after
