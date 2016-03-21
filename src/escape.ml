@@ -24,9 +24,21 @@ let unescape str =
     str (List.rev entities)
 
 let rec strip_tags str =
-  match Astring.String.cut ~sep:"<" str with
+  let open Astring.String in
+  match cut ~sep:"<" str with
   | None -> str
   | Some (l, r) ->
-     match Astring.String.cut ~sep:">" r with
+     match cut ~sep:">" r with
      | None -> str (* unmatched < *)
-     | Some (_, r) -> l ^ (strip_tags r)
+     | Some (data, r) ->
+       (* data contains the tag:
+            - <font>blablbala</font> --> find /font
+            - <balbalbla>klklklkl --> ignore
+            - <img src=... /> --> cut
+       *)
+       if get data (pred (length data)) = '/' then
+         l ^ strip_tags r
+       else
+         match cut ~sep:("</" ^ data ^ ">") r with
+         | None -> l ^ "<" ^ data ^ ">" ^ strip_tags r
+         | Some (btw, after) -> l ^ strip_tags btw ^ strip_tags after
