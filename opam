@@ -5,7 +5,7 @@ dev-repo:     "https://github.com/hannesm/jackline.git"
 bug-reports:  "https://github.com/hannesm/jackline/issues"
 author:       ["Hannes Mehnert <hannes@mehnert.org>"]
 maintainer:   ["Hannes Mehnert <hannes@mehnert.org>"]
-license:      "proprietary"
+license:      "BSD2"
 
 build: [
   [ "ocaml" "pkg/git.ml" ]
