@@ -13,7 +13,7 @@ let next_display_mode = function
 type notify_v =
   | Disconnected
   | Connected
-  | Notifications
+  | Notification of bool (* if false, then this and all other notifications were immediately cleared *)
   | Clear
   | Quit
 
@@ -31,7 +31,7 @@ type state = {
   config_directory : string ;
   config : Xconfig.t ;
 
-  state_mvar : notify_v Lwt_mvar.t ;
+  notify_mvar : notify_v Lwt_mvar.t ;
   contact_mvar : Contact.contact Lwt_mvar.t ;
   connect_mvar : connect_v Lwt_mvar.t ;
 
@@ -40,6 +40,7 @@ type state = {
 
   (* list of jid to blink *)
   notifications : Xjid.t list ;
+  gui_has_focus : bool ;
 
   (* initially yourself, modified by key presses (page up/page down/C-x/C-q) *)
   active_contact : Xjid.t ;
@@ -63,6 +64,31 @@ let add_status state dir msg =
      let self = User.insert_message self dir false true msg in
      Contact.replace_user state.contacts self
 
+let active state =
+  match Contact.find_contact state.contacts (Xjid.t_to_bare state.active_contact) with
+  | None -> assert false
+  | Some x -> x
+
+let isactive state jid =
+  let bare = Xjid.t_to_bare state.active_contact in
+  match active state with
+  | `User u when not u.User.expand -> Xjid.jid_matches (`Bare bare) jid
+  | _ -> jid = state.active_contact
+
+let has_any_notifications state = List.length state.notifications > 0
+
+let maybe_clear state =
+  let newstate =
+    if not state.gui_has_focus then
+      state
+    else
+      let notifications = List.filter (fun x -> not (isactive state x)) state.notifications in
+      { state with notifications } in
+  if not (has_any_notifications newstate) && has_any_notifications state then
+    (* latter test is so that we don't notify every time the user changes contact *)
+    Lwt.async (fun () -> Lwt_mvar.put newstate.notify_mvar Clear) ;
+  newstate
+
 let selflog mvar from message =
   let c s =
     add_status s (`Local ((`Full s.config.Xconfig.jid), from)) message ;
@@ -71,31 +97,75 @@ let selflog mvar from message =
   Lwt_mvar.put mvar c
 
 module Notify = struct
-  type notify_writer_s = Q | D | C | D_N | C_N
+  type notify_state = Q | D | C | D_N | C_N
 
-  let to_string = function
-    | Q -> "quit"
-    | D -> "disconnected"
-    | C -> "connected"
-    | D_N -> "disconnected_notifications"
-    | C_N -> "connected_notifications"
+  let to_string s v =
+    let ss = match s with
+      | Q -> "quit"
+      | D -> "disconnected"
+      | C -> "connected"
+      | D_N -> "disconnected_notifications"
+      | C_N -> "connected_notifications" in
+    let vs = match v with
+      | Connected -> "connect"
+      | Disconnected -> "disconnect"
+      | Notification true -> "notify_contact"
+      | Notification false -> "notify_contact clear_all_notifications"
+      | Clear -> "clear_all_notifications"
+      | Quit -> "quit" in
+    ss ^ " " ^ vs
 
-  let notify_writer jid cb fname =
+  let to_gui_focus line = match line with
+    | "gui_focus true" -> true
+    | "gui_focus false" -> false
+    | _ -> true
+
+  let flag_of_mode (type a) (mode:a Lwt_io.mode) = match mode with
+      | Lwt_io.Input -> Unix.O_RDONLY
+      | Lwt_io.Output -> Unix.O_WRONLY
+
+  let channel_of_int fd mode =
+    (* OCaml does not provide a library method to get the nth file descriptor of
+       a process, so we instead open /dev/fd/n which is portable across most
+       popular modern Unixes including Linux and *BSD, see
+
+       https://unix.stackexchange.com/questions/123602/portability-of-file-descriptor-links
+
+       We could also use ExtUnix which provides file_descr_of_int but this seems
+       a bit excessive just for this. *)
+    let ufd = Unix.openfile ("/dev/fd/" ^ string_of_int fd) [flag_of_mode mode] 0 in
+    Lwt_io.of_fd ~mode:mode (Lwt_unix.of_unix_file_descr ~blocking:true ufd)
+
+  (* TODO(infinity0): perhaps log the exception somewhere *)
+  let catch_exn f = Lwt.catch f (fun _ -> Lwt.return_unit)
+
+  let gui_focus_reader fdo ui_mvar =
+    let mvar = Lwt_mvar.create true in
+    (match fdo with
+    | None -> ()
+    | Some fd ->
+      let chan = channel_of_int fd Lwt_io.input in
+      let rec loop () = catch_exn (fun () ->
+          Lwt_io.read_line chan
+          >>= (fun line -> Lwt_mvar.put ui_mvar (fun state ->
+              Lwt.return (`Ok (maybe_clear { state with gui_has_focus = (to_gui_focus line) })))))
+        >>= loop in
+      Lwt.async loop) ;
+    mvar
+
+  let maybe_catch_and_return opt f = match opt with
+    | None -> Lwt.return_unit
+    | Some s -> catch_exn (fun () -> f s >>= fun _ -> Lwt.return_unit)
+
+  let notify_writer jid cb fdo =
     let mvar = Lwt_mvar.create Disconnected in
-    let write_file buf =
+    let chan_opt = match fdo with None -> None | Some fd -> Some (channel_of_int fd Lwt_io.output) in
+    let notify_call buf =
       let open Lwt_unix in
-      Lwt.catch (fun () ->
-          openfile fname [O_WRONLY ; O_TRUNC ; O_CREAT ] 0o600 >>= fun fd ->
-          Persistency.write_data fd buf >>= fun () ->
-          close fd)
-        (fun _ -> Lwt.return_unit) >>= fun () ->
-      match cb with
-      | None -> Lwt.return_unit
-      | Some x ->
-        Lwt.catch (fun () ->
-            system (x ^ " " ^ Xjid.full_jid_to_string jid ^ " " ^ buf) >>= fun _ ->
-            Lwt.return_unit)
-          (fun _ -> Lwt.return_unit)
+      (maybe_catch_and_return cb (fun x ->
+           system (x ^ " " ^ Xjid.full_jid_to_string jid ^ " " ^ buf))) >>= fun () ->
+      (maybe_catch_and_return chan_opt (fun chan ->
+           Lwt_io.write_line chan buf))
     in
     let rec loop s0 =
       Lwt_mvar.take mvar >>= fun v ->
@@ -106,13 +176,15 @@ module Notify = struct
         | Disconnected, C_N -> D_N
         | Connected, D -> C
         | Connected, D_N -> C_N
-        | Notifications, D -> D_N
-        | Notifications, C -> C_N
+        | Notification true, D -> D_N
+        | Notification false, D_N -> D
+        | Notification true, C -> C_N
+        | Notification false, C_N -> C
         | Clear, C_N -> C
         | Clear, D_N -> D
         | _, _ -> s0
       in
-      write_file (to_string s1) >>= fun () ->
+      notify_call (to_string s1 v) >>= fun () ->
       if s1 = Q then
         Lwt.return_unit
       else
@@ -159,7 +231,7 @@ module Connect = struct
     report sa ;
     sa
 
-  let connect_me config ui_mvar state_mvar users =
+  let connect_me config ui_mvar notify_mvar users =
     let mvar = Lwt_mvar.create Cancel in
     let failure reason =
       disconnect () >>= fun () ->
@@ -223,7 +295,7 @@ module Connect = struct
            connect user_data presence >>= fun () ->
            reconnect_loop None presence
         | Success user_data ->
-           Lwt_mvar.put state_mvar Connected >>= fun () ->
+           Lwt_mvar.put notify_mvar Connected >>= fun () ->
            reconnect_loop (Some user_data) presence
         | Presence p ->
            reconnect_loop user_data p
@@ -238,7 +310,7 @@ module Connect = struct
     mvar
 end
 
-let empty_state config_directory config contacts connect_mvar state_mvar =
+let empty_state config_directory config contacts connect_mvar notify_mvar =
   let contact_mvar = Persistency.notify_user config_directory
   and active = `Bare (fst config.Xconfig.jid)
   in
@@ -246,7 +318,7 @@ let empty_state config_directory config contacts connect_mvar state_mvar =
     config_directory                ;
     config                          ;
 
-    state_mvar                      ;
+    notify_mvar                     ;
     contact_mvar                    ;
     connect_mvar                    ;
 
@@ -256,6 +328,7 @@ let empty_state config_directory config contacts connect_mvar state_mvar =
     last_active_contact = active    ;
 
     notifications       = []        ;
+    gui_has_focus       = true      ;
 
     show_offline        = true      ;
     window_mode         = BuddyList ;
@@ -292,40 +365,30 @@ let random_string () =
   let rnd = Rng.generate 12 in
   Cstruct.to_string (Base64.encode rnd)
 
+let contact_has_user_focus state jid =
+  state.gui_has_focus && (isactive state jid)
+
 let notify state jid =
-  Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Notifications) ;
-  if
-    List.exists (Xjid.jid_matches jid) state.notifications ||
+  let newstate =
+    if contact_has_user_focus state jid then
+      state
+    else if
+      List.exists (Xjid.jid_matches jid) state.notifications ||
       (Xjid.jid_matches state.active_contact jid && state.scrollback = 0)
-  then
-    state
-  else
-    { state with notifications = jid :: state.notifications }
+    then
+      state
+    else
+      { state with notifications = jid :: state.notifications } in
+  Lwt.async (fun () -> Lwt_mvar.put newstate.notify_mvar (Notification (has_any_notifications newstate))) ;
+  newstate
 
-let active state =
-  match Contact.find_contact state.contacts (Xjid.t_to_bare state.active_contact) with
-  | None -> assert false
-  | Some x -> x
-
-let isactive state jid =
-  let bare = Xjid.t_to_bare state.active_contact in
-  match active state with
-  | `User u when not u.User.expand -> Xjid.jid_matches (`Bare bare) jid
-  | _ -> jid = state.active_contact
-
-let isnotified state jid =
+let has_notifications state jid =
   List.exists (Xjid.jid_matches jid) state.notifications
-
-let notified state =
-  let notifications = List.filter (fun x -> not (isactive state x)) state.notifications in
-  if List.length notifications = 0 then
-    Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) ;
-  { state with notifications }
 
 let active_contacts state =
   let active jid =
     let id = `Bare jid in
-    state.show_offline || Xjid.jid_matches id state.active_contact || isnotified state id
+    state.show_offline || Xjid.jid_matches id state.active_contact || has_notifications state id
   and online contact =
     Contact.active_presence contact <> `Offline
   and self = function
@@ -343,7 +406,7 @@ let active_resources state contact =
   if state.show_offline then
     Contact.all_resources contact
   else
-    let tst jid = isnotified state jid || state.active_contact = jid in
+    let tst jid = has_notifications state jid || state.active_contact = jid in
     Contact.active_resources tst contact
 
 let potentially_visible_resource state contact =
@@ -410,7 +473,7 @@ let activate_contact state active =
         window_mode         = BuddyList ;
         input               = Contact.input_buffer now }
     in
-    notified state
+    maybe_clear state
   in
   match find state.active_contact, find active with
   | Some cur, Some now ->

@@ -24,7 +24,7 @@ let init_system ui_mvar =
       | exn -> err true (Printexc.to_string exn)
   )
 
-let start_client cfgdir debug unicode () =
+let start_client cfgdir debug unicode fd_gui fd_nfy () =
   Sys.(set_signal sigpipe Signal_ignore) ;
 
   Printexc.register_printer (function
@@ -93,12 +93,12 @@ let start_client cfgdir debug unicode () =
 
   let ui_mvar = Lwt_mvar.create_empty () in
 
-  let state_mvar =
-    let file = Filename.concat cfgdir "notification.state" in
-    Cli_state.Notify.notify_writer myjid config.Xconfig.notification_callback file
+  let notify_mvar =
+    Cli_state.Notify.notify_writer myjid config.Xconfig.notification_callback fd_nfy
   in
-  let connect_mvar = Cli_state.Connect.connect_me config ui_mvar state_mvar users in
-  let state = Cli_state.empty_state cfgdir config users connect_mvar state_mvar in
+  let _ = Cli_state.Notify.gui_focus_reader fd_gui ui_mvar in
+  let connect_mvar = Cli_state.Connect.connect_me config ui_mvar notify_mvar users in
+  let state = Cli_state.empty_state cfgdir config users connect_mvar notify_mvar in
 
   let greeting =
     "multi user chat support: see you at /join jackline@conference.jabber.ccc.de (use ArrowUp key); \
@@ -135,7 +135,7 @@ let start_client cfgdir debug unicode () =
 
   closing () >>= fun () ->
 
-  Lwt_mvar.put state.Cli_state.state_mvar Cli_state.Quit >>= fun () ->
+  Lwt_mvar.put state.Cli_state.notify_mvar Cli_state.Quit >>= fun () ->
 
   (* cancel history dumper *)
   Lwt_engine.stop_event hist_dumper ;
@@ -144,8 +144,10 @@ let start_client cfgdir debug unicode () =
 
 let config_dir = ref ""
 let debug = ref false
-let rest = ref []
+let fd_gui = ref None
+let fd_nfy = ref None
 let ascii = ref false
+let rest = ref []
 
 let _ =
   let home = Unix.getenv "HOME" in
@@ -166,12 +168,14 @@ let usage = "usage " ^ Sys.argv.(0)
 let arglist = [
   ("-f", Arg.String (fun d -> config_dir := d), "configuration directory (defaults to ~/.config/ocaml-xmpp-client/)") ;
   ("-d", Arg.Bool (fun d -> debug := d), "log to out.txt in current working directory") ;
-  ("-a", Arg.Bool (fun a -> ascii := a), "ASCII only output")
+  ("-a", Arg.Bool (fun a -> ascii := a), "ASCII only output") ;
+  ("--fd-gui", Arg.Int (fun fd -> fd_gui := Some fd), "File descriptor to receive GUI focus updates on.") ;
+  ("--fd-nfy", Arg.Int (fun fd -> fd_nfy := Some fd), "File descriptor to send notification updates on.")
 ]
 
 let _ =
   try
     Arg.parse arglist (fun x -> rest := x :: !rest) usage ;
-    Lwt_main.run (start_client !config_dir !debug (not !ascii) ())
+    Lwt_main.run (start_client !config_dir !debug (not !ascii) !fd_gui !fd_nfy ())
   with
   | Sys_error s -> print_endline s
