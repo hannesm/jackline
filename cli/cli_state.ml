@@ -313,10 +313,10 @@ let isactive state jid =
   | `User u when not u.User.expand -> Xjid.jid_matches (`Bare bare) jid
   | _ -> jid = state.active_contact
 
-let isnotified state jid =
+let has_notifications state jid =
   List.exists (Xjid.jid_matches jid) state.notifications
 
-let notified state =
+let maybe_clear state =
   let notifications = List.filter (fun x -> not (isactive state x)) state.notifications in
   if List.length notifications = 0 then
     Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) ;
@@ -325,7 +325,7 @@ let notified state =
 let active_contacts state =
   let active jid =
     let id = `Bare jid in
-    state.show_offline || Xjid.jid_matches id state.active_contact || isnotified state id
+    state.show_offline || Xjid.jid_matches id state.active_contact || has_notifications state id
   and online contact =
     Contact.active_presence contact <> `Offline
   and self = function
@@ -343,7 +343,7 @@ let active_resources state contact =
   if state.show_offline then
     Contact.all_resources contact
   else
-    let tst jid = isnotified state jid || state.active_contact = jid in
+    let tst jid = has_notifications state jid || state.active_contact = jid in
     Contact.active_resources tst contact
 
 let potentially_visible_resource state contact =
@@ -410,7 +410,7 @@ let activate_contact state active =
         window_mode         = BuddyList ;
         input               = Contact.input_buffer now }
     in
-    notified state
+    maybe_clear state
   in
   match find state.active_contact, find active with
   | Some cur, Some now ->

@@ -99,14 +99,14 @@ let format_buddy state width s contact resource =
   let a =
     if isactive state jid then
       A.(st reverse)
-    else if isnotified state jid then
+    else if has_notifications state jid then
       A.(st blink)
     else
       A.empty
   in
   let a = A.(a ++ buddy_to_color (Contact.color contact resource)) in
   let first =
-    match isnotified state jid, Contact.expanded contact with
+    match has_notifications state jid, Contact.expanded contact with
     | true, true -> I.char a '*' 1 1
     | false, false -> I.char a (if potentially_visible_resource state contact then '+' else ' ') 1 1
     | true, false -> Char.star a 1

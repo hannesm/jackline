@@ -10,7 +10,7 @@ let navigate_message_buffer state direction =
   | Down, 0 -> state
   | Down, n ->
     let s = { state with scrollback = pred n } in
-    if s.scrollback = 0 then notified s else s
+    if s.scrollback = 0 then maybe_clear s else s
   | Up, n -> { state with scrollback = succ n }
 
 let history state dir =
