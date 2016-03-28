@@ -31,7 +31,7 @@ type state = {
   config_directory : string ;
   config : Xconfig.t ;
 
-  state_mvar : notify_v Lwt_mvar.t ;
+  notify_mvar : notify_v Lwt_mvar.t ;
   contact_mvar : Contact.contact Lwt_mvar.t ;
   connect_mvar : connect_v Lwt_mvar.t ;
 
@@ -83,7 +83,7 @@ let maybe_clear state =
   else
     let notifications = List.filter (fun x -> not (isactive state x)) state.notifications in
     if not (has_any_notifications state) then
-      Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Clear) ;
+      Lwt.async (fun () -> Lwt_mvar.put state.notify_mvar Clear) ;
     { state with notifications }
 
 let selflog mvar from message =
@@ -217,7 +217,7 @@ module Connect = struct
     report sa ;
     sa
 
-  let connect_me config ui_mvar state_mvar users =
+  let connect_me config ui_mvar notify_mvar users =
     let mvar = Lwt_mvar.create Cancel in
     let failure reason =
       disconnect () >>= fun () ->
@@ -281,7 +281,7 @@ module Connect = struct
            connect user_data presence >>= fun () ->
            reconnect_loop None presence
         | Success user_data ->
-           Lwt_mvar.put state_mvar Connected >>= fun () ->
+           Lwt_mvar.put notify_mvar Connected >>= fun () ->
            reconnect_loop (Some user_data) presence
         | Presence p ->
            reconnect_loop user_data p
@@ -296,7 +296,7 @@ module Connect = struct
     mvar
 end
 
-let empty_state config_directory config contacts connect_mvar state_mvar =
+let empty_state config_directory config contacts connect_mvar notify_mvar =
   let contact_mvar = Persistency.notify_user config_directory
   and active = `Bare (fst config.Xconfig.jid)
   in
@@ -304,7 +304,7 @@ let empty_state config_directory config contacts connect_mvar state_mvar =
     config_directory                ;
     config                          ;
 
-    state_mvar                      ;
+    notify_mvar                      ;
     contact_mvar                    ;
     connect_mvar                    ;
 
@@ -359,7 +359,7 @@ let notify state jid =
     (* TODO(infinity0): perhaps do a no-op notification as well *)
     state
   else (
-    Lwt.async (fun () -> Lwt_mvar.put state.state_mvar Notifications) ;
+    Lwt.async (fun () -> Lwt_mvar.put state.notify_mvar Notifications) ;
     if
       List.exists (Xjid.jid_matches jid) state.notifications ||
       (Xjid.jid_matches state.active_contact jid && state.scrollback = 0)

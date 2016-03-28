@@ -93,12 +93,12 @@ let start_client cfgdir debug unicode fd_gui fd_nfy () =
 
   let ui_mvar = Lwt_mvar.create_empty () in
 
-  let state_mvar =
+  let notify_mvar =
     Cli_state.Notify.notify_writer myjid config.Xconfig.notification_callback fd_nfy
   in
   let _ = Cli_state.Notify.gui_focus_reader fd_gui ui_mvar in
-  let connect_mvar = Cli_state.Connect.connect_me config ui_mvar state_mvar users in
-  let state = Cli_state.empty_state cfgdir config users connect_mvar state_mvar in
+  let connect_mvar = Cli_state.Connect.connect_me config ui_mvar notify_mvar users in
+  let state = Cli_state.empty_state cfgdir config users connect_mvar notify_mvar in
 
   let greeting =
     "multi user chat support: see you at /join jackline@conference.jabber.ccc.de (use ArrowUp key); \
@@ -135,7 +135,7 @@ let start_client cfgdir debug unicode fd_gui fd_nfy () =
 
   closing () >>= fun () ->
 
-  Lwt_mvar.put state.Cli_state.state_mvar Cli_state.Quit >>= fun () ->
+  Lwt_mvar.put state.Cli_state.notify_mvar Cli_state.Quit >>= fun () ->
 
   (* cancel history dumper *)
   Lwt_engine.stop_event hist_dumper ;
