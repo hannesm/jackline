@@ -93,10 +93,8 @@ let start_client cfgdir debug unicode fd_gui fd_nfy () =
 
   let ui_mvar = Lwt_mvar.create_empty () in
 
-  let state_mvar =
-    Cli_state.Notify.notify_writer myjid config.Xconfig.notification_callback fd_nfy
-  in
-  let _ = Cli_state.Notify.gui_focus_reader fd_gui ui_mvar in
+  Cli_state.Notify.notify_writer myjid config.Xconfig.notification_callback fd_nfy >>= fun state_mvar ->
+  Cli_state.Notify.gui_focus_reader fd_gui ui_mvar ;
   let connect_mvar = Cli_state.Connect.connect_me config ui_mvar state_mvar users in
   let state = Cli_state.empty_state cfgdir config users connect_mvar state_mvar in
 
@@ -169,8 +167,8 @@ let arglist = [
   ("-f", Arg.String (fun d -> config_dir := d), "configuration directory (defaults to ~/.config/ocaml-xmpp-client/)") ;
   ("-d", Arg.Bool (fun d -> debug := d), "log to out.txt in current working directory") ;
   ("-a", Arg.Bool (fun a -> ascii := a), "ASCII only output") ;
-  ("--fd-gui", Arg.Int (fun fd -> fd_gui := Some fd), "File descriptor to receive GUI focus updates on.") ;
-  ("--fd-nfy", Arg.Int (fun fd -> fd_nfy := Some fd), "File descriptor to send notification updates on.")
+  ("--fd-gui", Arg.String (fun fd -> fd_gui := Some fd), "File descriptor to receive GUI focus updates on.") ;
+  ("--fd-nfy", Arg.String (fun fd -> fd_nfy := Some fd), "File descriptor to send notification updates on.")
 ]
 
 let _ =

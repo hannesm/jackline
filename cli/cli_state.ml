@@ -83,7 +83,8 @@ let maybe_clear state =
       state
     else
       let notifications = List.filter (fun x -> not (isactive state x)) state.notifications in
-      { state with notifications } in
+      { state with notifications }
+  in
   if not (has_any_notifications newstate) && has_any_notifications state then
     (* latter test is so that we don't notify every time the user changes contact *)
     Lwt.async (fun () -> Lwt_mvar.put newstate.state_mvar Clear) ;
@@ -105,67 +106,67 @@ module Notify = struct
       | D -> "disconnected"
       | C -> "connected"
       | D_N -> "disconnected_notifications"
-      | C_N -> "connected_notifications" in
-    let vs = match v with
+      | C_N -> "connected_notifications"
+    and vs = match v with
       | Connected -> "connect"
       | Disconnected -> "disconnect"
       | Notification true -> "notify_contact"
       | Notification false -> "notify_contact clear_all_notifications"
       | Clear -> "clear_all_notifications"
-      | Quit -> "quit" in
+      | Quit -> "quit"
+    in
     ss ^ " " ^ vs
 
-  let to_gui_focus line = match line with
+  let to_gui_focus = function
     | "gui_focus true" -> true
     | "gui_focus false" -> false
     | _ -> true
 
-  let flag_of_mode (type a) (mode:a Lwt_io.mode) = match mode with
-      | Lwt_io.Input -> Unix.O_RDONLY
-      | Lwt_io.Output -> Unix.O_WRONLY
+  let flag_of_mode (type a) (mode : a Lwt_io.mode) = match mode with
+    | Lwt_io.Input -> Unix.O_RDONLY
+    | Lwt_io.Output -> Unix.O_WRONLY
 
-  let channel_of_int fd mode =
-    (* OCaml does not provide a library method to get the nth file descriptor of
-       a process, so we instead open /dev/fd/n which is portable across most
-       popular modern Unixes including Linux and *BSD, see
-
-       https://unix.stackexchange.com/questions/123602/portability-of-file-descriptor-links
-
-       We could also use ExtUnix which provides file_descr_of_int but this seems
-       a bit excessive just for this. *)
-    let ufd = Unix.openfile ("/dev/fd/" ^ string_of_int fd) [flag_of_mode mode] 0 in
-    Lwt_io.of_fd ~mode:mode (Lwt_unix.of_unix_file_descr ~blocking:true ufd)
+  let channel fd mode =
+    Lwt_unix.openfile fd [flag_of_mode mode] 0 >|=
+    Lwt_io.of_fd ~mode:mode
 
   (* TODO(infinity0): perhaps log the exception somewhere *)
   let catch_exn f = Lwt.catch f (fun _ -> Lwt.return_unit)
 
   let gui_focus_reader fdo ui_mvar =
-    let mvar = Lwt_mvar.create true in
-    (match fdo with
+    match fdo with
     | None -> ()
     | Some fd ->
-      let chan = channel_of_int fd Lwt_io.input in
-      let rec loop () = catch_exn (fun () ->
-          Lwt_io.read_line chan
-          >>= (fun line -> Lwt_mvar.put ui_mvar (fun state ->
-              Lwt.return (`Ok (maybe_clear { state with gui_has_focus = (to_gui_focus line) })))))
-        >>= loop in
-      Lwt.async loop) ;
-    mvar
+      let doit () =
+        channel fd Lwt_io.input >>= fun chan ->
+        let rec loop () =
+          Lwt_io.read_line chan >>= fun line ->
+          let cb state =
+            let gui_has_focus = to_gui_focus line in
+            Lwt.return (`Ok (maybe_clear { state with gui_has_focus }))
+          in
+          Lwt_mvar.put ui_mvar cb >>=
+          loop
+        in
+        catch_exn loop
+      in
+      Lwt.async doit
 
-  let maybe_catch_and_return opt f = match opt with
-    | None -> Lwt.return_unit
-    | Some s -> catch_exn (fun () -> f s >>= fun _ -> Lwt.return_unit)
+  let maybe_catch_and_return opt f =
+    Utils.option Lwt.return_unit (fun s -> catch_exn (fun () -> f s)) opt
 
   let notify_writer jid cb fdo =
     let mvar = Lwt_mvar.create Disconnected in
-    let chan_opt = match fdo with None -> None | Some fd -> Some (channel_of_int fd Lwt_io.output) in
+    (Utils.option
+       (Lwt.return None)
+       (fun fd -> channel fd Lwt_io.output >|= fun ch -> Some ch)
+       fdo) >|= fun chan_opt ->
     let notify_call buf =
-      let open Lwt_unix in
-      (maybe_catch_and_return cb (fun x ->
-           system (x ^ " " ^ Xjid.full_jid_to_string jid ^ " " ^ buf))) >>= fun () ->
-      (maybe_catch_and_return chan_opt (fun chan ->
-           Lwt_io.write_line chan buf))
+      let args = " " ^ Xjid.full_jid_to_string jid ^ " " ^ buf in
+      maybe_catch_and_return cb
+        (fun x -> Lwt_unix.system (x ^ args) >>= fun _ -> Lwt.return_unit) >>= fun () ->
+      maybe_catch_and_return chan_opt
+        (fun chan -> Lwt_io.write_line chan buf)
     in
     let rec loop s0 =
       Lwt_mvar.take mvar >>= fun v ->
