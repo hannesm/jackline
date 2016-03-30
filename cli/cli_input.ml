@@ -204,7 +204,7 @@ let read_terminal term mvar input_mvar () =
               and s = { s with input = ([], []) }
               in
               let err msg = add_status s (`Local ((`Full s.config.Xconfig.jid), "error")) msg in
-              if String.length (String.trim input) = 0 then
+              if String.length input = 0 then
                 let active = active s in
                 let exp = Contact.expanded active in
                 ok (if exp || potentially_visible_resource s active then
