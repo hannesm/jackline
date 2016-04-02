@@ -93,8 +93,8 @@ let start_client cfgdir debug unicode fd_gui fd_nfy () =
 
   let ui_mvar = Lwt_mvar.create_empty () in
 
-  Cli_state.Notify.notify_writer myjid config.Xconfig.notification_callback fd_nfy >>= fun state_mvar ->
-  Cli_state.Notify.gui_focus_reader fd_gui ui_mvar ;
+  Cli_state.Notify.notify_writer ui_mvar myjid config.Xconfig.notification_callback fd_nfy >>=
+  fun state_mvar -> Cli_state.Notify.gui_focus_reader fd_gui ui_mvar ;
   let connect_mvar = Cli_state.Connect.connect_me config ui_mvar state_mvar users in
   let state = Cli_state.empty_state cfgdir config users connect_mvar state_mvar in
 
