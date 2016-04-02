@@ -368,17 +368,13 @@ let random_string () =
   let rnd = Rng.generate 12 in
   Cstruct.to_string (Base64.encode rnd)
 
-let contact_has_user_focus state jid =
-  state.gui_has_focus && (isactive state jid)
-
 let notify state jid =
   let newstate =
-    if contact_has_user_focus state jid then
-      state
-    else if
+    if
       List.exists (Xjid.jid_matches jid) state.notifications ||
-      (Xjid.jid_matches state.active_contact jid && state.scrollback = 0)
+      (state.gui_has_focus && Xjid.jid_matches state.active_contact jid && state.scrollback = 0)
     then
+      (* no-op <=> already has notification || has focus from {parent gui, term window, scrolling} *)
       state
     else
       { state with notifications = jid :: state.notifications } in
