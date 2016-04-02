@@ -41,7 +41,6 @@ type state = {
   (* list of jid to blink *)
   notifications : Xjid.t list ;
   gui_has_focus : bool ;
-  gui_connected : bool ;
 
   (* initially yourself, modified by key presses (page up/page down/C-x/C-q) *)
   active_contact : Xjid.t ;
@@ -312,10 +311,9 @@ module Connect = struct
     mvar
 end
 
-let empty_state config_directory config contacts connect_mvar state_mvar fd_gui =
+let empty_state config_directory config contacts connect_mvar state_mvar =
   let contact_mvar = Persistency.notify_user config_directory
   and active = `Bare (fst config.Xconfig.jid)
-  and gui_connected = Utils.option false (fun _ -> true) fd_gui
   in
   {
     config_directory                ;
@@ -332,7 +330,6 @@ let empty_state config_directory config contacts connect_mvar state_mvar fd_gui 
 
     notifications       = []        ;
     gui_has_focus       = true      ;
-    gui_connected                   ;
 
     show_offline        = true      ;
     window_mode         = BuddyList ;
@@ -369,19 +366,21 @@ let random_string () =
   let rnd = Rng.generate 12 in
   Cstruct.to_string (Base64.encode rnd)
 
+let contact_has_user_focus state jid =
+  state.gui_has_focus && (isactive state jid)
+
 let notify state jid =
   let newstate =
-    if
-      (state.gui_has_focus && state.gui_connected && isactive state jid) ||
+    if contact_has_user_focus state jid then
+      state
+    else if
       List.exists (Xjid.jid_matches jid) state.notifications ||
       (Xjid.jid_matches state.active_contact jid && state.scrollback = 0)
     then
       state
     else
-      { state with notifications = jid :: state.notifications }
-  in
-  let real = not state.gui_connected || has_any_notifications newstate in
-  Lwt.async (fun () -> Lwt_mvar.put newstate.state_mvar (Notification real)) ;
+      { state with notifications = jid :: state.notifications } in
+  Lwt.async (fun () -> Lwt_mvar.put newstate.state_mvar (Notification (has_any_notifications newstate))) ;
   newstate
 
 let has_notifications state jid =
