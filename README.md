@@ -134,6 +134,15 @@ contact, a prepended `*` (or `☀` in case of collapsed contact), a blue
 `#` in the bottom left corner, execution of `notification_callback`, and
 a message to a file descriptor (if `--fd-nfy` is used).
 
+The most basic callback would be a script that emits a BEL and a terminal that
+translates a bell to urgency (`.Xdefaults`: `Xterm*vt100.bellsUrgent: true`; `bell.sh`:
+```
+if [ $3 != "connect" ]; then
+  echo -n ^G
+fi
+```
+where ^G can be written in shell by subsequent Ctrl-V Ctrl-G).
+
 A message is sent to the active contact by typing it followed by
 `return`.
 
