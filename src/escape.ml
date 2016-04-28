@@ -38,6 +38,7 @@ let rec strip_tags str =
             - <a href=...>aaa</a>
        *)
        if get data (pred (length data)) = '/' then
+         (* <br/> case *)
          l ^ strip_tags r
        else
          let s = match cut ~sep:" " data with
