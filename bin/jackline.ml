@@ -153,7 +153,7 @@ let _ =
   config_dir := Filename.concat cfgdir "ocaml-xmpp-client"
 
 let _ =
-  let utf s = Astring.String.is_infix ~affix:"UTF" (String.uppercase s) in
+  let utf s = Astring.String.is_infix ~affix:"UTF" (Astring.String.Ascii.uppercase s) in
   let rec tst = function
     | [] -> false
     | x::xs -> try utf (Unix.getenv x) with Not_found -> tst xs
