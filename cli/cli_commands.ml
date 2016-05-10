@@ -3,7 +3,7 @@ open Cli_state
 open Lwt.Infix
 
 let string_normalize_fingerprint fpstr =
-  let fpstr = String.lowercase fpstr in
+  let fpstr = Astring.String.Ascii.lowercase fpstr in
   Astring.String.fold_right
     (fun c acc -> if Astring.Char.Ascii.is_hex_digit c then
                     Astring.String.of_char c ^ acc
@@ -830,7 +830,7 @@ let adjust_otr_policy default_cfg cfg contact data =
     if String.length left > 0 then
       let arg, rest = split_ws left in
       let first, arg = String.get arg 0, String.sub arg 1 (pred (String.length arg)) in
-      let pols, vers = match first, try_decode (String.uppercase arg) with
+      let pols, vers = match first, try_decode (Astring.String.Ascii.uppercase arg) with
         | '+', (Some pol, None) when List.mem pol pols -> pols, vers
         | '+', (Some pol, None) -> pol :: pols, vers
         | '-', (Some pol, None) -> List.filter (fun x -> x <> pol) pols, vers
