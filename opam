@@ -15,6 +15,7 @@ build: [
 depends: [
   "ocamlfind" {build}
   "ocamlbuild" {build}
+  "ppx_sexp_conv" {build}
   "erm_xmpp" {>= "0.3"}
   "tls" {>= "0.7.0"}
   "nocrypto" {>= "0.5.0"}
@@ -25,7 +26,6 @@ depends: [
   "ptime" {>= "0.8.0"}
   "notty"
   "sexplib"
-  "ppx_sexp_conv"
   "hex"
 ]
 available: [ ocaml-version >= "4.02.2" ]
