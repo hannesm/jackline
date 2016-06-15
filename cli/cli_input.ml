@@ -225,8 +225,13 @@ let read_terminal term mvar input_mvar () =
                 match String.trim input with
                 | "/quit" -> Lwt.return (`Quit s)
                 | cmd ->
+                  let realcmd =
+                    match Cli_commands.completion cmd with
+                    | [x] -> cmd ^ x
+                    | _ -> cmd
+                  in
                   let active = clear_input (active s) cmd in
-                  Cli_commands.exec cmd s active self p
+                  Cli_commands.exec realcmd s active self p
               else if self then
                 (err "try `M-x doctor` in emacs instead" ;
                  ok s)
