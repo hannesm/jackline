@@ -31,9 +31,13 @@ let format_message tz_offset_s now self buddy resource { User.direction ; encryp
   let time = print_time ~now ~tz_offset_s timestamp
   and style, pre =
     match buddy with
-    | `Room _ ->
+    | `Room r ->
       ( match direction with
-        | `From (`Full (_, nick)) -> (`Highlight, nick ^ ": ")
+        | `From (`Full (_, nick)) ->
+           begin match Astring.String.find_sub ~sub:r.Muc.my_nick message with
+           | Some _ -> (`Underline, nick ^ ": ")
+           | None   -> (`Highlight, nick ^ ": ")
+           end
         | `From (`Bare _) -> (`Highlight, " ")
         | `Local (_, x) -> (`Default, "***" ^ x ^ " ")
         | `To _ -> (`Default, if received then "-> " else "?> ") )
@@ -65,6 +69,7 @@ let format_message tz_offset_s now self buddy resource { User.direction ; encryp
   and to_style = function
     | `Default -> A.empty
     | `Highlight -> A.(st bold)
+    | `Underline -> A.(st underline)
   in
   let p, msg =
     if String.length message >= 3 && String.sub message 0 3 = "/me" then
