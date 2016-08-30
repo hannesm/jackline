@@ -34,10 +34,13 @@ let format_message tz_offset_s now self buddy resource { User.direction ; encryp
     | `Room r ->
       ( match direction with
         | `From (`Full (_, nick)) ->
-           begin match Astring.String.find_sub ~sub:r.Muc.my_nick message with
-           | Some _ -> (`Underline, nick ^ ": ")
-           | None   -> (`Highlight, nick ^ ": ")
-           end
+          let tag =
+            if Astring.String.is_infix ~affix:r.Muc.my_nick message then
+              `Underline
+            else
+              `Highlight
+          in
+          (tag, nick ^ ": ")
         | `From (`Bare _) -> (`Highlight, " ")
         | `Local (_, x) -> (`Default, "***" ^ x ^ " ")
         | `To _ -> (`Default, if received then "-> " else "?> ") )
