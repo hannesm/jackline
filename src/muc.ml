@@ -149,7 +149,8 @@ let info r =
     | None -> "no topic"
     | Some x -> "topic: " ^ x
   and features = "features: " ^ String.concat "," (List.map feature_to_string r.features)
-  and members = List.map short_member_info r.members
+  and members = List.filter (fun m -> m.role <> `None ) r.members
+                |> List.map short_member_info
   in
   [ topic ; features ] @ members
 
