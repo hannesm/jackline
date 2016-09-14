@@ -37,7 +37,10 @@ let rec strip_tags str =
             - <img src=... /> --> cut
             - <a href=...>aaa</a>
        *)
-       if get data (pred (length data)) = '/' then
+       if data = "br" then
+         (* special case for stupid clients sending <br> *)
+         l ^ " " ^ strip_tags r
+       else if get data (pred (length data)) = '/' then
          (* <br/> case *)
          l ^ strip_tags r
        else
