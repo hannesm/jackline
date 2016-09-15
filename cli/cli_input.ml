@@ -226,7 +226,7 @@ let read_terminal term mvar input_mvar () =
                 | "/quit" -> Lwt.return (`Quit s)
                 | cmd ->
                   let realcmd =
-                    match Cli_commands.completion cmd with
+                    match Cli_commands.completion s cmd with
                     | [x] -> cmd ^ x
                     | _ -> cmd
                   in
@@ -250,7 +250,7 @@ let read_terminal term mvar input_mvar () =
               let pre, post = s.input in
               let input = char_list_to_str pre in
               let pre =
-                match Cli_commands.completion input with
+                match Cli_commands.completion s input with
                 | [] -> pre
                 | [x] -> pre @ str_to_char_list (x ^ " ")
                 | x::xs ->

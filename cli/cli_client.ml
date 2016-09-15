@@ -281,7 +281,7 @@ let render_state (width, height) state =
       let r = match post with
         | [] ->
           let input = char_list_to_str pre in
-          ( match Cli_commands.completion input with
+          ( match Cli_commands.completion state input with
             | [] -> I.empty
             | [x] -> I.string A.(fg (gray 18)) x
             | xs -> I.string A.(fg (gray 18)) (String.concat "|" xs) )

@@ -15,7 +15,7 @@ type command = {
   name : string ;
   command_line : string ;
   documentation : string ;
-  subcommands : string list ;
+  subcommands : state -> string list ;
 }
 
 module StringHash =
@@ -37,68 +37,72 @@ let new_command name command_line documentation subcommands =
 let _ =
   (* global *)
   new_command
-    "connect" "/connect" "connects to the server" [] ;
+    "connect" "/connect" "connects to the server" (fun _ -> []) ;
   new_command
-    "disconnect" "/disconnect" "disconnects from the server" [] ;
+    "disconnect" "/disconnect" "disconnects from the server" (fun _ -> []) ;
   new_command
-    "quit" "/quit" "exits this client" [] ;
+    "quit" "/quit" "exits this client" (fun _ -> []) ;
 
   new_command
-    "logheight" "/logheight [number]" "adjusts height of log to n" [] ;
+    "logheight" "/logheight [number]" "adjusts height of log to n" (fun _ -> []) ;
 
   (* global roster commands *)
   new_command
     "add" "/add [jid]"
-    "adds jid to your contact list, and sends a subscription request" [] ;
+    "adds jid to your contact list, and sends a subscription request" (fun _ -> []) ;
+
+  new_command (* XXX needs dynamic completions! *)
+    "go" "/go [jid]" "jump to contact jid" (fun s -> List.map Xjid.jid_to_string (all_jids s)) ;
 
   (* things affecting you *)
   new_command
     "status" "/status [presence] [message]"
     "sets your presence -- one of 'free' 'away' 'dnd' 'xa' 'offline' or 'online' and status message"
-    [ "free" ; "away" ; "dnd" ; "xa" ; "offline" ; "online" ] ;
+    (fun _ -> [ "free" ; "away" ; "dnd" ; "xa" ; "offline" ; "online" ]) ;
   new_command
-    "priority" "/priority [number]" "set your presence priority to number" [ ] ;
+    "priority" "/priority [number]" "set your presence priority to number" (fun _ -> []) ;
 
   (* user as context *)
   new_command
     "otrpolicy" "/otrpolicy +-[policy version]" "prints (without argument) or adjusts (prefix with add (+) or remove (-)) the otr policies and versions: require_encryption, send_whitespace_tag, whitespace_start_ake, error_start_ake, reveal_macs, v2, v3"
-    [ "+REQUIRE_ENCRYPTION" ; "+SEND_WHITESPACE_TAG" ; "+WHITESPACE_START_AKE" ; "+ERROR_START_AKE" ; "+REVEAL_MACS" ; "+V2" ; "+V3" ; "-REQUIRE_ENCRYPTION" ; "-SEND_WHITESPACE_TAG" ; "-WHITESPACE_START_AKE" ; "-ERROR_START_AKE" ; "-REVEAL_MACS" ; "-V2" ; "-V3" ] ;
+    (fun _ -> [ "+REQUIRE_ENCRYPTION" ; "+SEND_WHITESPACE_TAG" ; "+WHITESPACE_START_AKE" ; "+ERROR_START_AKE" ; "+REVEAL_MACS" ; "+V2" ; "+V3" ; "-REQUIRE_ENCRYPTION" ; "-SEND_WHITESPACE_TAG" ; "-WHITESPACE_START_AKE" ; "-ERROR_START_AKE" ; "-REVEAL_MACS" ; "-V2" ; "-V3" ]) ;
   new_command
-    "log" "/log [on|off]" "enable or disable logging for current contact" [ "on" ; "off" ] ;
+    "log" "/log [on|off]" "enable or disable logging for current contact" (fun _ -> [ "on" ; "off" ]) ;
   new_command
-    "clear" "/clear" "clears the active window chat backlog" [] ;
+    "clear" "/clear" "clears the active window chat backlog" (fun _ -> []) ;
   new_command
     "authorization" "/authorization [argument]"
     "changes presence subscription of the current contact to argument -- one of 'allow', 'cancel', 'request', 'request_unsubscribe'"
-    [ "allow" ; "cancel" ; "request" ; "request_unsubscribe" ] ;
+    (fun _ -> [ "allow" ; "cancel" ; "request" ; "request_unsubscribe" ]) ;
   new_command
     "fingerprint" "/fingerprint [fp]"
-    "marks the given OTR fingerprint verified for the current contact ; prints own and session fingerprint if no argument is given" [] ;
+    "marks the given OTR fingerprint verified for the current contact ; prints own and session fingerprint if no argument is given"
+    (fun _ -> []) ;
   new_command
     "revoke" "/revoke [fp]"
-    "revokes the given OTR fingerprint" [] ;
+    "revokes the given OTR fingerprint" (fun _ -> []) ;
   new_command
-    "info" "/info" "displays information about the current session" [] ;
+    "info" "/info" "displays information about the current session" (fun _ -> []) ;
   new_command
     "otr" "/otr [argument]" "manages OTR session by argument -- one of 'start' 'stop' or 'info'"
-    [ "start" ; "stop" ; "info" ] ;
+    (fun _ -> [ "start" ; "stop" ; "info" ]) ;
   new_command
     "smp" "/smp [argument]" "manages SMP session by argument -- one of 'shared [secret]', 'question [question]', 'answer' or 'abort'"
-    [ "shared" ; "question" ; "answer" ; "abort" ] ;
+    (fun _ -> [ "shared" ; "question" ; "answer" ; "abort" ]) ;
   new_command
-    "remove" "/remove" "remove current user from roster" [] ;
+    "remove" "/remove" "remove current user from roster" (fun _ -> []) ;
 
   (* multi user chat *)
   new_command
-    "join" "/join [chatroom]" "joins chatroom" [] ;
+    "join" "/join [chatroom]" "joins chatroom" (fun _ -> []) ;
 
   new_command
-    "leave" "/leave [?reason]" "leaves active chatroom (using reason)" [] ;
+    "leave" "/leave [?reason]" "leaves active chatroom (using reason)" (fun _ -> []) ;
 
   (* nothing below here, please *)
   new_command
     "help" "/help [cmd]" "shows available commands or detailed help for cmd"
-    (keys ())
+    (fun _ -> keys ())
 
 let split_ws s =
   match Astring.String.cut ~sep:" " s with
@@ -126,7 +130,7 @@ let might_match cmd prefix =
   in
   cmp_i 0
 
-let completion input =
+let completion s input =
   let open Astring.String in
   let l = length input
   and ws = try String.index input ' ' > 0 with Not_found -> false
@@ -134,17 +138,17 @@ let completion input =
   if l > 0 && get input 0 = '/' then
     match cmd_arg input with
     | (cmd, None) when ws && Commands.mem commands cmd ->
-      (Commands.find commands cmd).subcommands
+      (Commands.find commands cmd).subcommands s
     | (cmd, None) ->
       let cmds = keys () in
       (match List.filter (fun f -> might_match f cmd) cmds with
        | [] -> []
-       | [_] when Commands.mem commands cmd -> (Commands.find commands cmd).subcommands
+       | [_] when Commands.mem commands cmd -> (Commands.find commands cmd).subcommands s
        | xs -> List.map (fun x -> drop ~max:(pred l) x) xs)
     | (cmd, Some arg) when Commands.mem commands cmd ->
       let command = Commands.find commands cmd in
       List.map (fun x -> drop ~max:(pred l) (cmd ^ " " ^ x))
-        (List.filter (fun f -> might_match f arg) command.subcommands)
+        (List.filter (fun f -> might_match f arg) (command.subcommands s))
     | _ -> []
   else
     []
@@ -939,6 +943,13 @@ let exec input state contact isself p =
          | Some log_height when log_height >= 0 -> ok { state with log_height }
          | _ -> err "not a positive number")
      | ("logheight", _), _ -> err "requires argument"
+
+
+     | ("go", Some x), _ ->
+       (match Xjid.string_to_jid x with
+        | None -> err ("couldn't parse jid " ^ x)
+        | Some jid -> try ok (activate_contact state jid) with _ -> err ("jid " ^ x ^ " not found"))
+     | ("go", None), _ -> err "requires argument"
 
      (* commands not using active_contact *)
      | (x, _), None when List.mem x global_things -> err "not connected"
