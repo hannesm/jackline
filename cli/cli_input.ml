@@ -224,6 +224,46 @@ let read_terminal term mvar input_mvar () =
               then
                 match String.trim input with
                 | "/quit" -> Lwt.return (`Quit s)
+                | cmd when String.length cmd > 4 && String.sub cmd 0 4 = "/raw" ->
+                  (match !xmpp_session with
+                   | None -> err "no active session, try to connect first" ; Lwt.return_unit
+                   | Some t ->
+                     let data, otr =
+                       match Cli_commands.split_ws cmd with
+                       | ("/rawenc", Some data) -> data, true
+                       | ("/raw", Some data) -> data, false
+                       | _ -> "", false
+                     in
+                     let msg = Cstruct.to_string (Nocrypto.Uncommon.Cs.of_hex data) in
+                     let user = clear_input (active s) input in
+                     let m, jid, kind = match user with
+                       | `Room r -> Some msg, `Bare r.Muc.room_jid, Some Xmpp_callbacks.XMPPClient.Groupchat
+                       | `User u ->
+                         let bare = u.User.bare_jid in
+                         match session s with
+                         | None -> (if otr then None else Some msg), `Bare bare, None
+                         | Some se ->
+                           let jid = `Full (bare, se.User.resource) in
+                           if otr && Otr.State.is_encrypted se.User.otr then
+                             let ctx, out, _ = Otr.Engine.send_otr se.User.otr msg in
+                             Contact.replace_user s.contacts (User.update_otr u se ctx) ;
+                             (out, jid, None)
+                           else
+                             (Some msg, jid, None)
+                     in
+                     let log dir msg =
+                       let u = active s in
+                       let kind = match kind with None -> `Chat | Some _ -> `GroupChat in
+                       let msg = User.message ~kind dir otr false msg in
+                       let u = Contact.new_message u msg in
+                       Contact.replace_contact s.contacts u
+                     in
+                     match m with
+                     | None -> log (`Local (jid, "warning")) "didn't send anything" ; Lwt.return_unit
+                     | Some m ->
+                       log (`To (jid, "")) ("hex encoded: " ^ data) ;
+                       send t None ?kind jid None m) >>= fun () ->
+                  ok s
                 | cmd ->
                   let realcmd =
                     match Cli_commands.completion s cmd with
