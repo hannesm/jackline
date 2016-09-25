@@ -32,6 +32,7 @@ let validate_utf8 txt =
     | `End -> Buffer.contents buf
     | `Malformed _ -> if !unicode then Uutf.Buffer.add_utf_8 buf 0xFFFD; loop d buf
     | `Uchar 0x000A -> (* newline *) Uutf.Buffer.add_utf_8 buf 0x000A ; loop d buf
+    | `Uchar 0x0009 -> (* tab -> 4 spaces *) Uutf.Buffer.add_utf_8 buf 0x0020 ; Uutf.Buffer.add_utf_8 buf 0x0020 ; Uutf.Buffer.add_utf_8 buf 0x0020 ; Uutf.Buffer.add_utf_8 buf 0x0020 ; loop d buf
     | `Uchar 0x007F (* DEL *)
     (* See https://en.wikipedia.org/wiki/Unicode_control_characters / https://en.wikipedia.org/wiki/Bi-directional_text *)
     | `Uchar 0x200E | `Uchar 0x200F (* left-to-right / right-to-left *)
