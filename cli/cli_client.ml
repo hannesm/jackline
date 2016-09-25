@@ -22,10 +22,7 @@ let format_log tz_offset_s now log =
     | `Local (_, x) -> "*** " ^ x ^ " ***"
     | `To _ -> ">>>"
   in
-  let pre = I.string A.empty (time ^ from ^ " ") in
-  match split_on_nl A.empty message with
-  | [] -> pre
-  | x::xs -> I.vcat (I.(pre <|> x) :: xs)
+  (A.empty, time ^ from ^ " " ^ message)
 
 let format_message tz_offset_s now self buddy resource { User.direction ; encrypted ; received ; timestamp ; message ; _ } =
   let time = print_time ~now ~tz_offset_s timestamp
@@ -92,10 +89,7 @@ let format_message tz_offset_s now self buddy resource { User.direction ; encryp
       ("", message)
   in
   let a = to_style style in
-  let pre = I.string a (time ^ pre ^ p) in
-  match split_on_nl a msg with
-  | [] -> pre
-  | x::xs -> I.vcat (I.(pre <|> x)::xs)
+  (a, time ^ pre ^ p ^ " " ^ msg)
 
 let buddy_to_color = function
   | `Default -> A.empty
@@ -291,7 +285,7 @@ let render_state (width, height) state =
     and main =
       let msgfmt = format_message tz_offset_s now (self state) active resource
       and msgfilter = msgfilter active state.active_contact
-      and msgs msgfilter msgfmt =
+      and msgs strip msgfilter msgfmt =
         let filter, fmt = match active with
           | `User x when x.User.self -> ((fun _ -> true), logfmt)
           | _ -> (msgfilter, msgfmt)
@@ -301,7 +295,7 @@ let render_state (width, height) state =
           (succ state.scrollback) * main_height
         in
         let data = Utils.take_rev max (List.filter filter (Contact.messages active)) in
-        let image = render_wrapped_list chat_width fmt data in
+        let image = render_wrapped_list strip chat_width (List.map fmt data) in
         let bottom = state.scrollback * main_height in
         I.vsnap ~align:`Bottom main_height (I.vcrop 0 bottom image)
       in
@@ -310,13 +304,13 @@ let render_state (width, height) state =
         let buddies = render_buddy_list (buddy_width, main_height) state
         and vline = Char.vdash a main_height
         in
-        I.(buddies <|> vline <|> msgs msgfilter msgfmt)
-      | FullScreen -> msgs msgfilter msgfmt
+        I.(buddies <|> vline <|> msgs true msgfilter msgfmt)
+      | FullScreen -> msgs true msgfilter msgfmt
       | Raw ->
         let p m = match m.User.direction with `From _ -> true | _ -> false
-        and msgfmt x = I.vcat (split_on_nl A.empty x.User.message)
+        and msgfmt x = A.empty, x.User.message
         in
-        msgs p msgfmt
+        msgs false p msgfmt
     and bottom =
       let self = self state in
       let status =
@@ -331,7 +325,7 @@ let render_state (width, height) state =
       else
         let logs =
           let msgs = Utils.take_rev log_height self.User.message_history in
-          let l = render_wrapped_list width logfmt msgs in
+          let l = render_wrapped_list true width (List.map logfmt msgs) in
           I.vsnap ~align:`Bottom log_height l
         and hline = horizontal_line active resource a state.scrollback width
         in
@@ -377,15 +371,15 @@ let rec loop term size mvar input_mvar state =
     try
       render_state size state
     with e ->
-      let e = I.string A.(fg red) (Printexc.to_string e)
-      and note = I.string A.empty
+      let e = A.(fg red), (Printexc.to_string e)
+      and note = A.empty,
           "While trying to render the UI.  Try to scroll to another buddy (Page \
            Up/Down), switch rendering of buddy list (F12), or clear this \
            buddies messages (/clear<ret>); please report this bug \
-           (including the offending characters and the error message)"
+           (including the offending characters and the error message)\n"
       in
       let w = fst size in
-      (I.(wrap w e <-> wrap w note), 1)
+      (render_wrapped_list true w [e ; note], 1)
   in
   Notty_lwt.Term.image term image >>= fun () ->
   Notty_lwt.Term.cursor term (Some (cursorc, snd size)) >>= fun () ->

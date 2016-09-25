@@ -9,6 +9,17 @@ let string_of_int_option default = function
   | None -> default
   | Some x -> string_of_int x
 
+let wrap w image =
+  let w1 = I.width image in
+  let rec go i =
+    if (w1 - i) <= w then
+      [ I.hcrop i 0 image ]
+    else
+      I.hcrop i (w1 - i - w) image :: go (i + w)
+  in
+  let vs = go 0 in
+  I.vcat vs
+
 let rewrap term above below (prefix, inp, inp2) (width, _) =
   let content = wrap width I.(prefix <|> inp <|> inp2) in
   let above = I.vcat (List.map (wrap width) above) in
