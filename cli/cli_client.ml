@@ -89,7 +89,7 @@ let format_message tz_offset_s now self buddy resource { User.direction ; encryp
       ("", message)
   in
   let a = to_style style in
-  (a, time ^ pre ^ p ^ " " ^ msg)
+  (a, time ^ pre ^ p ^ msg)
 
 let buddy_to_color = function
   | `Default -> A.empty
