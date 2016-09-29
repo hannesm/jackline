@@ -1,16 +1,7 @@
-*.annot
-*.cmo
-*.cma
-*.cmi
-*.a
-*.o
-*.cmx
-*.cmxs
-*.cmxa
-*.swp
-_build
-setup.data
-setup.log
-*byte
+# ocamlbuild working directory
+_build/
+
+# ocamlbuild targets
+*.byte
 *.native
-*core
+*.install
