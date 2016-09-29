@@ -7,3 +7,10 @@ env:
   - PACKAGE="jackline" OCAML_VERSION=4.03 EXTRA_REMOTES="https://github.com/hannesm/xmpp-opam.git"
 notifications:
   email: false
+os:
+  - linux
+  - osx
+matrix:
+  exclude:
+    - os: osx
+      env: PACKAGE="jackline" OCAML_VERSION=4.03 EXTRA_REMOTES="https://github.com/hannesm/xmpp-opam.git"
