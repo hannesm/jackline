@@ -49,7 +49,7 @@ let start_client cfgdir debug unicode fd_gui fd_nfy () =
         Persistency.dump_config cfgdir config >>= fun () ->
         (match config.Xconfig.password with
          | None -> Lwt.return_unit
-         | Some x -> Persistency.dump_password cfgdir x) >>= fun () ->
+         | Some x -> Persistency.dump_password cfgdir (Bytes.of_string x)) >>= fun () ->
         Persistency.dump_dsa cfgdir config.Xconfig.dsa >|= fun () ->
         config
       | Some cfg -> Lwt.return cfg) >>= fun config ->

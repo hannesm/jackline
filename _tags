@@ -1,5 +1,4 @@
-true : annot, bin_annot
-true : warn_error(+1..49)
+true : bin_annot, principal, safe_string
 true : warn(+A-4-6-7-9-40-42-44-48)
 "src" : include
 "cli" : include

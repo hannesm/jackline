@@ -12,7 +12,7 @@ let dbg data =
       Printf.sprintf "[%02d:%02d:%02d] %s\n"
         now.Unix.tm_hour now.Unix.tm_min now.Unix.tm_sec data
     in
-    Persistency.write_data x msg
+    Persistency.write_data x (Bytes.of_string msg)
 
 module PlainSocket =
 struct
@@ -24,12 +24,12 @@ struct
 
   let read fd buf start len =
     Lwt_unix.read fd buf start len >>= fun size ->
-    dbg ("IN: " ^ (String.sub buf start size)) >|= fun () ->
+    dbg ("IN: " ^ Bytes.to_string (Bytes.sub buf start size)) >|= fun () ->
     size
 
   let write fd str =
-    dbg ("OUT: " ^ str) >>= fun () ->
-    let len = String.length str in
+    dbg ("OUT: " ^ Bytes.to_string str) >>= fun () ->
+    let len = Bytes.length str in
     let rec aux_send start =
       Lwt_unix.write fd str start (len - start) >>= fun sent ->
       if sent = 0 then
@@ -50,13 +50,14 @@ struct
     let cs = Cstruct.create len in
     Tls_lwt.Unix.read s cs >>= fun size ->
     ( if size > 0 then
-        (String.blit (Cstruct.to_string cs) 0 buf start size ;
-         dbg ("IN TLS: " ^ (String.sub buf start size)))
+        (Cstruct.blit_to_bytes cs start buf 0 size ;
+         dbg ("IN TLS: " ^ Bytes.to_string (Bytes.sub buf start size)))
       else
         Lwt.return () ) >|= fun () ->
     size
 
-  let write s str =
+  let write s bs =
+    let str = Bytes.to_string bs in
     dbg ("OUT TLS: " ^ str) >>= fun () ->
     Tls_lwt.Unix.write s (Cstruct.of_string str)
 

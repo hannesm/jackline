@@ -21,7 +21,7 @@ let read dir file =
       Lwt_unix.openfile f [Unix.O_RDONLY] 0 >>= fun fd ->
       read_data fd >>= fun buf ->
       Lwt_unix.close fd >|= fun () ->
-      Some (String.trim buf))
+      Some (String.trim (Bytes.to_string buf)))
     (fun _ ->
        Lwt.catch
          (fun () ->
@@ -110,7 +110,7 @@ let dump_user cfgdir user =
      let file = Filename.concat userdir out in
      delete file
   | Some sexp ->
-     let data = Sexplib.Sexp.to_string_hum sexp in
+     let data = Bytes.of_string (Sexplib.Sexp.to_string_hum sexp) in
      write userdir out data
 
 let notify_user cfgdir =
@@ -153,7 +153,7 @@ let dump_history cfgdir buddy =
   | None -> Lwt.return_unit (* should remove if user.User.preserve_messages is not set *)
   | Some sexp ->
      message_history_dir cfgdir >>= fun history_dir ->
-     append history_dir (Xjid.bare_jid_to_string (Contact.bare buddy)) sexp
+     append history_dir (Xjid.bare_jid_to_string (Contact.bare buddy)) (Bytes.of_string sexp)
 
 let dump_histories cfgdir users =
   let users = Contact.fold (fun _ v acc -> v :: acc) users [] in
@@ -190,7 +190,7 @@ let load_password cfgdir =
 let otr_dsa = "otr_dsa.sexp"
 
 let dump_dsa cfgdir dsa =
-  write cfgdir otr_dsa (Sexp.to_string_hum (Nocrypto.Dsa.sexp_of_priv dsa))
+  write cfgdir otr_dsa (Bytes.of_string (Sexp.to_string_hum (Nocrypto.Dsa.sexp_of_priv dsa)))
 
 let load_dsa cfgdir =
   read cfgdir otr_dsa >|= function
