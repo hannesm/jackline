@@ -63,15 +63,25 @@ let start_client cfgdir debug unicode fd_gui fd_nfy () =
         Some password
       | Some x -> Lwt.return (Some x)) >>= fun password ->
   let config = { config with Xconfig.password = password } in
+  let myjid = config.Xconfig.jid in
 
+  (* loading old users.sexp *)
   Persistency.load_users cfgdir >>= fun users ->
   let users_sexp_existed = Contact.length users > 0 in
+
+  (* spam people with groupchat *)
+  let groupchat = Muc.new_room
+      ~jid:(match Xjid.string_to_bare_jid "jackline@conference.jabber.ccc.de" with Some x -> x | None -> invalid_arg "broken")
+      ~my_nick:(fst (fst myjid))
+      ~autojoin:false
+      ()
+  in
+  Contact.replace_room users groupchat ;
 
   Persistency.load_user_dir cfgdir users >>= fun () ->
   Persistency.load_histories cfgdir users >>= fun () ->
 
   (* setup self contact *)
-  let myjid = config.Xconfig.jid in
   let () =
     let bare, resource = myjid in
     let user = match Contact.find_user users bare with

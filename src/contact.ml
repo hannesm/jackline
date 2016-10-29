@@ -245,6 +245,12 @@ let marshal = function
   | `User u -> User.marshal_user u
   | `Room r -> Muc.marshal_room r
 
+let load str = match User.load_user str with
+  | Some u -> Some (`User u)
+  | None -> match Muc.load_room str with
+    | Some r -> Some (`Room r)
+    | None -> None
+
 let oneline c r =
   match c, r with
   | `User u, None -> User.oneline u

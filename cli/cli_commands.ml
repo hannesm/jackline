@@ -457,6 +457,7 @@ let handle_connect p c_mvar =
                List.filter (fun m -> m.Muc.nickname <> nick) r.Muc.members
            in
            Contact.replace_room state.contacts { r with Muc.members }) ;
+        Lwt_mvar.put state.contact_mvar (`Room r) >>= fun () ->
         Lwt.return (`Ok state)
     in
     p exec
@@ -905,7 +906,7 @@ let handle_leave buddy reason =
        Xmpp_callbacks.Xep_muc.leave_room s ?reason ~nick (Xjid.jid_to_xmpp_jid jid) >|= fun () ->
        `Ok state
      in
-     let r = `Room { r with Muc.last_status = false } in
+     let r = `Room { r with Muc.autojoin = false } in
      (["leaving room"], Some r, Some clos)
   | _ -> (["not a chatroom"], None, None)
 
@@ -921,7 +922,7 @@ let exec input state contact isself p =
 
   let ok s = Lwt.return (`Ok s) in
 
-  let global_things = ["add";"status";"priority";"join"] in
+  let global_things = ["add";"status";"priority"] in
   match cmd_arg input with
   (* completely independent *)
   | ("help" , x) -> handle_help (msg ?prefix:None) x ; ok state
@@ -978,9 +979,13 @@ let exec input state contact isself p =
             ok state)
 
      (* multi user chat *)
+     | ("join", None), Some s ->
+       let my_nick = fst (fst state.config.Xconfig.jid) in
+       let r = Xjid.bare_jid_to_string (Contact.bare contact) in
+       handle_join state s my_nick state.contacts r err
      | ("join", Some a), Some s ->
-        let my_nick = fst (fst state.config.Xconfig.jid) in
-        handle_join state s my_nick state.contacts a err
+       let my_nick = fst (fst state.config.Xconfig.jid) in
+       handle_join state s my_nick state.contacts a err
 
 
      (* commands using active_contact as context *)

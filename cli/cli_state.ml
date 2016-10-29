@@ -278,7 +278,7 @@ module Connect = struct
                    Contact.fold
                      (fun k v acc ->
                         match v with
-                        | `Room r when r.Muc.last_status -> k :: acc
+                        | `Room r when r.Muc.autojoin -> k :: acc
                         | _ -> acc)
                      users []
                  in

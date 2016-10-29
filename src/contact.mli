@@ -50,6 +50,7 @@ val color : contact -> resource option -> User.color
 val oneline : contact -> resource option -> string
 
 val marshal : contact -> Sexplib.Sexp.t option
+val load : string -> contact option
 
 type contacts
 

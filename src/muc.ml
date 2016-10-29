@@ -135,11 +135,11 @@ type groupchat = {
   input_buffer : (int list * int list) ;
   readline_history : string list ;
   history_position : int ;
-  last_status : bool ;
+  autojoin : bool ;
 }
 
-let new_room ~jid ?(topic=None) ~my_nick ?(members=[]) ?(features=[]) ?(preserve_messages=false) () =
-  { room_jid = jid ; topic ; my_nick ; members ; features ; expand = false ; preserve_messages ; message_history = [] ; input_buffer = ([], []) ; readline_history = [] ; history_position = 0 ; last_status = true }
+let new_room ~jid ?(topic=None) ~my_nick ?(members=[]) ?(features=[]) ?(autojoin = true) ?(preserve_messages=false) () =
+  { room_jid = jid ; topic ; my_nick ; members ; features ; expand = false ; preserve_messages ; message_history = [] ; input_buffer = ([], []) ; readline_history = [] ; history_position = 0 ; autojoin }
 
 let short_member_info m =
   Printf.sprintf " %s %s (role: %s) (affiliation: %s)" (User.presence_to_char m.presence) m.nickname (role_to_string m.role) (affiliation_to_string m.affiliation)
@@ -191,23 +191,27 @@ let t_of_sexp t _version =
   match t with
   | Sexp.List l ->
     (match
-       List.fold_left (fun (room_jid, my_nick, preserve_messages) v -> match v with
+       List.fold_left (fun (room_jid, my_nick, preserve_messages, autojoin) v -> match v with
            | Sexp.List [ Sexp.Atom "room_jid" ; jabberid ] ->
              assert (room_jid = None);
              let room_jid = Xjid.bare_jid_of_sexp jabberid in
-             (Some room_jid, my_nick, preserve_messages)
+             (Some room_jid, my_nick, preserve_messages, autojoin)
            | Sexp.List [ Sexp.Atom "my_nick" ; Sexp.Atom nick ] ->
              assert (my_nick = None);
-             (room_jid, Some nick, preserve_messages)
+             (room_jid, Some nick, preserve_messages, autojoin)
            | Sexp.List [ Sexp.Atom "preserve_messages" ; hf ] ->
              assert (preserve_messages = None) ;
              let preserve_messages = bool_of_sexp hf in
-             (room_jid, my_nick, Some preserve_messages)
+             (room_jid, my_nick, Some preserve_messages, autojoin)
+           | Sexp.List [ Sexp.Atom "autojoin" ; hf ] ->
+             assert (autojoin = None) ;
+             let autojoin = bool_of_sexp hf in
+             (room_jid, my_nick, preserve_messages, Some autojoin)
            | _ -> assert false)
-         (None, None, None) l
+         (None, None, None, None) l
      with
-     | Some room_jid, Some my_nick, Some preserve_messages ->
-       Some (new_room ~jid:room_jid ~my_nick ~preserve_messages ())
+     | Some room_jid, Some my_nick, Some preserve_messages, Some autojoin ->
+       Some (new_room ~jid:room_jid ~my_nick ~preserve_messages ~autojoin ())
      | _ -> None )
   | _ -> None
 
@@ -219,11 +223,20 @@ let sexp_of_t t =
     "room_jid"          , Xjid.sexp_of_bare_jid t.room_jid ;
     "my_nick"           , sexp_of_string t.my_nick ;
     "preserve_messages" , sexp_of_bool t.preserve_messages ;
+    "autojoin"       , sexp_of_bool t.autojoin ;
   ]
 
 let marshal_room room =
   let sexp = sexp_of_t room in
   Some Sexp.(List [ sexp_of_int db_version ; sexp ])
+
+let load_room bytes =
+  try (match Sexp.of_string bytes with
+       | Sexp.List [ ver ; user ] ->
+          let version = int_of_sexp ver in
+          (try t_of_sexp user version with _ -> None)
+       | _ -> None)
+    with _ -> None
 
 let oneline room =
   let presence = Utils.option `Offline (fun x -> x.presence) (self_member room)

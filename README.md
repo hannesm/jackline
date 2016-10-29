@@ -72,7 +72,7 @@ Get OCaml (>= 4.02.3), get opam (1.2),
 If you have an older OCaml compiler, run `opam switch 4.02.3`.
 
 Run the following commands:
-- `opam repo add xmpp-dev git://github.com/hannesm/xmpp-opam`
+- `opam repo add xmpp-dev https://github.com/hannesm/xmpp-opam.git`
 - `opam update`
 - `opam install jackline`
 
