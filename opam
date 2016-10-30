@@ -8,7 +8,7 @@ maintainer:   ["Hannes Mehnert <hannes@mehnert.org>"]
 license:      "BSD2"
 
 build: [
-  ["ocaml" "pkg/pkg.ml" "build" "--pinned" "%{pinned}%"]
+  [ "ocaml" "pkg/pkg.ml" "build" "--pinned" "true" ]
 ]
 
 depends: [
