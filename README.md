@@ -138,10 +138,9 @@ The most basic callback would be a script that emits a BEL and a terminal that
 translates a bell to urgency (`.Xdefaults`: `Xterm*vt100.bellsUrgent: true`; `bell.sh`:
 ```
 if [ $3 != "connect" ]; then
-  echo -n ^G
+  printf '\a'
 fi
 ```
-where ^G can be written in shell by subsequent Ctrl-V Ctrl-G).
 
 A message is sent to the active contact by typing it followed by
 `return`.
