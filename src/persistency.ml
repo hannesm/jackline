@@ -97,10 +97,11 @@ let user_dir dir =
 let dump_config cfgdir cfg =
   write cfgdir config (Xconfig.store_config cfg)
 
-let load_config dsa cfg =
-  read cfg config >|= function
-  | Some x ->  Some (Xconfig.load_config dsa x)
-  | None   -> None
+let load_config load_dsa cfg =
+  read cfg config >>= function
+  | Some x -> load_dsa >|= fun dsa ->
+    Some (Xconfig.load_config (Some dsa) x)
+  | None   -> Lwt.return_none
 
 let dump_user cfgdir user =
   user_dir cfgdir >>= fun userdir ->
