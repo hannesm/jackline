@@ -3,14 +3,18 @@ install: wget https://raw.githubusercontent.com/ocaml/ocaml-ci-scripts/master/.t
 script: bash -ex .travis-opam.sh
 sudo: required
 env:
-  - PACKAGE="jackline" OCAML_VERSION=4.02 EXTRA_REMOTES="https://github.com/hannesm/xmpp-opam.git"
-  - PACKAGE="jackline" OCAML_VERSION=4.03 EXTRA_REMOTES="https://github.com/hannesm/xmpp-opam.git"
+  global:
+    - PACKAGE="jackline"
+    - EXTRA_REMOTES="https://github.com/hannesm/xmpp-opam.git"
+matrix:
+  include:
+  - os: linux
+    enx: OCAML_VERSION=4.02
+  - os: linux
+    env: OCAML_VERSION=4.03
+  - os: linux
+    env: OCAML_VERSION=4.04
+  - os: osx
+    env: OCAML_VERSION=4.03
 notifications:
   email: false
-os:
-  - linux
-  - osx
-matrix:
-  exclude:
-    - os: osx
-      env: PACKAGE="jackline" OCAML_VERSION=4.03 EXTRA_REMOTES="https://github.com/hannesm/xmpp-opam.git"
