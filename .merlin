@@ -14,7 +14,7 @@ PKG lwt
 PKG sexplib
 PKG hex
 PKG nocrypto
-PKG notty
+PKG notty notty.lwt
 PKG ptime
 PKG ptime.clock.os
 PKG ppx_sexp_conv

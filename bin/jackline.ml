@@ -144,7 +144,7 @@ let start_client cfgdir debug unicode fd_gui fd_nfy () =
   Lwt.async (Cli_input.read_terminal term ui_mvar input_mvar) ;
   (* main loop *)
   let size = Notty_lwt.Term.size term in
-  Cli_client.loop term size ui_mvar input_mvar state >>= fun state ->
+  Cli_client.loop term size Lwt_engine.fake_event ui_mvar input_mvar state >>= fun state ->
 
   closing () >>= fun () ->
 
