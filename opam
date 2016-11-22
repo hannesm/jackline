@@ -8,7 +8,8 @@ maintainer:   ["Hannes Mehnert <hannes@mehnert.org>"]
 license:      "BSD2"
 
 build: [
-  [ "ocaml" "pkg/pkg.ml" "build" "--pinned" "true" ]
+  [ "ocaml" "pkg/pkg.ml" "build" "--pinned" "true" ] { os != "openbsd" }
+  [ "ocaml" "pkg/pkg.ml" "build" "--pinned" "false" ] { os = "openbsd" }
 ]
 
 depends: [
