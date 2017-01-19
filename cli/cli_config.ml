@@ -216,7 +216,7 @@ let configure term () =
   ask above ~below prefix transform valid term >>= (function
   | None ->
     (* do sth smart here... ask doesn't allow valid to have lwt.t.. -- maybe it should!? *)
-    ask above "CA file: " (fun x -> x) (fun x -> `Ok x) term >>= fun trust_anchor ->
+    ask above "CA file: " (fun x -> x) (fun x -> if Sys.file_exists x then `Ok x else `Invalid) term >>= fun trust_anchor ->
     Lwt_unix.access trust_anchor [ Unix.F_OK ; Unix.R_OK ] >>= fun () ->
     X509_lwt.certs_of_pem trust_anchor >>= fun tas ->
     (match X509.Validation.valid_cas ~time:(Unix.time ()) tas with
