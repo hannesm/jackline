@@ -145,11 +145,20 @@ let completion s input =
       (match List.filter (fun f -> might_match f cmd) cmds with
        | [] -> []
        | [_] when Commands.mem commands cmd -> (Commands.find commands cmd).subcommands s
-       | xs -> List.map (fun x -> drop ~max:(pred l) x) xs)
+       | xs -> List.map (drop ~max:(pred l)) xs)
     | (cmd, Some arg) when Commands.mem commands cmd ->
       let command = Commands.find commands cmd in
       List.map (fun x -> drop ~max:(pred l) (cmd ^ " " ^ x))
         (List.filter (fun f -> might_match f arg) (command.subcommands s))
+    | _ -> []
+  else if l > 0 then
+    match active s with
+    | `Room r ->
+      List.map (drop ~max:l)
+        (List.filter
+           (Astring.String.is_prefix ~affix:input)
+           (List.map (fun m -> m.Muc.nickname)
+              (List.filter (fun m -> m.Muc.presence <> `Offline) r.Muc.members)))
     | _ -> []
   else
     []

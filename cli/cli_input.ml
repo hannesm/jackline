@@ -298,7 +298,11 @@ let read_terminal term mvar input_mvar () =
               let pre =
                 match Cli_commands.completion s input with
                 | [] -> pre
-                | [x] -> pre @ str_to_char_list (x ^ " ")
+                | [x] ->
+                  if String.length input > 0 && String.get input 0 = '/' then
+                    pre @ str_to_char_list (x ^ " ")
+                  else
+                    pre @ str_to_char_list (x ^ ": ")
                 | x::xs ->
                   let shortest = List.fold_left (fun l x -> min l (String.length x)) (String.length x) xs in
                   let rec prefix idx =
