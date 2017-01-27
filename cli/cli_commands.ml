@@ -484,6 +484,7 @@ let handle_connect p c_mvar =
                { Muc.nickname = nick ; jid = real_jid ; affiliation ; role ; presence ; status } ::
                List.filter (fun m -> m.Muc.nickname <> nick) r.Muc.members
            in
+           (* XXX: should inform user (join/leave message) *)
            Contact.replace_room state.contacts { r with Muc.members }) ;
         Lwt_mvar.put state.contact_mvar (`Room r) >>= fun () ->
         Lwt.return (`Ok state)
