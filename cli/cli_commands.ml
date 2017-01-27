@@ -382,16 +382,24 @@ let handle_connect p c_mvar =
       Lwt.return (`Ok state)
     in
     p exec
-  and presence jid presence priority status =
+  in
+  let presence_msg old now status =
+    let pre = match old, now with
+      | `Offline, _ -> "joined "
+      | _, `Offline -> "left "
+      | _ -> ""
+    in
+    let old = User.presence_to_char old
+    and now = User.presence_to_char now
+    and now_full = User.presence_to_string now
+    and status = Utils.option "" (fun x -> " - " ^ x) status
+    in
+    pre ^ "[" ^ old ^ ">" ^ now ^ "] (now " ^ now_full ^ ")" ^ status
+  in
+  let presence jid presence priority status =
     let exec state =
       let status = Utils.option None (fun x -> Some (Utils.validate_utf8 x)) status in
-      let msg old =
-        let presence_char = User.presence_to_char presence
-        and presence_string = User.presence_to_string presence
-        and statstring = Utils.option "" (fun x -> " - " ^ x) status
-        in
-        "[" ^ old ^ ">" ^ presence_char ^ "] (now " ^ presence_string ^ ")" ^ statstring
-      and update_session session =
+      let update_session session =
         { session with User.presence ; status ; priority }
       in
       let state, user, session =
@@ -421,11 +429,11 @@ let handle_connect p c_mvar =
       if User.presence_unmodified session presence status priority then
         Lwt.return (`Ok state)
       else
-        let old = User.presence_to_char session.User.presence in
+        let old = session.User.presence in
         let session = update_session session in
         let user, removed = User.replace_session user session in
         Contact.replace_user state.contacts user ;
-        add_status state (`From jid) (msg old) ;
+        add_status state (`From jid) (presence_msg old session.User.presence status) ;
         let state =
           if removed then
             Utils.option
@@ -477,14 +485,19 @@ let handle_connect p c_mvar =
            let r = Muc.reset_room r in
            Contact.replace_room state.contacts r
          else
-           let members = match Muc.member r jid with
-             | None -> Muc.new_member nick ~jid:real_jid affiliation role presence status :: r.Muc.members
-             | Some _ ->
+           let old, members = match Muc.member r jid with
+             | None ->
+               `Offline,
+               Muc.new_member nick ~jid:real_jid affiliation role presence status :: r.Muc.members
+             | Some m ->
                (* XXX MUC need to be a bit smarter here *)
+               m.Muc.presence,
                { Muc.nickname = nick ; jid = real_jid ; affiliation ; role ; presence ; status } ::
                List.filter (fun m -> m.Muc.nickname <> nick) r.Muc.members
            in
-           (* XXX: should inform user (join/leave message) *)
+           let msg = presence_msg old presence status in
+           let msg = User.message ~kind:`GroupChat (`From jid) false true msg in
+           let r = Muc.new_message r msg in
            Contact.replace_room state.contacts { r with Muc.members }) ;
         Lwt_mvar.put state.contact_mvar (`Room r) >>= fun () ->
         Lwt.return (`Ok state)
