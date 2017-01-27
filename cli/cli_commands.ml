@@ -387,16 +387,14 @@ let handle_connect p c_mvar =
     let pre = match old, now with
       | `Offline, `Online -> "joined"
       | `Offline, `Free -> "joined"
-      | `Offline, `DoNotDisturb -> "joined (dnd)"
-      | `Offline, `Away -> "joined (away)"
-      | `Offline, `ExtendedAway -> "joined (xa)"
+      | `Offline, x -> "joined (" ^ User.presence_to_string x ^ ")"
       | _, `Offline -> "left"
       | x, y ->
         let oldc = User.presence_to_char x
         and nowc = User.presence_to_char y
         and nows = User.presence_to_string y
         in
-        "[" ^ oldc ^ ">" ^ nowc ^ "] (" ^ nows ^ ")"
+        oldc ^ "->" ^ nowc ^ " (" ^ nows ^ ")"
     in
     let status = Utils.option "" (fun x -> " - " ^ x) status in
     pre ^ status

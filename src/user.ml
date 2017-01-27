@@ -35,8 +35,8 @@ let presence_to_string = function
   | `Online       -> "online"
   | `Free         -> "free"
   | `Away         -> "away"
-  | `DoNotDisturb -> "do not disturb"
-  | `ExtendedAway -> "extended away"
+  | `DoNotDisturb -> "dnd"
+  | `ExtendedAway -> "xa"
   | `Offline      -> "offline"
 
 let string_to_presence = function
