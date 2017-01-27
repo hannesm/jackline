@@ -209,6 +209,7 @@ let jid_of_direction = function
 type chatkind = [
   | `Chat
   | `GroupChat
+  | `Presence
 ] [@@deriving sexp]
 
 type message = {
@@ -320,8 +321,8 @@ let message ?(timestamp = Ptime_clock.now ()) ?(kind = `Chat) direction encrypte
 let new_message user message =
   { user with message_history = message :: user.message_history }
 
-let insert_message ?timestamp u dir enc rcvd msg =
-  let message = message ?timestamp dir enc rcvd msg in
+let insert_message ?timestamp ?kind u dir enc rcvd msg =
+  let message = message ?timestamp ?kind dir enc rcvd msg in
   new_message u message
 
 let encrypted = Otr.State.is_encrypted

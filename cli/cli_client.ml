@@ -13,8 +13,16 @@ let print_time ~now ~tz_offset_s timestamp =
   else
     Printf.sprintf "%02d-%02d %02d:%02d " m d hh mm
 
+let st_kind = function
+  | `Chat | `GroupChat -> `Message
+  | `Presence -> `Info
+
+let st_to_a = function
+  | `Message -> A.empty
+  | `Info -> A.(fg (gray 18))
+
 let format_log tz_offset_s now log =
-  let { User.direction ; timestamp ; message ; _ } = log in
+  let { User.direction ; timestamp ; message ; kind ; _ } = log in
   let time = print_time ~now ~tz_offset_s timestamp in
   let from = match direction with
     | `From jid -> Xjid.jid_to_string jid ^ ":"
@@ -22,9 +30,9 @@ let format_log tz_offset_s now log =
     | `Local (_, x) -> "*** " ^ x ^ " ***"
     | `To _ -> ">>>"
   in
-  (A.empty, time ^ from ^ " " ^ message)
+  (st_to_a (st_kind kind), time ^ from ^ " " ^ message)
 
-let format_message tz_offset_s now self buddy resource { User.direction ; encrypted ; received ; timestamp ; message ; _ } =
+let format_message tz_offset_s now self buddy resource { User.direction ; encrypted ; received ; timestamp ; message ; kind ; _ } =
   let time = print_time ~now ~tz_offset_s timestamp
   and style, pre =
     match buddy with
@@ -66,10 +74,13 @@ let format_message tz_offset_s now self buddy resource { User.direction ; encryp
         Utils.option "" (fun x -> "(" ^ x ^ ") ") show_res
       in
       (style, r ^ pre)
-  and to_style = function
-    | `Default -> A.empty
-    | `Highlight -> A.(st bold)
-    | `Underline -> A.(st underline)
+  and to_style st =
+    match st, st_kind kind with
+    | `Default, x -> st_to_a x
+    | `Highlight, `Message -> A.(st bold)
+    | `Highlight, `Info -> st_to_a `Info
+    | `Underline, `Message -> A.(st underline)
+    | `Underline, `Info -> A.(st underline ++ st_to_a `Info)
   in
   let p, msg =
     if String.length message >= 3 && String.sub message 0 3 = "/me" then

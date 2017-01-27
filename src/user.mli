@@ -90,6 +90,7 @@ val jid_of_direction : direction -> Xjid.t
 type chatkind = [
   | `Chat
   | `GroupChat
+  | `Presence
 ]
 
 val chatkind_of_sexp : Sexplib.Type.t -> chatkind
@@ -146,7 +147,7 @@ val oneline : user -> string
 val oneline_with_session : user -> session -> string
 
 (* messages *)
-val insert_message : ?timestamp:Ptime.t -> user -> direction -> bool -> bool -> string -> user
+val insert_message : ?timestamp:Ptime.t -> ?kind:chatkind -> user -> direction -> bool -> bool -> string -> user
 val new_message : user -> message -> user
 
 (* convenience *)

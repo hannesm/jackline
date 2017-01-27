@@ -385,16 +385,21 @@ let handle_connect p c_mvar =
   in
   let presence_msg old now status =
     let pre = match old, now with
-      | `Offline, _ -> "joined "
-      | _, `Offline -> "left "
-      | _ -> ""
+      | `Offline, `Online -> "joined"
+      | `Offline, `Free -> "joined"
+      | `Offline, `DoNotDisturb -> "joined (dnd)"
+      | `Offline, `Away -> "joined (away)"
+      | `Offline, `ExtendedAway -> "joined (xa)"
+      | _, `Offline -> "left"
+      | x, y ->
+        let oldc = User.presence_to_char x
+        and nowc = User.presence_to_char y
+        and nows = User.presence_to_string y
+        in
+        "[" ^ oldc ^ ">" ^ nowc ^ "] (" ^ nows ^ ")"
     in
-    let old = User.presence_to_char old
-    and now = User.presence_to_char now
-    and now_full = User.presence_to_string now
-    and status = Utils.option "" (fun x -> " - " ^ x) status
-    in
-    pre ^ "[" ^ old ^ ">" ^ now ^ "] (now " ^ now_full ^ ")" ^ status
+    let status = Utils.option "" (fun x -> " - " ^ x) status in
+    pre ^ status
   in
   let presence jid presence priority status =
     let exec state =
@@ -433,7 +438,7 @@ let handle_connect p c_mvar =
         let session = update_session session in
         let user, removed = User.replace_session user session in
         Contact.replace_user state.contacts user ;
-        add_status state (`From jid) (presence_msg old session.User.presence status) ;
+        add_status ~kind:`Presence state (`From jid) (presence_msg old session.User.presence status) ;
         let state =
           if removed then
             Utils.option
@@ -496,7 +501,7 @@ let handle_connect p c_mvar =
                List.filter (fun m -> m.Muc.nickname <> nick) r.Muc.members
            in
            let msg = presence_msg old presence status in
-           let msg = User.message ~kind:`GroupChat (`From jid) false true msg in
+           let msg = User.message ~kind:`Presence (`From jid) false true msg in
            let r = Muc.new_message r msg in
            Contact.replace_room state.contacts { r with Muc.members }) ;
         Lwt_mvar.put state.contact_mvar (`Room r) >>= fun () ->
