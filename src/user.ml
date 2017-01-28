@@ -285,7 +285,7 @@ let new_user ~jid ?(name=None) ?(groups=[]) ?(subscription=`None) ?(otr_fingerpr
   { bare_jid = jid ; name ; groups ; subscription ; properties ; otr_fingerprints ; preserve_messages ; active_sessions ; message_history ; input_buffer ; readline_history ; otr_custom_config ; expand ; self ; history_position }
 
 let active_session user =
-  let sorted = List.sort compare_session user.active_sessions in
+  let sorted = sorted_sessions user in
   match List.filter (fun x -> x.presence <> `Offline) sorted, sorted with
   | x :: _, _ -> Some x
   | [], x :: _ -> Some x
