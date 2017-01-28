@@ -941,17 +941,19 @@ let tell_user (log:(User.direction * string) -> unit) jid ?(prefix:string option
   let f = Utils.option from (fun x -> x ^ "; " ^ from) prefix in
   log (`Local (jid, f), msg)
 
-let handle_join my_nick r =
-  match Xjid.string_to_jid r with
-  | Some (`Bare jid) ->
+let handle_join nick r =
+  let join jid my_nick =
     let room = Muc.new_room ~jid ~my_nick () in
     let clos state s =
-      Contact.replace_room state.contacts room ;
-      Xmpp_callbacks.Xep_muc.enter_room s (Xjid.jid_to_xmpp_jid (`Bare jid)) >|= fun () ->
+      Xmpp_callbacks.Xep_muc.enter_room s ~nick:my_nick (Xjid.jid_to_xmpp_jid (`Bare jid)) >|= fun () ->
       `Ok state
     in
     (["joining room " ^ r], Some (`Room room), Some clos)
-  | _ -> ([r ^ " is not a bare jid"], None, None)
+  in
+  match Xjid.string_to_jid r with
+  | Some (`Bare jid) -> join jid nick
+  | Some (`Full (bare, res)) -> join bare res
+  | None -> ([r ^ " is not a good jid"], None, None)
 
 let handle_leave buddy reason =
   match buddy with
