@@ -40,6 +40,8 @@ type state = {
 
   (* list of jid to blink *)
   notifications : Xjid.t list ;
+
+  (* modified by --fd-gui *)
   gui_has_focus : bool ;
 
   (* initially yourself, modified by key presses (page up/page down/C-x/C-q) *)
@@ -130,8 +132,8 @@ module Notify = struct
     Lwt_unix.openfile fd [flag_of_mode mode] 0 >|=
     Lwt_io.of_fd ~mode:mode
 
-  (* TODO(infinity0): perhaps log the exception somewhere *)
-  let catch_exn f = Lwt.catch f (fun _ -> Lwt.return_unit)
+  let catch_exn ui_mvar f = Lwt.catch f (fun e ->
+      selflog ui_mvar "async error in notify r/w" (Printexc.to_string e))
 
   let gui_focus_reader fdo ui_mvar =
     match fdo with
@@ -148,14 +150,14 @@ module Notify = struct
           Lwt_mvar.put ui_mvar cb >>=
           loop
         in
-        catch_exn loop
+        catch_exn ui_mvar loop
       in
       Lwt.async doit
 
-  let maybe_catch_and_return opt f =
-    Utils.option Lwt.return_unit (fun s -> catch_exn (fun () -> f s)) opt
+  let maybe_catch_and_return ui_mvar opt f =
+    Utils.option Lwt.return_unit (fun s -> catch_exn ui_mvar (fun () -> f s)) opt
 
-  let notify_writer jid cb fdo =
+  let notify_writer ui_mvar jid cb fdo =
     let mvar = Lwt_mvar.create Disconnected in
     (Utils.option
        (Lwt.return None)
@@ -163,9 +165,9 @@ module Notify = struct
        fdo) >|= fun chan_opt ->
     let notify_call buf =
       let args = " " ^ Xjid.full_jid_to_string jid ^ " " ^ buf in
-      maybe_catch_and_return cb
+      maybe_catch_and_return ui_mvar cb
         (fun x -> Lwt_unix.system (x ^ args) >>= fun _ -> Lwt.return_unit) >>= fun () ->
-      maybe_catch_and_return chan_opt
+      maybe_catch_and_return ui_mvar chan_opt
         (fun chan -> Lwt_io.write_line chan buf)
     in
     let rec loop s0 =
