@@ -35,8 +35,8 @@ let presence_to_string = function
   | `Online       -> "online"
   | `Free         -> "free"
   | `Away         -> "away"
-  | `DoNotDisturb -> "do not disturb"
-  | `ExtendedAway -> "extended away"
+  | `DoNotDisturb -> "dnd"
+  | `ExtendedAway -> "xa"
   | `Offline      -> "offline"
 
 let string_to_presence = function
@@ -209,6 +209,7 @@ let jid_of_direction = function
 type chatkind = [
   | `Chat
   | `GroupChat
+  | `Presence
 ] [@@deriving sexp]
 
 type message = {
@@ -284,20 +285,10 @@ let new_user ~jid ?(name=None) ?(groups=[]) ?(subscription=`None) ?(otr_fingerpr
   { bare_jid = jid ; name ; groups ; subscription ; properties ; otr_fingerprints ; preserve_messages ; active_sessions ; message_history ; input_buffer ; readline_history ; otr_custom_config ; expand ; self ; history_position }
 
 let active_session user =
-  let sorted = List.sort compare_session user.active_sessions
-  and not_subscribed = List.mem user.subscription [`From ; `None]
-  in
-  (* XXX: here be dragons: consider the other to be subscribed (i.e. in the roster),
-     but the s2s communication slightly broken: ends up in a pretty useless
-     dialogue (sending to bare, not having a otr context)
-
-     maybe a valuable strategy is to look whether R went (recently) from XXX to
-     offline?  what we really want to prevent is sending messages into the
-     nirvana (now that randomized resources are the way to go!?)
-   *)
+  let sorted = sorted_sessions user in
   match List.filter (fun x -> x.presence <> `Offline) sorted, sorted with
   | x :: _, _ -> Some x
-  | [], x :: _ when not_subscribed -> Some x
+  | [], x :: _ -> Some x
   | _ -> None
 
 let oneline user =
@@ -328,8 +319,8 @@ let message ?(timestamp = Ptime_clock.now ()) ?(kind = `Chat) direction encrypte
 let new_message user message =
   { user with message_history = message :: user.message_history }
 
-let insert_message ?timestamp u dir enc rcvd msg =
-  let message = message ?timestamp dir enc rcvd msg in
+let insert_message ?timestamp ?kind u dir enc rcvd msg =
+  let message = message ?timestamp ?kind dir enc rcvd msg in
   new_message u message
 
 let encrypted = Otr.State.is_encrypted

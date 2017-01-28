@@ -126,7 +126,13 @@ let send_msg t state active_user message =
           let ctx, out, user_out = Otr.Engine.send_otr ctx msg in
           let user = User.update_otr u session ctx in
           Contact.replace_user state.contacts user ;
-          (`Full (bare, session.User.resource), Some session, out, user_out, None)
+          let jid, session =
+            if session.User.resource = "" then
+              (`Bare bare, None)
+            else
+              (`Full (bare, session.User.resource), Some session)
+          in
+          (jid, session, out, user_out, None)
   in
   maybe_send ?kind jid session out user_out
 
@@ -292,7 +298,11 @@ let read_terminal term mvar input_mvar () =
               let pre =
                 match Cli_commands.completion s input with
                 | [] -> pre
-                | [x] -> pre @ str_to_char_list (x ^ " ")
+                | [x] ->
+                  if String.length input > 0 && String.get input 0 = '/' then
+                    pre @ str_to_char_list (x ^ " ")
+                  else
+                    pre @ str_to_char_list (x ^ ": ")
                 | x::xs ->
                   let shortest = List.fold_left (fun l x -> min l (String.length x)) (String.length x) xs in
                   let rec prefix idx =

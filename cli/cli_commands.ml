@@ -45,13 +45,15 @@ let _ =
 
   new_command
     "logheight" "/logheight [number]" "adjusts height of log to n" (fun _ -> []) ;
+  new_command
+    "buddywidth" "/buddywidth [number]" "adjusts width of buddy list to n" (fun _ -> []) ;
 
   (* global roster commands *)
   new_command
     "add" "/add [jid]"
     "adds jid to your contact list, and sends a subscription request" (fun _ -> []) ;
 
-  new_command (* XXX needs dynamic completions! *)
+  new_command
     "go" "/go [jid]" "jump to contact jid" (fun s -> List.map Xjid.jid_to_string (all_jids s)) ;
 
   (* things affecting you *)
@@ -94,10 +96,11 @@ let _ =
 
   (* multi user chat *)
   new_command
-    "join" "/join [chatroom]" "joins chatroom" (fun _ -> []) ;
-
+    "join" "/join [?chatroom]" "joins chatroom (or active contact)" (fun _ -> []) ;
   new_command
     "leave" "/leave [?reason]" "leaves active chatroom (using reason)" (fun _ -> []) ;
+  new_command
+    "rooms" "/rooms [server]" "queries chatrooms on server" (fun _ -> []) ;
 
   (* nothing below here, please *)
   new_command
@@ -144,11 +147,20 @@ let completion s input =
       (match List.filter (fun f -> might_match f cmd) cmds with
        | [] -> []
        | [_] when Commands.mem commands cmd -> (Commands.find commands cmd).subcommands s
-       | xs -> List.map (fun x -> drop ~max:(pred l) x) xs)
+       | xs -> List.map (drop ~max:(pred l)) xs)
     | (cmd, Some arg) when Commands.mem commands cmd ->
       let command = Commands.find commands cmd in
       List.map (fun x -> drop ~max:(pred l) (cmd ^ " " ^ x))
         (List.filter (fun f -> might_match f arg) (command.subcommands s))
+    | _ -> []
+  else if l > 0 then
+    match active s with
+    | `Room r ->
+      List.map (drop ~max:l)
+        (List.filter
+           (Astring.String.is_prefix ~affix:input)
+           (List.map (fun m -> m.Muc.nickname)
+              (List.filter (fun m -> m.Muc.presence <> `Offline) r.Muc.members)))
     | _ -> []
   else
     []
@@ -208,11 +220,11 @@ let handle_connect p c_mvar =
       let u = User.new_user ~jid:bare () in
       Contact.replace_user state.contacts u ;
       (state, u)
-  and find_room state bare =
-    match Contact.find_room state.contacts bare with
+  and find_room state jid autojoin =
+    match Contact.find_room state.contacts jid with
     | Some room -> (state, room)
     | None ->
-      let room = Muc.new_room ~jid:bare ~my_nick:(fst (fst state.config.Xconfig.jid)) () in
+      let room = Muc.new_room ~jid ~my_nick:(fst (fst state.config.Xconfig.jid)) ~autojoin () in
       Contact.replace_room state.contacts room ;
       (state, room)
   and find_session state user resource =
@@ -253,18 +265,13 @@ let handle_connect p c_mvar =
     in
     p exec
 
-  and message bare ?timestamp dir txt =
+  and message bare res ?timestamp txt =
     let exec state =
       let state, user = find_user state bare in
-      let user = User.insert_message ?timestamp user dir false true txt in
-      Contact.replace_user state.contacts user ;
-      let state = notify state (`Bare bare) in
-      Lwt.return (`Ok state)
-    in
-    p exec
-  and enc_message (bare, res) ?timestamp txt =
-    let exec state =
-      let state, user = find_user state bare in
+      let res = match res with
+        | Some r -> r
+        | None -> ""
+      in
       let state, session = find_session state user res in
       let ctx, out, ret = Otr.Engine.handle session.User.otr txt in
       let user = User.update_otr user session ctx in
@@ -317,7 +324,7 @@ let handle_connect p c_mvar =
   and group_message jid timestamp topic body _data id =
     let exec state =
       let body = Utils.option None (fun x -> Some (Utils.validate_utf8 x)) body in
-      let state, room = find_room state (Xjid.t_to_bare jid) in
+      let state, room = find_room state (Xjid.t_to_bare jid) false in
       let room = Utils.option room (fun x -> { room with Muc.topic = Some x }) topic in
       let state, room = match body with
         | None -> (state, room)
@@ -377,48 +384,82 @@ let handle_connect p c_mvar =
       Lwt.return (`Ok state)
     in
     p exec
-  and presence jid presence priority status =
+  in
+  let presence_msg old now status =
+    let pre = match old, now with
+      | `Offline, `Online -> "joined"
+      | `Offline, `Free -> "joined"
+      | `Offline, x -> "joined (" ^ User.presence_to_string x ^ ")"
+      | _, `Offline -> "left"
+      | x, y ->
+        let oldc = User.presence_to_char x
+        and nowc = User.presence_to_char y
+        and nows = User.presence_to_string y
+        in
+        oldc ^ "->" ^ nowc ^ " (" ^ nows ^ ")"
+    in
+    let status = Utils.option "" (fun x -> " - " ^ x) status in
+    pre ^ status
+  in
+  let presence jid presence priority status =
     let exec state =
       let status = Utils.option None (fun x -> Some (Utils.validate_utf8 x)) status in
-      let msg old =
-        let presence_char = User.presence_to_char presence
-        and presence_string = User.presence_to_string presence
-        and statstring = Utils.option "" (fun x -> " - " ^ x) status
-        in
-        "[" ^ old ^ ">" ^ presence_char ^ "] (now " ^ presence_string ^ ")" ^ statstring
+      let update_session session =
+        { session with User.presence ; status ; priority }
       in
-      match jid with
-      | `Bare _ ->
-        let log = "presence " ^ msg "_" in
-        add_status state (`From jid) log ;
-        Lwt.return (`Ok state)
-      | `Full (b, r) ->
-        let state, user = find_user state b in
-        let state, session = find_session state user r in
-        if User.presence_unmodified session presence status priority then
-          Lwt.return (`Ok state)
-        else
-          let old = User.presence_to_char session.User.presence in
-          let session = { session with User.presence ; status ; priority } in
-          let user, removed = User.replace_session user session in
-          Contact.replace_user state.contacts user ;
-          add_status state (`From jid) (msg old) ;
-          let state =
-            if removed then
-              Utils.option state (fun x -> update_notifications state user x.User.resource r)  (User.find_similar_session user r)
-            else
-              state
+      let state, user, session =
+        match jid with
+        | `Bare b ->
+          (* this happens in several situations:
+             - if a@foo.com and b@bar.com are subscribed, a logs in: bar.com sends a "b is offline" presence
+             - in slack's xmpp server (likely others), nobody has a resource, but everything originates from the bare jid *)
+          let state, user = find_user state b in
+          let user, session = match User.sorted_sessions user with
+            | x::_ -> (user, x)
+            | [] ->
+              let otr_config = otr_config user state in
+              let u, s = User.create_session user "" otr_config state.config.Xconfig.dsa in
+              Contact.replace_user state.contacts u ;
+              (u, s)
           in
-          Lwt.return (`Ok state)
+          let active_sessions = List.map update_session user.User.active_sessions in
+          let user = { user with User.active_sessions } in
+          Contact.replace_user state.contacts user ;
+          (state, user, session)
+        | `Full (b, r) ->
+          let state, user = find_user state b in
+          let state, session = find_session state user r in
+          (state, user, session)
+      in
+      if User.presence_unmodified session presence status priority then
+        Lwt.return (`Ok state)
+      else
+        let old = session.User.presence in
+        let session = update_session session in
+        let user, removed = User.replace_session user session in
+        Contact.replace_user state.contacts user ;
+        add_status ~kind:`Presence state (`From jid) (presence_msg old session.User.presence status) ;
+        let state =
+          if removed then
+            Utils.option
+              state
+              (fun x -> update_notifications state user x.User.resource session.User.resource)
+              (User.find_similar_session user session.User.resource)
+          else
+            state
+        in
+        Lwt.return (`Ok state)
     in
     p exec
   and group_presence jid presence status data =
     let exec state =
       let status = Utils.option None (fun x -> Some (Utils.validate_utf8 x)) status in
       match jid with
-      | `Bare _ -> Lwt.return (`Ok state) (* XXX sth more sensible *)
+      | `Bare bare ->
+        let state, _ = find_room state bare false in
+        Lwt.return (`Ok state)
       | `Full (bare, nickname) ->
-        let state, r = find_room state bare in
+        let state, r = find_room state bare false in
         let real_jid, nick, affiliation, role =
           let open Xmpp_callbacks.Xep_muc in
           let to_affiliation = function
@@ -449,13 +490,19 @@ let handle_connect p c_mvar =
            let r = Muc.reset_room r in
            Contact.replace_room state.contacts r
          else
-           let members = match Muc.member r jid with
-             | None -> Muc.new_member nick ~jid:real_jid affiliation role presence status :: r.Muc.members
-             | Some _ ->
+           let old, members = match Muc.member r jid with
+             | None ->
+               `Offline,
+               Muc.new_member nick ~jid:real_jid affiliation role presence status :: r.Muc.members
+             | Some m ->
                (* XXX MUC need to be a bit smarter here *)
+               m.Muc.presence,
                { Muc.nickname = nick ; jid = real_jid ; affiliation ; role ; presence ; status } ::
                List.filter (fun m -> m.Muc.nickname <> nick) r.Muc.members
            in
+           let msg = presence_msg old presence status in
+           let msg = User.message ~kind:`Presence (`From jid) false true msg in
+           let r = Muc.new_message r msg in
            Contact.replace_room state.contacts { r with Muc.members }) ;
         Lwt_mvar.put state.contact_mvar (`Room r) >>= fun () ->
         Lwt.return (`Ok state)
@@ -499,13 +546,18 @@ let handle_connect p c_mvar =
       Lwt.return (`Ok state)
     in
     p exec
+  and create_room bare autojoin =
+    let exec state =
+      let state, _ = find_room state bare autojoin in
+      Lwt.return (`Ok state)
+    in
+    p exec
   in
   let (user_data : Xmpp_callbacks.user_data) = {
       Xmpp_callbacks.log ;
       locallog ;
 
       message ;
-      enc_message ;
       group_message ;
 
       received_receipts ;
@@ -514,6 +566,8 @@ let handle_connect p c_mvar =
       subscription ;
       presence ;
       group_presence ;
+
+      create_room ;
 
       reset_users ;
       update_users ;
@@ -887,14 +941,19 @@ let tell_user (log:(User.direction * string) -> unit) jid ?(prefix:string option
   let f = Utils.option from (fun x -> x ^ "; " ^ from) prefix in
   log (`Local (jid, f), msg)
 
-let handle_join state s my_nick buddies room err =
-  match Xjid.string_to_jid room with
-  | Some (`Bare room_jid) ->
-     let room = Muc.new_room ~jid:room_jid ~my_nick () in
-     Contact.replace_room buddies room ;
-     Xmpp_callbacks.Xep_muc.enter_room s (Xjid.jid_to_xmpp_jid (`Bare room_jid)) >>= fun () ->
-     Lwt.return (`Ok state)
-  | _ -> err "not a bare jid"
+let handle_join nick r =
+  let join jid my_nick =
+    let room = Muc.new_room ~jid ~my_nick () in
+    let clos state s =
+      Xmpp_callbacks.Xep_muc.enter_room s ~nick:my_nick (Xjid.jid_to_xmpp_jid (`Bare jid)) >|= fun () ->
+      `Ok state
+    in
+    (["joining room " ^ r], Some (`Room room), Some clos)
+  in
+  match Xjid.string_to_jid r with
+  | Some (`Bare jid) -> join jid nick
+  | Some (`Full (bare, res)) -> join bare res
+  | None -> ([r ^ " is not a good jid"], None, None)
 
 let handle_leave buddy reason =
   match buddy with
@@ -906,9 +965,59 @@ let handle_leave buddy reason =
        Xmpp_callbacks.Xep_muc.leave_room s ?reason ~nick (Xjid.jid_to_xmpp_jid jid) >|= fun () ->
        `Ok state
      in
-     let r = `Room { r with Muc.autojoin = false } in
-     (["leaving room"], Some r, Some clos)
-  | _ -> (["not a chatroom"], None, None)
+     let r = { r with Muc.autojoin = false } in
+     (["leaving room " ^ Xjid.bare_jid_to_string r.Muc.room_jid], Some (`Room r), Some clos)
+  | _ -> ([Xjid.bare_jid_to_string (Contact.bare buddy) ^ " is not a chatroom"], None, None)
+
+let handle_rooms host =
+  let clos state s =
+    let open Xmpp_callbacks in
+    let callback ev jid_from _jid_to _lang () =
+      let jid_from = match jid_from with
+        | None -> `Bare ("", "none")
+        | Some x -> match Xjid.string_to_jid x with
+          | Some x -> x
+          | None -> `Bare ("", x)
+      in
+      match ev with
+      | XMPPClient.IQError _ -> s.XMPPClient.user_data.log (`From jid_from) "couldn't find any rooms"
+      | XMPPClient.IQResult el ->
+        match el with
+        | Some (Xml.Xmlelement ((ns, "query"), _, els)) when ns = Disco.ns_disco_items ->
+          let name_id = List.fold_left (fun acc ele ->
+              match ele with
+              | Xml.Xmlelement ((_, "item"), attrs, _) ->
+                (Xml.safe_get_attr_value "name" attrs, Xml.safe_get_attr_value "jid" attrs) :: acc
+              | _ -> acc) [] els
+          in
+          let rs, xs =
+            List.fold_left (fun (r, s) (name, jid) ->
+                match Xjid.string_to_bare_jid jid with
+                | None -> (r, (name, jid) :: s)
+                | Some bare -> ((bare, name) :: r, s))
+              ([], []) name_id
+          in
+          let servers things =
+             let str = String.concat ", " (List.map (fun (name, jid) -> name ^ " (" ^ jid ^ ")") things) in
+             s.XMPPClient.user_data.log (`From jid_from) ("servers: " ^ str)
+          and rooms rooms =
+             let str = String.concat ", " (List.map (fun ((user, _), name) -> name ^ " (" ^ user ^ "@)") rooms) in
+             s.XMPPClient.user_data.log (`From jid_from) ("rooms: " ^ str) >>= fun () ->
+             Lwt_list.iter_s
+               (fun id -> s.XMPPClient.user_data.create_room id false)
+               (List.map fst rooms)
+          in
+          (match rs, xs with
+           | [], xs -> servers xs
+           | rs, [] -> rooms rs
+           | rs, xs -> servers xs >>= fun () -> rooms rs)
+        | _ -> s.XMPPClient.user_data.log (`From jid_from) "no rooms"
+    in
+    XMPPClient.make_iq_request s ~jid_to:(JID.of_string host)
+      (XMPPClient.IQGet (Xml.make_element (Disco.ns_disco_items, "query") [] [])) callback >|= fun () ->
+    `Ok state
+  in
+  (["querying rooms at " ^ host], None, Some clos)
 
 let exec input state contact isself p =
   let log (direction, msg) = add_status state direction msg in
@@ -928,214 +1037,218 @@ let exec input state contact isself p =
   | ("help" , x) -> handle_help (msg ?prefix:None) x ; ok state
 
   | other ->
-     let err msg = err msg ; ok state in
-     match other, !xmpp_session with
-     (* connect *)
-     | ("connect", _), None   -> handle_connect p state.connect_mvar >>= fun () -> ok state
-     | ("connect", _), Some _ -> err "already connected"
+    let err msg = err msg ; ok state in
+    match other, !xmpp_session with
+    (* connect *)
+    | ("connect", _), None   -> handle_connect p state.connect_mvar >>= fun () -> ok state
+    | ("connect", _), Some _ -> err "already connected"
 
-     (* disconnect *)
-     | ("disconnect", _), Some _ -> handle_disconnect (msg ?prefix:None) >>= fun () -> ok state
-     | ("disconnect", _), None   -> err "not connected"
+    (* disconnect *)
+    | ("disconnect", _), Some _ -> handle_disconnect (msg ?prefix:None) >>= fun () -> ok state
+    | ("disconnect", _), None   -> err "not connected"
 
-     (* log height *)
-     | ("logheight", Some x), _ ->
-       (match try Some (int_of_string x) with Failure _ -> None with
-         | Some log_height when log_height >= 0 -> ok { state with log_height }
-         | _ -> err "not a positive number")
-     | ("logheight", _), _ -> err "requires argument"
+    (* join *)
+    | ("join", _), None -> err "not connected"
 
+    (* log height *)
+    | ("logheight", Some x), _ ->
+      (match try Some (int_of_string x) with Failure _ -> None with
+        | Some log_height when log_height >= 0 -> ok { state with log_height }
+        | _ -> err "not a positive number")
+    | ("logheight", _), _ -> err "requires argument"
 
-     | ("go", Some x), _ ->
-       (match Xjid.string_to_jid x with
-        | None -> err ("couldn't parse jid " ^ x)
-        | Some jid -> try ok (activate_contact state jid) with _ -> err ("jid " ^ x ^ " not found"))
-     | ("go", None), _ -> err "requires argument"
+    (* buddywidth *)
+    | ("buddywidth", Some x), _ ->
+      (match try Some (int_of_string x) with Failure _ -> None with
+        | Some buddy_width when buddy_width >= 0 -> ok { state with buddy_width }
+        | _ -> err "not a positive number")
+    | ("buddywidth", _), _ -> err "requires argument"
 
-     (* commands not using active_contact *)
-     | (x, _), None when List.mem x global_things -> err "not connected"
-     | (x, None), _ when List.mem x global_things ->
-        handle_help (msg ~prefix:"argument required") (Some x) ; ok state
+    | ("go", Some x), _ ->
+      (match Xjid.string_to_jid x with
+       | None -> err ("couldn't parse jid " ^ x)
+       | Some jid -> try ok (activate_contact state jid) with _ -> err ("jid " ^ x ^ " not found"))
+    | ("go", None), _ -> err "requires argument"
 
-     (* add *)
-     | ("add", Some a), Some s -> handle_add s a (msg ?prefix:None) >>= fun () -> ok state
+    (* commands not using active_contact *)
+    | (x, _), None when List.mem x global_things -> err "not connected"
+    | (x, None), _ when List.mem x global_things ->
+      handle_help (msg ~prefix:"argument required") (Some x) ; ok state
 
-     (* status *)
-     | ("status", Some arg), Some s ->
-        (match handle_status own_session arg with
-         | None -> handle_help (msg ~prefix:"unknown argument") (Some "status") ; ok state
-         | Some p ->
-            Lwt_mvar.put state.connect_mvar (Presence p) >>= fun () ->
-            send_status s p >>= fun () ->
-            ok state)
+    (* add *)
+    | ("add", Some a), Some s -> handle_add s a (msg ?prefix:None) >>= fun () -> ok state
 
-     (* priority *)
-     | ("priority", Some p), Some s ->
-        (match handle_priority own_session p with
-         | None   -> handle_help (msg ~prefix:"unknown argument") (Some "priority") ; ok state
-         | Some p ->
-            Lwt_mvar.put state.connect_mvar (Presence p) >>= fun () ->
-            send_status s p >>= fun () ->
-            ok state)
+    (* status *)
+    | ("status", Some arg), Some s ->
+      (match handle_status own_session arg with
+       | None -> handle_help (msg ~prefix:"unknown argument") (Some "status") ; ok state
+       | Some p ->
+         Lwt_mvar.put state.connect_mvar (Presence p) >>= fun () ->
+         send_status s p >>= fun () ->
+         ok state)
 
-     (* multi user chat *)
-     | ("join", None), Some s ->
-       let my_nick = fst (fst state.config.Xconfig.jid) in
-       let r = Xjid.bare_jid_to_string (Contact.bare contact) in
-       handle_join state s my_nick state.contacts r err
-     | ("join", Some a), Some s ->
-       let my_nick = fst (fst state.config.Xconfig.jid) in
-       handle_join state s my_nick state.contacts a err
+    (* priority *)
+    | ("priority", Some p), Some s ->
+      (match handle_priority own_session p with
+       | None   -> handle_help (msg ~prefix:"unknown argument") (Some "priority") ; ok state
+       | Some p ->
+         Lwt_mvar.put state.connect_mvar (Presence p) >>= fun () ->
+         send_status s p >>= fun () ->
+         ok state)
 
+    (* commands using active_contact as context *)
+    | other, s ->
+      let err str =
+        msg "error" str ; ([], None, None)
+      and handle_help msg arg =
+        handle_help msg arg ; ([], None, None)
+      and need_user f =
+        Utils.option
+          (["not applicable"], None, None)
+          (fun x ->
+             let (d, u, c) = f x in
+             (d, Utils.option None (fun u -> Some (`User u)) u, c))
+          real_user
+      in
 
-     (* commands using active_contact as context *)
-     | other, s ->
-        let err str =
-          msg "error" str ; ([], None, None)
-        and handle_help msg arg =
-          handle_help msg arg ; ([], None, None)
-        and need_user f =
-          Utils.option
-            (["not applicable"], None, None)
-            (fun x -> let (d, u, c) = f x in
-                      (d, Utils.option None (fun u -> Some (`User u)) u, c))
-            real_user
-        in
+      let datas, u, clos = match other, s with
+        | ("clear", _), _ -> ([], Some (Contact.clear_messages contact), None)
 
-        let datas, u, clos = match other, s with
-          | ("clear", _), _ -> ([], Some (Contact.clear_messages contact), None)
+        | ("log", None), _ -> handle_help (msg ~prefix:"argument required") (Some "log")
+        | ("log", Some a), _ when a = "on"  -> handle_log contact true a state.config_directory
+        | ("log", Some a), _ when a = "off" -> handle_log contact false a state.config_directory
+        | ("log", Some _), _ -> handle_help (msg ~prefix:"unknown argument") (Some "log")
 
-          | ("log", None), _ -> handle_help (msg ~prefix:"argument required") (Some "log")
-          | ("log", Some a), _ when a = "on"  -> handle_log contact true a state.config_directory
-          | ("log", Some a), _ when a = "off" -> handle_log contact false a state.config_directory
-          | ("log", Some _), _ -> handle_help (msg ~prefix:"unknown argument") (Some "log")
-
-          | ("info", _), _ ->
-             let datas =
-               if isself then
-                 handle_own_info (self state) own_session state.config_directory state.config.Xconfig.dsa
-               else
-                 handle_info contact (resource state) state.config_directory
-             in
-             (datas, None, None)
-
-          | ("leave", reason), Some _ -> handle_leave contact reason
-
-         | ("remove", _), None -> err "not connected"
-         | ("remove", _), Some _ -> need_user (fun u -> ([], None, Some (handle_remove u)))
-
-         | ("fingerprint", None), _ ->
-            let datas =
-              handle_own_otr_info state.config.Xconfig.dsa @
-                current_otr_fp (session state)
-            in
-            (datas, None, None)
-         | ("fingerprint", Some fp), _ ->
+        | ("info", _), _ ->
+          let datas =
             if isself then
-              err "won't talk to myself"
+              handle_own_info (self state) own_session state.config_directory state.config.Xconfig.dsa
             else
-              need_user (fun u -> handle_fingerprint u err fp)
+              handle_info contact (resource state) state.config_directory
+          in
+          (datas, None, None)
 
-         | ("revoke", None), _ -> handle_help (msg ~prefix:"argument required") (Some "revoke")
-         | ("revoke", Some fp), _ -> need_user (fun u -> handle_revoke u err fp)
+        (* join *)
+        | ("join", Some a), Some _ ->
+          let my_nick = fst (fst state.config.Xconfig.jid) in
+          handle_join my_nick a
+        | ("join", None), Some _ ->
+          (match contact with
+           | `Room r ->
+             let my_nick = fst (fst state.config.Xconfig.jid) in
+             handle_join my_nick (Xjid.bare_jid_to_string r.Muc.room_jid)
+           | _ -> (["not a room"], None, None))
 
-         | ("authorization", _), None -> err "not connected"
-         | ("authorization", None), _ -> handle_help (msg ~prefix:"argument required") (Some "authorization")
-         | ("authorization", Some a), Some _ ->
-            if isself then
-              err "won't authorize myself"
-            else
-              need_user
-                (fun u ->
-                 match handle_authorization a with
-                 | None   -> handle_help (msg ~prefix:"unknown argument") (Some "authorization")
-                 | Some (kind, m) ->
-                    let clos state s =
-                      let jid_to = Xjid.jid_to_xmpp_jid (`Bare u.User.bare_jid) in
-                      Xmpp_callbacks.XMPPClient.send_presence s ~jid_to ~kind () >|= fun () ->
-                      `Ok state
-                    in
-                    ([m], None, Some clos))
+        | ("leave", reason), Some _ -> handle_leave contact reason
+        | ("rooms", Some host), Some _ -> handle_rooms host
 
-         | ("otrpolicy", None), _ ->
-            need_user
-              (fun u -> let cfg = otr_config u state in
-                        (print_otr_policy cfg, None, None))
+        | ("remove", _), None -> err "not connected"
+        | ("remove", _), Some _ -> need_user (fun u -> ([], None, Some (handle_remove u)))
 
-         | ("otrpolicy", Some _), _ when isself -> err "cannot adjust own otr policy"
-         | ("otrpolicy", Some z), _ ->
-            need_user
-              (fun u -> let cfg = otr_config u state in
-                        adjust_otr_policy state.config.Xconfig.otr_config cfg u z)
+        | ("fingerprint", None), _ ->
+          let datas =
+            handle_own_otr_info state.config.Xconfig.dsa @
+            current_otr_fp (session state)
+          in
+          (datas, None, None)
+        | ("fingerprint", Some fp), _ ->
+          if isself then
+            err "won't talk to myself"
+          else
+            need_user (fun u -> handle_fingerprint u err fp)
 
+        | ("revoke", None), _ -> handle_help (msg ~prefix:"argument required") (Some "revoke")
+        | ("revoke", Some fp), _ -> need_user (fun u -> handle_revoke u err fp)
 
-         | ("otr", None), _ ->
-            handle_help (msg ~prefix:"argument required") (Some "otr")
-         | ("otr", Some "info"), _  ->
-            need_user
-              (fun u -> if isself then
-                          (handle_own_otr_info state.config.Xconfig.dsa, None, None)
-                        else
-                          (handle_otr_info u (session state), None, None))
+        | ("authorization", _), None -> err "not connected"
+        | ("authorization", None), _ -> handle_help (msg ~prefix:"argument required") (Some "authorization")
+        | ("authorization", Some _), Some _ when isself-> err "won't authorize myself"
+        | ("authorization", Some a), Some _ ->
+          need_user
+            (fun u ->
+               match handle_authorization a with
+               | None   -> handle_help (msg ~prefix:"unknown argument") (Some "authorization")
+               | Some (kind, m) ->
+                 let clos state s =
+                   let jid_to = Xjid.jid_to_xmpp_jid (`Bare u.User.bare_jid) in
+                   Xmpp_callbacks.XMPPClient.send_presence s ~jid_to ~kind () >|= fun () ->
+                   `Ok state
+                 in
+                 ([m], None, Some clos))
 
-         | ("otr", Some _), None  -> err "not connected"
-         | ("otr", Some "start"), Some _ ->
-            need_user
-              (fun u ->
-               if isself then
-                 err "do not like to talk to myself"
-               else
-                 let cfg = otr_config u state in
-                 handle_otr_start u (session state) cfg state.config.Xconfig.dsa)
+        | ("otrpolicy", None), _ ->
+          need_user
+            (fun u ->
+               let cfg = otr_config u state in
+               (print_otr_policy cfg, None, None))
+        | ("otrpolicy", Some _), _ when isself -> err "cannot adjust own otr policy"
+        | ("otrpolicy", Some z), _ ->
+          need_user
+            (fun u ->
+               let cfg = otr_config u state in
+               adjust_otr_policy state.config.Xconfig.otr_config cfg u z)
 
-         | ("otr", Some "stop"), Some _ ->
-            need_user
-              (fun u ->
-               if isself then
-                 err "do not like to talk to myself"
-               else
-                 handle_otr_stop u (session state) err)
+        | ("otr", None), _ ->
+          handle_help (msg ~prefix:"argument required") (Some "otr")
+        | ("otr", Some "info"), _ when isself ->
+          (handle_own_otr_info state.config.Xconfig.dsa, None, None)
+        | ("otr", Some "info"), _ ->
+          need_user (fun u -> (handle_otr_info u (session state), None, None))
 
-         | ("otr", Some _), _ -> handle_help (msg ~prefix:"unknown argument") (Some "otr")
+        | ("otr", Some _), None  -> err "not connected"
+        | ("otr", Some "start"), Some _ when isself ->
+          err "do not like to talk to myself"
+        | ("otr", Some "start"), Some _ ->
+          need_user
+            (fun u ->
+               let cfg = otr_config u state in
+               handle_otr_start u (session state) cfg state.config.Xconfig.dsa)
 
-         | ("smp", _), _ when isself -> err "do not like to talk to myself"
-         | ("smp", None), _ -> handle_help (msg ~prefix:"argument required") (Some "smp")
-         | ("smp", _), None -> err "not connected"
+        | ("otr", Some "stop"), Some _ when isself ->
+          err "do not like to talk to myself"
+        | ("otr", Some "stop"), Some _ ->
+          need_user (fun u -> handle_otr_stop u (session state) err)
 
-         | ("smp", Some a), Some _ ->
-            need_user
-              (fun u ->
+        | ("otr", Some _), _ -> handle_help (msg ~prefix:"unknown argument") (Some "otr")
+
+        | ("smp", _), _ when isself -> err "do not like to talk to myself"
+        | ("smp", None), _ -> handle_help (msg ~prefix:"argument required") (Some "smp")
+        | ("smp", _), None -> err "not connected"
+
+        | ("smp", Some a), Some _ ->
+          need_user
+            (fun u ->
                match session state with
                | Some session when User.encrypted session.User.otr ->
-                  (match split_ws a with
-                   | "abort", _ -> handle_smp_abort u session
-                   | "shared", Some arg -> handle_smp_shared u session arg
-                   | "question", Some question -> handle_smp_question u session question
-                   | "answer", Some arg -> handle_smp_answer u session arg
-                   | _ -> handle_help (msg ~prefix:"argument required") (Some "smp"))
+                 (match split_ws a with
+                  | "abort", _ -> handle_smp_abort u session
+                  | "shared", Some arg -> handle_smp_shared u session arg
+                  | "question", Some question -> handle_smp_question u session question
+                  | "answer", Some arg -> handle_smp_answer u session arg
+                  | _ -> handle_help (msg ~prefix:"argument required") (Some "smp"))
                | _ -> err "need a secure session, use /otr start first")
-         | _ -> handle_help (msg ~prefix:"unknown command") None
-        in
+        | _ -> handle_help (msg ~prefix:"unknown command") None
+      in
 
-        let user old =
-          let u = List.fold_left
-                    (fun c d ->
-                     let msg = User.message (`Local (state.active_contact, "")) false false d in
-                     Contact.new_message c msg)
-                    old datas
-          in
-          Contact.replace_contact state.contacts u ;
-          u
+      let user old =
+        let u = List.fold_left
+            (fun c d ->
+               let msg = User.message (`Local (state.active_contact, "")) false false d in
+               Contact.new_message c msg)
+            old datas
         in
-        (match u with
-         | None   ->
-            ignore (user contact) ;
-            Lwt.return_unit
-         | Some x ->
-            let u = user x in
-            (* TODO: this is slightly too eager (too many writes) *)
-            Lwt_mvar.put state.contact_mvar u) >>= fun () ->
-        match clos, !xmpp_session with
-        | Some x, Some s -> x state s
-        | Some _, None -> msg "error" "not connected" ; Lwt.return (`Ok state)
-        | None, _ -> Lwt.return (`Ok state)
+        Contact.replace_contact state.contacts u ;
+        u
+      in
+      (match u with
+       | None   ->
+         ignore (user contact) ;
+         Lwt.return_unit
+       | Some x ->
+         let u = user x in
+         (* TODO: this is slightly too eager (too many writes) *)
+         Lwt_mvar.put state.contact_mvar u) >>= fun () ->
+      match clos, !xmpp_session with
+      | Some x, Some s -> x state s
+      | Some _, None -> msg "error" "not connected" ; Lwt.return (`Ok state)
+      | None, _ -> Lwt.return (`Ok state)
