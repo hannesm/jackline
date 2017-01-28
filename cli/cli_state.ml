@@ -274,16 +274,19 @@ module Connect = struct
               (kind, show, s, prio) authenticator user_data
               (fun session ->
                  Lwt_mvar.put mvar (Success user_data) >>= fun () ->
-                 let users =
+                 let auto_rooms =
                    Contact.fold
                      (fun k v acc ->
                         match v with
-                        | `Room r when r.Muc.autojoin -> k :: acc
+                        | `Room r when r.Muc.autojoin -> r :: acc
                         | _ -> acc)
                      users []
                  in
-                 let rooms = List.map (fun x -> Xjid.jid_to_xmpp_jid (`Bare x)) users in
-                 Lwt_list.iter_s (Xmpp_callbacks.Xep_muc.enter_room session) rooms) >|= fun session ->
+                 Lwt_list.iter_s (fun r ->
+                     let nick = r.Muc.my_nick
+                     and jid = Xjid.jid_to_xmpp_jid (`Bare r.Muc.room_jid)
+                     in
+                     Xmpp_callbacks.Xep_muc.enter_room session ~nick jid) auto_rooms) >|= fun session ->
             xmpp_session := Some session ;
             Lwt.async (fun () -> Xmpp_callbacks.parse_loop session))
             (fun exn -> Lwt_unix.close socket >>= fun () -> failure exn))
