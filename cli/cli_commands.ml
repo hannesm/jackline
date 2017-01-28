@@ -45,6 +45,8 @@ let _ =
 
   new_command
     "logheight" "/logheight [number]" "adjusts height of log to n" (fun _ -> []) ;
+  new_command
+    "buddywidth" "/buddywidth [number]" "adjusts width of buddy list to n" (fun _ -> []) ;
 
   (* global roster commands *)
   new_command
@@ -1052,6 +1054,13 @@ let exec input state contact isself p =
         | Some log_height when log_height >= 0 -> ok { state with log_height }
         | _ -> err "not a positive number")
     | ("logheight", _), _ -> err "requires argument"
+
+    (* buddywidth *)
+    | ("buddywidth", Some x), _ ->
+      (match try Some (int_of_string x) with Failure _ -> None with
+        | Some buddy_width when buddy_width >= 0 -> ok { state with buddy_width }
+        | _ -> err "not a positive number")
+    | ("buddywidth", _), _ -> err "requires argument"
 
     | ("go", Some x), _ ->
       (match Xjid.string_to_jid x with

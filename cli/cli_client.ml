@@ -248,13 +248,13 @@ let render_state (width, height) state =
       if s + 10 > height then 0 else s
     in
     if lh = 0 then
-      (0, height - 2)
+      (0, height - 3)
     else
       (lh, height - lh - 3)
   and buddy_width, chat_width =
     let b = state.buddy_width in
     match state.window_mode with
-    | BuddyList -> (b, width - b - 1)
+    | BuddyList -> if b + 20 > width then (0, width) else (b, width - b - 1)
     | FullScreen | Raw -> (0, width)
   in
 
@@ -330,15 +330,15 @@ let render_state (width, height) state =
         and mysession = selfsession state
         in
         status_line self mysession notify log a width
+      and hline = horizontal_line active resource a state.scrollback width
       in
       if log_height = 0 then
-        status
+        I.(hline <-> status)
       else
         let logs =
           let msgs = Utils.take_rev log_height self.User.message_history in
           let l = render_wrapped_list true width (List.map logfmt msgs) in
           I.vsnap ~align:`Bottom log_height l
-        and hline = horizontal_line active resource a state.scrollback width
         in
         I.(hline <-> logs <-> status)
     in
