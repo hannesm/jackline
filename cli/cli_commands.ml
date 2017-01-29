@@ -951,6 +951,7 @@ let handle_join nick r =
         let room = Muc.new_room ~jid ~my_nick () in
         join room
       | Some r -> match Muc.member r (`Full (("",""), r.Muc.my_nick)) with
+        | None -> join { r with Muc.autojoin = true }
         | Some x when x.Muc.presence <> `Offline -> join { r with Muc.autojoin = true }
         | _ ->
           add_status ~kind:`Error state (`Local (state.active_contact, "")) "/join: already in that room" ;
