@@ -15,8 +15,7 @@ let print_time ~now ~tz_offset_s timestamp =
 
 let st_to_a = function
   | `Chat | `GroupChat -> A.empty
-  | `Presence -> A.(fg cyan)
-  | `Info -> A.(fg (gray 18))
+  | `Presence | `Info -> A.(fg (gray 18))
   | `Warning -> A.(fg yellow)
   | `Error -> A.(fg red)
   | `Success -> A.(fg green)
