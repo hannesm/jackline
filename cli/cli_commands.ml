@@ -98,9 +98,9 @@ let _ =
   new_command
     "join" "/join [?chatroom]" "joins chatroom (or active contact)"
     (fun s ->
-       List.map Xjid.bare_jid_to_string
+       " " :: List.map Xjid.bare_jid_to_string
          (Contact.fold (fun _ c acc ->
-             match c with `Room r -> r.Muc.room_jid :: acc | _ -> acc)
+              match c with `Room r -> r.Muc.room_jid :: acc | _ -> acc)
              s.contacts [])) ;
   new_command
     "leave" "/leave [?reason]" "leaves active chatroom (using reason)" (fun _ -> []) ;
