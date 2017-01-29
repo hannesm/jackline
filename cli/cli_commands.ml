@@ -1165,7 +1165,7 @@ let exec input state contact isself p =
         | ("join", None), Some _ ->
           (match contact with
            | `Room r ->
-             let my_nick = fst (fst state.config.Xconfig.jid) in
+             let my_nick = r.Muc.my_nick in
              handle_join my_nick (Xjid.bare_jid_to_string r.Muc.room_jid)
            | _ -> (["/join: active contact is not a room"], None, None))
 
