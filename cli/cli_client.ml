@@ -13,24 +13,24 @@ let print_time ~now ~tz_offset_s timestamp =
   else
     Printf.sprintf "%02d-%02d %02d:%02d " m d hh mm
 
-let st_kind = function
-  | `Chat | `GroupChat -> `Message
-  | `Presence -> `Info
-
 let st_to_a = function
-  | `Message -> A.empty
+  | `Chat | `GroupChat -> A.empty
+  | `Presence -> A.(fg cyan)
   | `Info -> A.(fg (gray 18))
+  | `Warning -> A.(fg yellow)
+  | `Error -> A.(fg red)
+  | `Success -> A.(fg green)
 
 let format_log tz_offset_s now log =
   let { User.direction ; timestamp ; message ; kind ; _ } = log in
   let time = print_time ~now ~tz_offset_s timestamp in
   let from = match direction with
     | `From jid -> Xjid.jid_to_string jid ^ ":"
-    | `Local (_, x) when x = "" -> "***"
-    | `Local (_, x) -> "*** " ^ x ^ " ***"
+    | `Local (_, x) when x = "" -> "*"
+    | `Local (_, x) -> "* " ^ x ^ " *"
     | `To _ -> ">>>"
   in
-  (st_to_a (st_kind kind), time ^ from ^ " " ^ message)
+  (st_to_a kind, time ^ from ^ " " ^ message)
 
 let format_message tz_offset_s now self buddy resource { User.direction ; encrypted ; received ; timestamp ; message ; kind ; _ } =
   let time = print_time ~now ~tz_offset_s timestamp
@@ -47,7 +47,7 @@ let format_message tz_offset_s now self buddy resource { User.direction ; encryp
           in
           (tag, nick ^ ": ")
         | `From (`Bare _) -> (`Highlight, " ")
-        | `Local (_, x) -> (`Default, "***" ^ x ^ " ")
+        | `Local (_, x) -> (`Default, "*" ^ x ^ " ")
         | `To _ -> (`Default, if received then "-> " else "?> ") )
     | `User _ ->
       let en = if encrypted then "O" else "-" in
@@ -56,8 +56,8 @@ let format_message tz_offset_s now self buddy resource { User.direction ; encryp
         | `To _   ->
           let f = if received then "-" else "?" in
           (`Default, f ^ en ^ "> ")
-        | `Local (_, x) when x = "" -> (`Default, "*** ")
-        | `Local (_, x) -> (`Default, "***" ^ x ^ "*** ")
+        | `Local (_, x) when x = "" -> (`Default, "* ")
+        | `Local (_, x) -> (`Default, "*" ^ x ^ "* ")
       in
       let r =
         let show_res =
@@ -75,12 +75,12 @@ let format_message tz_offset_s now self buddy resource { User.direction ; encryp
       in
       (style, r ^ pre)
   and to_style st =
-    match st, st_kind kind with
+    match st, kind with
     | `Default, x -> st_to_a x
-    | `Highlight, `Message -> A.(st bold)
-    | `Highlight, `Info -> st_to_a `Info
-    | `Underline, `Message -> A.(st underline)
-    | `Underline, `Info -> A.(st underline ++ st_to_a `Info)
+    | `Highlight, `Chat | `Highlight, `GroupChat -> A.(st bold)
+    | `Highlight, x -> st_to_a x
+    | `Underline, `Chat | `Underline, `GroupChat -> A.(st underline)
+    | `Underline, x -> A.(st underline ++ st_to_a x)
   in
   let p, msg =
     if String.length message >= 3 && String.sub message 0 3 = "/me" then
@@ -404,7 +404,7 @@ let rec loop term size redrawer mvar input_mvar state =
   Lwt_mvar.take mvar >>= fun action ->
   Lwt.catch (fun () -> action state)
     (fun exn ->
-       add_status state (`Local ((`Full state.config.Xconfig.jid), "error")) (Printexc.to_string exn) ;
+       add_status ~kind:`Error state (`Local ((`Full state.config.Xconfig.jid), "error")) (Printexc.to_string exn) ;
        Lwt.return (`Failure state)) >>= function
   | `Ok state -> loop term size redraw mvar input_mvar state
   | `Resize size -> loop term size redraw mvar input_mvar state

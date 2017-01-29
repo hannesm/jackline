@@ -91,6 +91,10 @@ type chatkind = [
   | `Chat
   | `GroupChat
   | `Presence
+  | `Info
+  | `Error
+  | `Warning
+  | `Success
 ]
 
 val chatkind_of_sexp : Sexplib.Type.t -> chatkind

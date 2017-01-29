@@ -210,6 +210,10 @@ type chatkind = [
   | `Chat
   | `GroupChat
   | `Presence
+  | `Info
+  | `Error
+  | `Warning
+  | `Success
 ] [@@deriving sexp]
 
 type message = {

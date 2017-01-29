@@ -6,7 +6,7 @@ let init_system ui_mvar =
     Lwt.async (fun () ->
         Connect.disconnect () >>= fun () ->
         let handle s =
-          add_status s (`Local ((`Full s.config.Xconfig.jid), "async error")) m ;
+          add_status ~kind:`Error s (`Local ((`Full s.config.Xconfig.jid), "async error")) m ;
           if r then
             Lwt.return (`Failure s)
           else
@@ -117,7 +117,7 @@ let start_client cfgdir debug unicode fd_gui fd_nfy () =
     "multi user chat support: see you at /join jackline@conference.jabber.ccc.de (use ArrowUp key); \
      type /help for help"
   and sender = `Local (`Full myjid, "welcome to jackline " ^ Utils.version) in
-  Cli_state.add_status state sender greeting ;
+  Cli_state.add_status ~kind:`Info state sender greeting ;
 
   let us = Contact.fold (fun _ v acc -> v :: acc) users [] in
 

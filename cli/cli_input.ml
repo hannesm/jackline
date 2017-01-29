@@ -209,7 +209,7 @@ let read_terminal term mvar input_mvar () =
               and self = Xjid.jid_matches (`Bare (fst s.config.Xconfig.jid)) s.active_contact
               and s = { s with input = ([], []) }
               in
-              let err msg = add_status s (`Local ((`Full s.config.Xconfig.jid), "error")) msg in
+              let err msg = add_status ~kind:`Error s (`Local ((`Full s.config.Xconfig.jid), "error")) msg in
               if String.length input = 0 then
                 let active = active s in
                 let exp = Contact.expanded active in

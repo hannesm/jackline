@@ -92,7 +92,7 @@ let maybe_clear state =
 
 let selflog mvar from message =
   let c s =
-    add_status s (`Local ((`Full s.config.Xconfig.jid), from)) message ;
+    add_status ~kind:`Info s (`Local ((`Full s.config.Xconfig.jid), from)) message ;
     Lwt.return (`Ok s)
   in
   Lwt_mvar.put mvar c
@@ -276,7 +276,7 @@ module Connect = struct
                  Lwt_mvar.put mvar (Success user_data) >>= fun () ->
                  let auto_rooms =
                    Contact.fold
-                     (fun k v acc ->
+                     (fun _ v acc ->
                         match v with
                         | `Room r when r.Muc.autojoin -> r :: acc
                         | _ -> acc)

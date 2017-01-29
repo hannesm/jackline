@@ -44,8 +44,8 @@ module Xep_muc = XEP_muc.Make (XMPPClient)
 open Lwt.Infix
 
 type user_data = {
-  log                  : User.direction -> string -> unit Lwt.t ;
-  locallog             : string -> string -> unit Lwt.t ;
+  log                  : ?kind:User.chatkind -> User.direction -> string -> unit Lwt.t ;
+  locallog             : ?kind:User.chatkind -> string -> string -> unit Lwt.t ;
 
   message              : Xjid.bare_jid -> string option -> ?timestamp:Ptime.t -> string -> unit Lwt.t ;
   group_message        : Xjid.t -> Ptime.t option -> string option -> string option -> Xep_muc.User.data option -> string option -> unit Lwt.t ;
@@ -421,7 +421,7 @@ let connect socket_data myjid certname password presence authenticator user_data
 
   let tls_socket () =
     TLSSocket.switch socket_data certname authenticator >>= fun socket_data ->
-    user_data.locallog "TLS session info" (tls_epoch_to_line socket_data) >>= fun () ->
+    user_data.locallog ~kind:`Info "TLS session info" (tls_epoch_to_line socket_data) >>= fun () ->
     let module TLS_module =
       struct type t = Tls_lwt.Unix.t
              let socket = socket_data
