@@ -96,7 +96,12 @@ let _ =
 
   (* multi user chat *)
   new_command
-    "join" "/join [?chatroom]" "joins chatroom (or active contact)" (fun _ -> []) ;
+    "join" "/join [?chatroom]" "joins chatroom (or active contact)"
+    (fun s ->
+       List.map Xjid.bare_jid_to_string
+         (Contact.fold (fun _ c acc ->
+             match c with `Room r -> r.Muc.room_jid :: acc | _ -> acc)
+             s.contacts [])) ;
   new_command
     "leave" "/leave [?reason]" "leaves active chatroom (using reason)" (fun _ -> []) ;
   new_command
@@ -952,7 +957,7 @@ let handle_join nick r =
         join room
       | Some r -> match Muc.member r (`Full (("",""), r.Muc.my_nick)) with
         | None -> join { r with Muc.autojoin = true }
-        | Some x when x.Muc.presence <> `Offline -> join { r with Muc.autojoin = true }
+        | Some x when x.Muc.presence = `Offline -> join { r with Muc.autojoin = true }
         | _ ->
           add_status ~kind:`Error state (`Local (state.active_contact, "")) "/join: already in that room" ;
           Lwt.return (`Ok state)
