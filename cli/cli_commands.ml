@@ -196,7 +196,8 @@ let notify_user jid ctx inc_fp verify_fp = function
        match v with
        | `Verified _ -> tos v, `Success
        | _ when c = 0 && o -> "POSSIBLE BREAKIN ATTEMPT! new " ^ tos v ^ other o ^ verify, `Error
-       | _ -> tos v ^ count c ^ other o ^ verify, `Error
+       | `Revoked _ -> tos v ^ count c ^ other o ^ verify, `Error
+       | _ -> tos v ^ count c ^ other o ^ verify, `Warning
      in
      [ ((`Local (jid, "OTR")), `Success, false, ("encrypted connection established (ssid " ^ ssid ^ ")")) ;
        ((`Local (jid, "OTR key")), kind, false, otrmsg) ]
