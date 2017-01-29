@@ -376,10 +376,10 @@ let tls_epoch_to_line t =
     let version = epoch.Core.protocol_version
     and cipher = epoch.Core.ciphersuite
     in
-    Sexplib.Sexp.(to_string_hum (List [
+    `Ok Sexplib.Sexp.(to_string_hum (List [
         Core.sexp_of_tls_version version ;
         Ciphersuite.sexp_of_ciphersuite cipher ]))
-  | `Error -> "error while fetching TLS parameters"
+  | `Error -> `Error "error while fetching TLS parameters"
 
 let resolve (hostname : string option) (port : int option) (jid_idn : string) =
   (* resolving logic:
@@ -421,7 +421,9 @@ let connect socket_data myjid certname password presence authenticator user_data
 
   let tls_socket () =
     TLSSocket.switch socket_data certname authenticator >>= fun socket_data ->
-    user_data.locallog ~kind:`Info "TLS session info" (tls_epoch_to_line socket_data) >>= fun () ->
+    (match tls_epoch_to_line socket_data with
+     | `Ok str -> user_data.locallog ~kind:`Success "TLS session info" str
+     | `Error str -> user_data.locallog ~kind:`Error "TLS session info" str) >>= fun () ->
     let module TLS_module =
       struct type t = Tls_lwt.Unix.t
              let socket = socket_data
