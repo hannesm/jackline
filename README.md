@@ -197,8 +197,8 @@ Available colours:
 - "empty",
 - "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
 - "lightblack", "lightred", "lightgreen", "lightyellow", "lightblue", "lightmagenta", "lightcyan", "lightwhite",
-- "gray <n>" (where n is in the range 0 and 23,
-- "rgb <r> <g> <b>" (where r, g, b in the range 0 and 5)
+- "gray *n*" (where *n* is in the range 0 and 23),
+- "rgb *r* *g* *b*" (where *r*, *g*, *b* are in the range 0 and 5)
 
 frame: red means the active session is unencrypted, green encrypted
 
