@@ -216,6 +216,9 @@ type chatkind = [
   | `Success
 ] [@@deriving sexp]
 
+let chatkind_to_string k =
+  Sexplib.Sexp.to_string (sexp_of_chatkind k)
+
 type message = {
   direction  : direction ;
   encrypted  : bool ;

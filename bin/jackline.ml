@@ -59,6 +59,11 @@ let start_client cfgdir debug unicode fd_gui fd_nfy () =
         config
       | Some cfg -> Lwt.return cfg) >>= fun config ->
 
+  Cli_colour.init () ;
+  (Persistency.load_colours cfgdir >|= function
+    | None -> ()
+    | Some colours -> Cli_colour.load colours) >>= fun () ->
+
   (match config.Xconfig.password with
    | None -> Persistency.load_password cfgdir
    | Some x -> Lwt.return (Some x)) >>= (function
@@ -113,11 +118,14 @@ let start_client cfgdir debug unicode fd_gui fd_nfy () =
   let connect_mvar = Cli_state.Connect.connect_me config ui_mvar state_mvar users in
   let state = Cli_state.empty_state cfgdir config users connect_mvar state_mvar in
 
-  let greeting =
-    "multi user chat support: see you at /join jackline@conference.jabber.ccc.de (use ArrowUp key); \
-     type /help for help"
-  and sender = `Local (`Full myjid, "welcome to jackline " ^ Utils.version) in
-  Cli_state.add_status ~kind:`Info state sender greeting ;
+  let greetings = [
+    "welcome to jackline r" ^ Utils.version ;
+    "type /help for command list" ;
+    "* configurable colours! '((Presence \"cyan\") (Success \"lightgreen\"))' in your ~/.config/ocaml-xmpp-client/colours.sexp (see https://github.com/hannesm/jackline for details)" ;
+    "* improved MUC support: join&leave messages; autojoin on (re)connect; /rooms discovery" ]
+  and sender = `Local (`Full myjid,"")
+  in
+  List.iter (Cli_state.add_status ~kind:`Info state sender) greetings ;
 
   let us = Contact.fold (fun _ v acc -> v :: acc) users [] in
 

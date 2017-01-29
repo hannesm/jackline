@@ -114,7 +114,7 @@ a = away, d = do not disturb, x = extended away, _ = offline).
 
 A single contact is active, which can be modified by `PgUp/PdDown`.
 The active contact is shown in reversed foreground and background
-color.  Its chat content is displayed in the chat window.  Certain
+colour.  Its chat content is displayed in the chat window.  Certain
 commands and operations (such as sending a message) require an active
 contact.
 
@@ -170,20 +170,49 @@ Active keys:
 
 `/help` prints the available commands, `/help command` more detailed help of the given command.
 
-#### Colors
+#### Colours
+
+default foreground colours are:
+- Chat empty
+- GroupChat empty
+- Presence gray 18
+- Info gray 18
+- Warning yellow
+- Error red
+- Success green
+
+To customise, create a file `colours.sexp` in your config folder
+(`~/.config/ocaml-xmpp-client` unless `-f` is provided).  Sample content:
+```
+((Chat "empty")
+ (GroupChat "empty")
+ (Presence "gray 18")
+ (Info "gray 18")
+ (Warning "yellow")
+ (Error "red")
+ (Success "green"))
+```
+
+Available colours:
+- "empty",
+- "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
+- "lightblack", "lightred", "lightgreen", "lightyellow", "lightblue", "lightmagenta", "lightcyan", "lightwhite",
+- "gray <n>" (where n is in the range 0 and 23,
+- "rgb <r> <g> <b>" (where r, g, b in the range 0 and 5)
+
+frame: red means the active session is unencrypted, green encrypted
 
 contact list:
-- green frame and contact: OTR session established
-- red frame and contact: no OTR session
-- black: no active session exists
+- green contact: OTR session established
+- red contact: no OTR session
+- black/white: groupchat, offline, self
 
 horizontal line
 - red OTR fingerprint: not verified (use a second channel)
 - green OTR: key is verified
 
-status line
-- own jabber id in reverse colors: logging to disk is enabled for this contact
-- own jabber id in usual colors: no logging to disk for this contact
+logging (`/log on|off`):
+- jabber id in status line in reverse: logging is turned on
 
 ### FAQ
 

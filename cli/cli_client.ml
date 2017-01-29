@@ -13,13 +13,6 @@ let print_time ~now ~tz_offset_s timestamp =
   else
     Printf.sprintf "%02d-%02d %02d:%02d " m d hh mm
 
-let st_to_a = function
-  | `Chat | `GroupChat -> A.empty
-  | `Presence | `Info -> A.(fg (gray 18))
-  | `Warning -> A.(fg yellow)
-  | `Error -> A.(fg red)
-  | `Success -> A.(fg green)
-
 let format_log tz_offset_s now log =
   let { User.direction ; timestamp ; message ; kind ; _ } = log in
   let time = print_time ~now ~tz_offset_s timestamp in
@@ -29,7 +22,7 @@ let format_log tz_offset_s now log =
     | `Local (_, x) -> "* " ^ x ^ " *"
     | `To _ -> ">>>"
   in
-  (st_to_a kind, time ^ from ^ " " ^ message)
+  (Cli_colour.kind kind, time ^ from ^ " " ^ message)
 
 let format_message tz_offset_s now self buddy resource { User.direction ; encrypted ; received ; timestamp ; message ; kind ; _ } =
   let time = print_time ~now ~tz_offset_s timestamp
@@ -75,11 +68,11 @@ let format_message tz_offset_s now self buddy resource { User.direction ; encryp
       (style, r ^ pre)
   and to_style st =
     match st, kind with
-    | `Default, x -> st_to_a x
+    | `Default, x -> Cli_colour.kind x
     | `Highlight, `Chat | `Highlight, `GroupChat -> A.(st bold)
-    | `Highlight, x -> st_to_a x
+    | `Highlight, x -> Cli_colour.kind x
     | `Underline, `Chat | `Underline, `GroupChat -> A.(st underline)
-    | `Underline, x -> A.(st underline ++ st_to_a x)
+    | `Underline, x -> A.(st underline ++ Cli_colour.kind x)
   in
   let p, msg =
     if String.length message >= 3 && String.sub message 0 3 = "/me" then
@@ -103,8 +96,8 @@ let format_message tz_offset_s now self buddy resource { User.direction ; encryp
 
 let buddy_to_color = function
   | `Default -> A.empty
-  | `Good -> A.(fg green)
-  | `Bad -> A.(fg red)
+  | `Good -> Cli_colour.kind `Success
+  | `Bad -> Cli_colour.kind `Error
 
 let format_buddy state width s contact resource =
   let jid = Contact.jid contact resource in
@@ -211,7 +204,7 @@ let horizontal_line buddy resource a scrollback width =
 
 let status_line self mysession notify log a width =
   let a = A.(a ++ st bold) in
-  let notify = if notify then I.string A.(a ++ st blink ++ fg cyan) "##" else Char.hdash a 2
+  let notify = if notify then I.string A.(a ++ st blink ++ Cli_colour.kind `Warning) "##" else Char.hdash a 2
   and jid =
     let data = User.userid self mysession
     and a' = if log then A.(st reverse) else a
@@ -287,8 +280,8 @@ let render_state (width, height) state =
           let input = char_list_to_str pre in
           ( match Cli_commands.completion state input with
             | [] -> I.empty
-            | [x] -> I.string A.(fg (gray 18)) x
-            | xs -> I.string A.(fg (gray 18)) (String.concat "|" xs) )
+            | [x] -> I.string (Cli_colour.kind `Info) x
+            | xs -> I.string (Cli_colour.kind `Info) (String.concat "|" xs) )
         | _ -> iinp2
       in
       v_center iinp r width
@@ -386,7 +379,7 @@ let rec loop term size redrawer mvar input_mvar state =
         try
           render_state size state
         with e ->
-          let e = A.(fg red), (Printexc.to_string e)
+          let e = Cli_colour.kind `Error, (Printexc.to_string e)
           and note =
             "While trying to render the UI.  Try to scroll to another buddy \
              (Page Up/Down), switch rendering of buddy list (F12), or clear \

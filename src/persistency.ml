@@ -77,6 +77,7 @@ let write dir filename buf =
   Lwt.return ()
 
 let config = "config.sexp"
+let colours = "colours.sexp"
 let users = "users.sexp"
 
 let maybe_create_dir dir =
@@ -102,6 +103,12 @@ let load_config load_dsa cfg =
   | Some x -> load_dsa >|= fun dsa ->
     Some (Xconfig.load_config (Some dsa) x)
   | None   -> Lwt.return_none
+
+
+let load_colours cfg =
+  read cfg colours >|= function
+  | Some x -> Some (Sexplib.Conv.(list_of_sexp (pair_of_sexp User.chatkind_of_sexp string_of_sexp)) (Sexplib.Sexp.of_string x))
+  | None   -> None
 
 let dump_user cfgdir user =
   user_dir cfgdir >>= fun userdir ->

@@ -99,6 +99,7 @@ type chatkind = [
 
 val chatkind_of_sexp : Sexplib.Type.t -> chatkind
 val sexp_of_chatkind : chatkind -> Sexplib.Type.t
+val chatkind_to_string : chatkind -> string
 
 type message = {
   direction  : direction ;
