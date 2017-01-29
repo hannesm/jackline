@@ -2,7 +2,7 @@
 
 ### [Jackline](https://en.wikipedia.org/wiki/Jackline)
 
-![Screenshot](http://berlin.ccc.de/~hannes/jackline.png)
+![Screenshot](http://berlin.ccc.de/~hannes/jackline2.png)
 
 The goal is a minimalistic graphical user interface for a secure (fail
 hard!) and trustworthy XMPP client.
