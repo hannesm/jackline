@@ -74,8 +74,8 @@ let warn jid user add_msg =
 
 let send_msg t state active_user message =
   let handle_otr_out jid user_out =
-    let add_msg direction encrypted data =
-      let msg = User.message direction encrypted false data in
+    let add_msg ?kind direction encrypted data =
+      let msg = User.message ?kind direction encrypted false data in
       let u = active state in
       let u = Contact.new_message u msg in
       Contact.replace_contact state.contacts u
@@ -85,7 +85,7 @@ let send_msg t state active_user message =
      | `Room _ -> ()) ;
     match user_out with
     | `Warning msg      ->
-       add_msg (`Local (jid, "OTR Warning")) false msg ;
+       add_msg ~kind:`Warning (`Local (jid, "OTR Warning")) false msg ;
        ""
     | `Sent m           ->
        let id = random_string () in
@@ -257,17 +257,16 @@ let read_terminal term mvar input_mvar () =
                            else
                              (Some msg, jid, None)
                      in
-                     let log dir msg =
+                     let log kind dir msg =
                        let u = active s in
-                       let kind = match kind with None -> `Chat | Some _ -> `GroupChat in
                        let msg = User.message ~kind dir otr false msg in
                        let u = Contact.new_message u msg in
                        Contact.replace_contact s.contacts u
                      in
                      match m with
-                     | None -> log (`Local (jid, "warning")) "didn't send anything" ; Lwt.return_unit
+                     | None -> log `Warning (`Local (jid, "warning")) "didn't send anything" ; Lwt.return_unit
                      | Some m ->
-                       log (`To (jid, "")) ("hex encoded: " ^ data) ;
+                       log (match kind with None -> `Chat | _ -> `GroupChat) (`To (jid, "")) ("hex encoded: " ^ data) ;
                        send t None ?kind jid None m) >>= fun () ->
                   ok s
                 | cmd ->
