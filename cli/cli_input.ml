@@ -240,22 +240,25 @@ let read_terminal term mvar input_mvar () =
                        | ("/raw", Some data) -> data, false
                        | _ -> "", false
                      in
-                     let msg = Cstruct.to_string (Nocrypto.Uncommon.Cs.of_hex data) in
                      let user = clear_input (active s) input in
+                     let msg =
+                       try Some (Cstruct.to_string (Nocrypto.Uncommon.Cs.of_hex data)) with _ -> None
+                     in
                      let m, jid, kind = match user with
-                       | `Room r -> Some msg, `Bare r.Muc.room_jid, Some Xmpp_callbacks.XMPPClient.Groupchat
+                       | `Room r -> msg, `Bare r.Muc.room_jid, Some Xmpp_callbacks.XMPPClient.Groupchat
                        | `User u ->
                          let bare = u.User.bare_jid in
-                         match session s with
-                         | None -> (if otr then None else Some msg), `Bare bare, None
-                         | Some se ->
+                         match session s, msg with
+                         | _, None -> None, `Bare bare, None
+                         | None, _ -> (if otr then None else msg), `Bare bare, None
+                         | Some se, Some txt ->
                            let jid = `Full (bare, se.User.resource) in
                            if otr && Otr.State.is_encrypted se.User.otr then
-                             let ctx, out, _ = Otr.Engine.send_otr se.User.otr msg in
+                             let ctx, out, _ = Otr.Engine.send_otr se.User.otr txt in
                              Contact.replace_user s.contacts (User.update_otr u se ctx) ;
                              (out, jid, None)
                            else
-                             (Some msg, jid, None)
+                             (Some txt, jid, None)
                      in
                      let log kind dir msg =
                        let u = active s in
