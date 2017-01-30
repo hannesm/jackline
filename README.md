@@ -11,14 +11,14 @@ This goal is achieved with clean-slate libraries (OCaml-TLS,
 OCaml-OTR) and few features: no support for HTML markup, avatars,
 which music you're playing, timezone you're living in, ...
 
-This is β software... feedback welcome!  Security audits are
-needed, please contact me if you plan to do any or already did some.
-The OCaml-TLS implementation received some preliminary black box and
-white box testing.
+You can [read about this project (January
+2017)](https://hannes.nqsb.io/Posts/Jackline).
 
-The configuration has to include the trust anchor for the server
-certificate (or the SHA256 fingerprint of the certificate) - otherwise
-there is no way how a client can ensure to talk to the correct XMPP
+This is unreleased software... feedback welcome!
+
+Failing hard means that the configuration has to include the trust anchor for
+the server certificate (or the SHA256 fingerprint of the certificate) -
+otherwise there is no way how jackline could ensure to talk to the correct XMPP
 server.  There won't be any 'ignore ssl warnings' option.
 
 Supported features:
@@ -26,7 +26,7 @@ Supported features:
 - OTR (built-in and enabled by default)
 - strict TLS certificate verification
 - plain text (no HTML!)
-- XEP-0184 (Message Delivery Receipts)
+- [XEP-0184](http://xmpp.org/extensions/xep-0184.html) (Message Delivery Receipts)
 - _no_ import of OTR keys or configuration
 - _no_ plaintext connections to XMPP server
 
@@ -57,19 +57,18 @@ declarative) coding style (this code here is not there yet).
 
 OPAM is the OCaml package manager, and not directly needed, but very
 convenient for installation and updating.  It lacks package signing,
-but has a
-[proposal](http://opam.ocaml.org/blog/Signing-the-opam-repository/)!
+but I've some [work-in-progress](https://github.com/hannesm/conex).
 
 ### Installing jackline
 
-First be aware that this is unreleased β software.  Bug reports are
-welcome (pull requests as well).  There might be a release later in
-2016 (XML/XMPP library needs some refactoring first).
+First be aware that this is unreleased software.  Bug reports are welcome
+(pull requests as well).  There might be a release later (but the XML/XMPP
+library needs some refactoring first).
 
 Get OCaml (>= 4.02.3), get opam (1.2),
 [aspcud](http://www.cs.uni-potsdam.de/wv/aspcud/) and
 [gmp](http://gmplib.org/) are also required.
-If you have an older OCaml compiler, run `opam switch 4.02.3`.
+If you have an older OCaml compiler, run `opam switch 4.04.0`.
 
 Run the following commands:
 - `opam repo add xmpp-dev https://github.com/hannesm/xmpp-opam.git`
@@ -77,26 +76,34 @@ Run the following commands:
 - `opam install jackline`
 
 Now you should have a `~/.opam/system/bin/jackline` (or
-`~/.opam/4.02.3/bin/jackline`), which should be in your `PATH` (if you
+`~/.opam/4.04.0/bin/jackline`), which should be in your `PATH` (if you
 executed ``eval `opam config env` ``).
 
 To update, simply run `opam update` followed by `opam upgrade`.  This
 will get you the latest version (git master).
 
+Read the `jackline --help` output:
+```
+  -f configuration directory (defaults to ~/.config/ocaml-xmpp-client/)
+  -d log to out.txt in current working directory
+  -a ASCII only output
+  --fd-gui File descriptor to receive GUI focus updates on.
+  --fd-nfy File descriptor to send notification updates on.
+```
+
 ### Configuration
 
-When you start `jackline` for the first time, it starts an interactive
-configuration dialog asking about account details.  There is no need
-to provide optional information.  Hostname and which common name
-should appear in the certificate is derived from the jabber id.
+When you start `jackline` for the first time (or with an empty configuration
+directory), it starts an interactive configuration dialog asking about account
+details.  There is no need to provide optional information.  Hostname and which
+common name should appear in the certificate is derived from the jabber id.
 
-The configuration file is stored in
-`~/.config/ocaml-xmpp-client/*/config.sexp`, you can specify another
-directory by using the `-f` command line argument.  Next to the
-configuration, there is a file containing your `password` (unless you
-decided to enter it on every start of jackline), a `otr_dsa.sexp`
-containing your OTR key, a `users` directory with a file for each
-contact (OTR fingerprints, custom OTR policies, ...).
+The configuration file is stored as `config.sexp` in your configuration
+directory.  Next to it, there is a file containing your `password` (unless you
+decided to enter it on every start of jackline), `otr_dsa.sexp` containing your
+OTR key, a `users` directory with a file for each contact (OTR fingerprints,
+custom OTR policies, ...), and a `histories` directory if you enable logging for
+a specific contact (`/log on`).
 
 ### Using jackline
 
@@ -129,13 +136,16 @@ log is filtered by messages to the specific resource, and merged in
 the base contact.  An unexpanded contact equals to the resource with
 highest priority.
 
-When a new message is received, this is indicated by blinking of the
-contact, a prepended `*` (or `☀` in case of collapsed contact), a blue
-`#` in the bottom left corner, execution of `notification_callback`, and
-a message to a file descriptor (if `--fd-nfy` is used).
+When a new message is received, this is indicated by blinking of the contact, a
+prepended `*` (or `☀` in case of collapsed contact), a yellow `##` in the bottom
+left corner, execution of `notification_callback`, and a message to a file
+descriptor (if `--fd-nfy` is used).
 
 The most basic callback would be a script that emits a BEL and a terminal that
-translates a bell to urgency (`.Xdefaults`: `Xterm*vt100.bellsUrgent: true`; `bell.sh`:
+translates a bell to urgency (in your `.Xdefaults`, have the line
+`Xterm*vt100.bellsUrgent: true`);
+
+`bell.sh`:
 ```
 if [ $3 != "connect" ]; then
   printf '\a'
@@ -146,24 +156,26 @@ A message is sent to the active contact by typing it followed by
 `return`.
 
 In the chat window, each message is prefixed with 3 characters:
-- `***` is a local message.
-- `<--` is an incoming unencrypted message.
-- `<O-` is an incoming OTR encrypted message
-- `-->` is an outgoing unencrypted message, which has been received by the other client (XEP 184).
-- `?->` is an outgoing unencrypted message waiting for a message delivery receipt (XEP 184).
-- `-O>` is an outgoing OTR encrypted message, which has been received by the other client (XEP 184).
-- `?O>` is an outgoing OTR encrypted message waiting for receipt (XEP 184).
+- `*` - local
+- `<--` - incoming unencrypted
+- `<O-` - incoming OTR encrypted
+- `-->` - outgoing unencrypted, delivered (XEP 184)
+- `?->` - outgoing unencrypted, waiting for receipt (XEP 184)
+- `-O>` - outgoing OTR encrypted, delivered (XEP 184)
+- `?O>` - outgoing OTR encrypted, waiting for receipt (XEP 184)
 
-Active keys:
+Keybindings
 - `PgUp`, `PgDown` navigates through the contact list
+- `Up`, `Down` rotate through per-contact input history
+- `Left`, `Right`, `Home`, `End` navigate in input line
 - `Ctrl-q` jumps to next notification
 - `Ctrl-x` jumps to last active user
 - `F5` toggles display of offline contacts
 - `F12` toggles between display of contact list, full screen chat, and raw (only received messages)
-- `F11` and `Shift-F11` (or `Ctrl-F11`) increases and decreases width of contact list
-- `F10` and `Shift-F10` (or `Ctrl-F10`) increases and decreases height of log window
+- `F11` and `Shift-F11` (or `Ctrl-F11`) increases and decreases width of contact list (`/buddywidth`)
+- `F10` and `Shift-F10` (or `Ctrl-F10`) increases and decreases height of log window (`/logheight`)
 - `Ctrl-PgUp` (or `Ctrl-p`), `Ctrl-PgDown` (or `Ctrl-n`) scrolls chat window
-- `<tab>` tab completion (largest prefix)
+- `<tab>` tab completion (largest prefix, suggestions are displayed in grey while typingx)
 - `Ctrl-a` (jump to beginning of line), `Ctrl-e` (jump to end of line), `Ctrl-k` (kill text to the right of cursor), `Ctrl-u` (kill text to the left of cursor), `Ctrl-left` (jump word backwards), `Ctrl-right` (jump word forwards), `Ctrl-f` (forward one character), `Ctrl-b` (backward one character)
 - `Ctrl-space` (mark, indicated by underline), `Ctrl-w` (cut), `Ctrl-y` (yank) [currently broken]
 - `Ctrl-_` undo [currently broken]
@@ -172,7 +184,19 @@ Active keys:
 
 #### Colours
 
-default foreground colours are:
+Colours are mainly used to indicate security properties: enabled end-to-end
+encryption (of the active contact) let's the frame turn green, disabled
+end-to-end encryption makes the frame red.  Green is also used to indicate
+verified public keys, red for unverified ones.
+
+A contact in the contact list is green if there is an active end-to-end
+encrypted session, red if not and the contact is online, black if the contact is
+offline or a groupchat.  Inverse highlights the active contact, and if the buddy
+name in the status bar is inverted, logging is turned on.
+
+Other errors are red, warnings are green.
+
+The default colours are:
 - Chat empty
 - GroupChat empty
 - Presence gray 18
@@ -181,44 +205,26 @@ default foreground colours are:
 - Error red
 - Success green
 
-To customise, create a file `colours.sexp` in your config folder
-(`~/.config/ocaml-xmpp-client` unless `-f` is provided).  Sample content:
+
+To draw all presence messages in cyan instead of gray, create a
+`colours.sexp` in your config folder with the contents:
 ```
-((Chat "empty")
- (GroupChat "empty")
- (Presence "gray 18")
- (Info "gray 18")
- (Warning "yellow")
- (Error "red")
- (Success "green"))
+((Presence "cyan"))
 ```
 
-Available colours:
-- "empty",
-- "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
-- "lightblack", "lightred", "lightgreen", "lightyellow", "lightblue", "lightmagenta", "lightcyan", "lightwhite",
-- "gray *n*" (where *n* is in the range 0 and 23),
-- "rgb *r* *g* *b*" (where *r*, *g*, *b* are in the range 0 and 5)
-
-frame: red means the active session is unencrypted, green encrypted
-
-contact list:
-- green contact: OTR session established
-- red contact: no OTR session
-- black/white: groupchat, offline, self
-
-horizontal line
-- red OTR fingerprint: not verified (use a second channel)
-- green OTR: key is verified
-
-logging (`/log on|off`):
-- jabber id in status line in reverse: logging is turned on
+Available colours ([notty documentation](https://pqwy.github.io/notty/Notty.A.html#1_Colors)):
+- empty,
+- black, red, green, yellow, blue, magenta, cyan, white,
+- lightblack, lightred, lightgreen, lightyellow, lightblue, lightmagenta, lightcyan, lightwhite,
+- gray *n* (where `n >= 0 && n <= 5`,
+- rgb *r* *g* *b* (where `r >= 0 && r <= 5 && g >= 0 && g <= 5 && b >= 0 && b <= 5`)
 
 ### FAQ
 
 - How do I update the fingerprint of the server certificate (getting authentication failure messages)? -- Currently you have to edit `config.sexp`:  find the `(Fingerprint XXX)` data, and replace XXX with the new fingerprint (`openssl s_client -connect SERVER:5222 -starttls xmpp | openssl x509 -fingerprint -sha256 -noout` might be useful (or [tlsclient](https://github.com/hannesm/tlsclient) using `tlsclient --starttls xmpp -z SERVER:5222`).
 - How do I prevent jackline from doing DNS lookups? -- Interactive configuration or specify `(hostname ("146.255.57.229"))` in `config.sexp`.
 - The server certificate does not match the server name, how do I fix this? -- Interactive configuration or specify `(cert_hostname ("blabla.com"))` in `config.sexp`.
+- I hate the default colours. -- [they're now customisable](https://github.com/hannesm/jackline/#colours)
 - Keys do not work on MacOSX -- [This](https://github.com/timothybasanov/terminal-app-function-keys#full-list-of-all-bindings) might be useful.
 - I want to receive notifications. -- A hook script can be defined during interactive configuration or `(notification_callback (/my/favorite/script.sh))` in `config.sexp`.  It is executed with three (or four) arguments: the local user's jabber id, a summary of the state of jackline, the event type that caused this execution, and perhaps other things; see `cli/cli_state.ml` search for `module Notify` for details.
 - I want a systray icon. -- there are two projects, [posiputt/jackification](https://github.com/posiputt/jackification), and [cfcs/misc](https://github.com/cfcs/misc/blob/master/jackline_systray.py)
