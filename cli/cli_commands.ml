@@ -96,14 +96,14 @@ let _ =
 
   (* multi user chat *)
   new_command
-    "join" "/join [?chatroom]" "joins chatroom (or active contact)"
+    "join" "/join [?muc/nick]" "join (foo@bar.org/bla) chatroom foo on bar.org (or active contact) using nick bla (defaults to username)"
     (fun s ->
        " " :: List.map Xjid.bare_jid_to_string
          (Contact.fold (fun _ c acc ->
               match c with `Room r -> r.Muc.room_jid :: acc | _ -> acc)
              s.contacts [])) ;
   new_command
-    "leave" "/leave [?reason]" "leaves active chatroom (using reason)" (fun _ -> []) ;
+    "leave" "/leave [?reason]" "leaves active multi-user chat (with reason)" (fun _ -> []) ;
   new_command
     "rooms" "/rooms [server]" "queries chatrooms on server" (fun _ -> []) ;
 
