@@ -30,11 +30,14 @@ Supported features:
 - _no_ import of OTR keys or configuration
 - _no_ plaintext connections to XMPP server
 
+I (so far successfully) try to preserve three core properties:
+- any data written on disk (using lots of silly parens) by jackline will stay being readable by every future jackline version
+- once the initial configuration file (and private key and maybe password) is created, it will never be written to by jackline
+- jackline will never transmit any data or open a network connection unless initiated by you (jackline contains a keep-alive and reconnect mechanism to re-establish a connection, but there won't be any "automatically connect on startup" feature)
+
 NB: jackline and
 [torsocks](https://trac.torproject.org/projects/tor/wiki/doc/torsocks) are
 friends: `torify jackline` works.
-
-The interface is inspired by [mcabber](http://mcabber.com).
 
 Trusted code base is at the moment:
 - [OCaml-OTR](https://github.com/hannesm/ocaml-otr)
@@ -230,3 +233,4 @@ Available colours ([notty documentation](https://pqwy.github.io/notty/Notty.A.ht
 - I want a systray icon. -- there are two projects, [posiputt/jackification](https://github.com/posiputt/jackification), and [cfcs/misc](https://github.com/cfcs/misc/blob/master/jackline_systray.py)
 - I want to have notifications on MacOSX. - Andrej wrote [a script](https://github.com/schoeke/notline) using terminal notifier; otherwise [this guide](https://gist.github.com/prebenlm/5562656) might help.
 - Support? -- join us at jackline@conference.jabber.ccc.de
+- The interface is inspired by [mcabber](http://mcabber.com)
