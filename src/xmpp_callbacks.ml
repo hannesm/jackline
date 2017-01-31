@@ -382,34 +382,34 @@ let tls_epoch_to_line t =
   | `Error -> `Error "error while fetching TLS parameters"
 
 let resolve (hostname : string option) (port : int option) (jid_idn : string) =
-  (* resolving logic:
-     - prefer user-supplied hostname & port [default to 5222]
-     - TODO: if not available, use DNS SRV record of jid_idn (find a lib which does SRV)
-     - if not available, use A record of jid_domain (and supplied port / 5222)
-  *)
-  let open Unix in
-  let resolve host =
-    match
-      try Some (List.hd (getaddrinfo host "xmpp-client"
-                           [AI_SOCKTYPE SOCK_STREAM ; AI_FAMILY PF_INET])).ai_addr
-      with _ -> None
-    with
-    | None -> fail (Invalid_argument ("could not resolve hostname " ^ host))
-    | Some (ADDR_UNIX _) -> fail (Invalid_argument "received unix address")
-    | Some (ADDR_INET (ip, _) as x) -> match port with
-      | None -> return x
-      | Some p -> return (ADDR_INET (ip, p))
+  (* this is a mess, only to resolve a hostname
+      - if an IP is provided, don't leak that to getaddrinfo
+      - Unix.getaddrinfo and Unix.inet_addr_of_string may throw -> need to catch exceptions
+      - Unix.getaddrinfo "xmpp-client" may not work (e.g. on some MacOSX versions), but Unix.getaddrinfo "" does
+      - TODO: if not available, use DNS SRV record of jid_idn
+      - TODO: use some result type here *)
+  let getaddrinfo host service =
+    let open Unix in
+    try Some (List.hd (getaddrinfo host service
+                         [AI_SOCKTYPE SOCK_STREAM ; AI_FAMILY PF_INET])).ai_addr
+    with _ -> None
   in
-  let to_ipv4 str =
-    try (let ip = inet_addr_of_string str in
-         match port with
-         | Some x -> return (ADDR_INET (ip, x))
-         | None -> return (ADDR_INET (ip, 5222)))
-    with _ -> resolve str
+  let rec resolve ?(service = "xmpp-client") host =
+    match getaddrinfo host service with
+    | None when service = "" -> fail (Invalid_argument ("could not resolve hostname " ^ host))
+    | None -> resolve ~service:"" host
+    | Some (Unix.ADDR_INET (ip, _)) when service = "" -> Lwt.return (ip, 5222)
+    | Some (Unix.ADDR_INET (ip, port)) -> Lwt.return (ip, port)
+    | Some (Unix.ADDR_UNIX _) -> fail (Invalid_argument "received unix address")
   in
-  match hostname with
-  | Some x -> to_ipv4 x
-  | None -> resolve jid_idn
+  (match hostname with
+   | Some x ->
+     (try Lwt.return (Unix.inet_addr_of_string x, 5222)
+      with _ -> resolve x)
+   | None -> resolve jid_idn) >>= fun res ->
+  match port, res with
+  | Some x, (ip, _) -> Lwt.return (Unix.ADDR_INET (ip, x))
+  | None, (ip, port) -> Lwt.return (Unix.ADDR_INET (ip, port))
 
 let connect socket_data myjid certname password presence authenticator user_data mvar =
   let module Socket_module =
