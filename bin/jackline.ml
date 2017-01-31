@@ -121,7 +121,7 @@ let start_client cfgdir debug unicode fd_gui fd_nfy () =
   let greetings = [
     "welcome to jackline r" ^ Utils.version ;
     "type /help for command list" ;
-    "* configurable colours! '((Presence \"cyan\") (Success \"lightgreen\"))' in your ~/.config/ocaml-xmpp-client/colours.sexp (see https://github.com/hannesm/jackline#colours for details)" ;
+    "* configurable colours!  Put '((Presence \"cyan\") (Success \"lightgreen\"))' in your " ^ cfgdir ^ "/colours.sexp (see https://github.com/hannesm/jackline#colours for details)" ;
     "* improved MUC support: join&leave messages; autojoin on (re)connect; /rooms discovery" ]
   and sender = `Local (`Full myjid,"")
   in
