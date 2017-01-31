@@ -233,3 +233,4 @@ Available colours ([notty documentation](https://pqwy.github.io/notty/Notty.A.ht
 - I want to have notifications on MacOSX. - Andrej wrote [a script](https://github.com/schoeke/notline) using terminal notifier; otherwise [this guide](https://gist.github.com/prebenlm/5562656) might help.
 - Support? -- join us at jackline@conference.jabber.ccc.de
 - The interface is inspired by [mcabber](http://mcabber.com)
+- The installation failed on OpenBSD - try with a larger stack size: `ulimit -s 8192` should be good
