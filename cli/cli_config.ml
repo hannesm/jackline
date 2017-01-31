@@ -1,6 +1,7 @@
 open Cli_support
 open Lwt.Infix
 open Notty
+open Astring
 
 let safe_int_of_string x =
   try int_of_string x with Failure _ -> -1
@@ -66,7 +67,7 @@ let read_line ?(above = []) ?(prefix = "") ?default ?(below = []) term =
 let read_password ?(above = []) ?(prefix = "") ?(below = []) term =
   let rec go pre =
     let w = I.(width (uchars A.empty (Array.of_list pre))) in
-    let input = Char.star A.(st reverse) w in
+    let input = Chars.star A.(st reverse) w in
     let prefix = I.string A.empty prefix in
     rewrap term above below (prefix, input, I.empty) (Notty_lwt.Term.size term) >>= fun () ->
     Lwt_stream.next (Notty_lwt.Term.events term) >>= function
@@ -250,7 +251,7 @@ let configure term () =
   read_yes_no ~above ~prefix true term >>= fun v3 ->
   let above' versions =
     let text = "OTR versions: " in
-    let v = String.concat ", " (List.map Otr.State.version_to_string versions) in
+    let v = String.concat ~sep:", " (List.map Otr.State.version_to_string versions) in
     above @ [I.string A.empty (text ^ v)]
   in
   let versions = if v3 then [ `V3 ] else [] in
@@ -264,18 +265,20 @@ let configure term () =
 
   let above = above' versions in
 
+  let not_slack = not (Astring.String.is_infix ~affix:"slack.com" dom) in
+
   let above' pols =
     let txt = "OTR policies: " in
-    let p = String.concat ", " (List.map Otr.State.policy_to_string pols) in
+    let p = String.concat ~sep:", " (List.map Otr.State.policy_to_string pols) in
     above @ [I.string A.empty (txt ^ p)]
   in
 
   let prefix = "Require encryption? " in
-  read_yes_no ~above ~prefix true term >>= fun require ->
+  read_yes_no ~above ~prefix not_slack term >>= fun require ->
 
   let pols = if require then [ `REQUIRE_ENCRYPTION ] else [] in
   let prefix = "Send whitespace tag? " in
-  read_yes_no ~above:(above' pols) ~prefix true term >>= fun ws_tag ->
+  read_yes_no ~above:(above' pols) ~prefix not_slack term >>= fun ws_tag ->
 
   let pols =
     pols @ if ws_tag then [ `SEND_WHITESPACE_TAG ] else []
@@ -287,7 +290,7 @@ let configure term () =
     pols @ if ws_start then [ `WHITESPACE_START_AKE ] else []
   in
   let prefix = "Error starts key exchange? " in
-  read_yes_no ~above:(above' pols) ~prefix true term >>= fun err_start ->
+  read_yes_no ~above:(above' pols) ~prefix not_slack term >>= fun err_start ->
 
   let pols =
     pols @ if err_start then [ `ERROR_START_AKE ] else []

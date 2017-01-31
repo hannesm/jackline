@@ -1,7 +1,7 @@
 open Notty
 
 (* Some utilities on top of Notty which I need (might be useful elsewhere?) *)
-module Char = struct
+module Chars = struct
   let hdash a w =
     if !Utils.unicode then
       I.uchar a 0x2500 w 1
