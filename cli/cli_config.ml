@@ -10,28 +10,18 @@ let string_of_int_option default = function
   | None -> default
   | Some x -> string_of_int x
 
-let wrap w image =
-  let w1 = I.width image in
-  let rec go i =
-    if (w1 - i) <= w then
-      [ I.hcrop i 0 image ]
-    else
-      I.hcrop i (w1 - i - w) image :: go (i + w)
-  in
-  let vs = go 0 in
-  I.vcat vs
-
 let rewrap term above below (prefix, inp, inp2) (width, _) =
-  let content = wrap width I.(prefix <|> inp <|> inp2) in
-  let above = I.vcat (List.map (wrap width) above) in
-  let below = I.vcat (List.map (wrap width) below) in
-  let image = I.(above <-> content <-> below) in
+  let wrap = render_wrapped_list true width in
+  let content = wrap [A.empty, prefix] in
+  let input = I.(inp <|> inp2) in
+  let above = wrap above in
+  let below = wrap below in
+  let input = if I.width input = 0 then I.string A.empty " " else input in
+  let image = I.(above <-> content <-> input <-> below) in
   Notty_lwt.Term.image term image >>= fun () ->
   let col, row =
-    let col = I.width prefix + I.width inp in
-    let h =
-      let content = wrap width I.(prefix <|> inp) in
-      I.(height (above <-> content)) in
+    let col = I.width inp in
+    let h = I.(height (above <-> content <-> inp)) in
     let height = if col mod width = 0 then succ h else h in
     (succ (col mod width), height)
   in
@@ -39,15 +29,14 @@ let rewrap term above below (prefix, inp, inp2) (width, _) =
 
 let read_line ?(above = []) ?(prefix = "") ?default ?(below = []) term =
   let rec go (pre, post) =
-    let iprefix = I.string A.empty prefix
-    and iinp =
+    let iinp =
       let inp = Array.of_list pre in
       I.uchars A.(st reverse) inp
     and iinp2 =
       let inp2 = Array.of_list post in
       I.uchars A.(st reverse) inp2
     in
-    rewrap term above below (iprefix, iinp, iinp2) (Notty_lwt.Term.size term) >>= fun () ->
+    rewrap term above below (prefix, iinp, iinp2) (Notty_lwt.Term.size term) >>= fun () ->
     Lwt_stream.next (Notty_lwt.Term.events term) >>= fun e ->
     match readline_input e with
     | `Ok f -> go (f (pre, post))
@@ -68,7 +57,6 @@ let read_password ?(above = []) ?(prefix = "") ?(below = []) term =
   let rec go pre =
     let w = I.(width (uchars A.empty (Array.of_list pre))) in
     let input = Chars.star A.(st reverse) w in
-    let prefix = I.string A.empty prefix in
     rewrap term above below (prefix, input, I.empty) (Notty_lwt.Term.size term) >>= fun () ->
     Lwt_stream.next (Notty_lwt.Term.events term) >>= function
       | `Key (`Enter, []) -> Lwt.return (char_list_to_str pre)
@@ -99,7 +87,7 @@ let ask above ?(below = []) prefix ?default transform valid term =
         if diderror then
           below
         else
-          let im = I.string A.(fg red) "invalid data, try again" in
+          let im = (A.(fg red), "invalid data, try again") in
           im :: below
       in
       doit true above below prefix ?default transform valid term
@@ -111,25 +99,22 @@ let configure term () =
     let greet =
       "Welcome to Jackline configuration. You will be guided through the setup."
     in
-    [I.string A.empty greet]
+    [A.empty, greet]
   in
 
   (* JID *)
   let prefix = "Jabber ID: " in
-  let below = [I.string A.empty "format must be 'user@server/resource'"] in
+  let below = [A.empty, "format must be 'user@server/resource'"] in
   ask above ~below prefix
     Xjid.string_to_jid
     (function Some (`Full f) -> `Ok f | _ -> `Invalid)
     term >>= fun jid ->
 
   let ((_, dom), _) = jid in
-  let above =
-    let txt = "Jabber ID: " ^ Xjid.full_jid_to_string jid in
-    above @ [I.string A.empty txt]
-  in
+  let above = above @ [A.empty, "Jabber ID: " ^ Xjid.full_jid_to_string jid] in
 
   (* Priority *)
-  let below = [I.string A.empty "between 0 and 128"] in
+  let below = [A.empty, "between 0 and 128"] in
   ask above ~below "Priority: " ~default:"0"
     safe_int_of_string
     (function
@@ -140,7 +125,7 @@ let configure term () =
 
   let above =
     let txt = "Priority: " ^ string_of_int_option "0 (default)" priority in
-    above @ [I.string A.empty txt]
+    above @ [A.empty, txt]
   in
 
   (* Server name *)
@@ -154,7 +139,7 @@ let configure term () =
 
   let above =
     let servername = "Servername: " ^ Utils.option dom (fun x -> x) hostname in
-    above @ [I.string A.empty servername]
+    above @ [A.empty, servername]
   in
 
   (* Port *)
@@ -167,8 +152,7 @@ let configure term () =
     term >>= fun port ->
 
   let above =
-    let port = "Port: " ^ string_of_int_option "5222 (default)" port in
-    above @ [I.string A.empty port]
+    above @ [A.empty, "Port: " ^ string_of_int_option "5222 (default)" port]
   in
 
   (* Password *)
@@ -180,10 +164,10 @@ let configure term () =
   let above =
     let pw = "Password: " in
     let chars = match password with
-      | None -> I.string A.empty "will be asked at startup"
-      | Some _ -> I.uchar A.empty 0x2605 5 1
+      | None -> "will be asked at startup"
+      | Some _ -> "*****"
     in
-    above @ [I.(string A.empty pw <|> chars)]
+    above @ [A.empty, pw ; A.empty, chars]
   in
 
   (* Fingerprint authenticator *)
@@ -195,12 +179,12 @@ let configure term () =
         Utils.option dom (fun x -> x) hostname ^ ":" ^
         string_of_int (Utils.option 5222 (fun x -> x) port)
       in
-      ("If you have `tlsclient` installed, run: "
+      "If you have `tlsclient` installed, run: "
       ^ "`tlsclient -z --starttls=xmpp " ^ hostport ^ "`",
       "Alternatively: `openssl s_client -connect " ^ hostport
-      ^ " -starttls xmpp | openssl x509 -sha256 -fingerprint -noout`")
+      ^ " -starttls xmpp | openssl x509 -sha256 -fingerprint -noout`"
     in
-    [I.(string A.empty str1 <-> string A.empty str2)]
+    [A.empty, str1; A.empty, str2]
   and transform fp =
     let dotted_hex_to_cs hex =
       try
@@ -231,7 +215,7 @@ let configure term () =
       | `Fingerprint fp -> "Certificate fingerprint: " ^ fp
       | `Trust_anchor file -> "Trust anchor: " ^ file
     in
-    above @ [I.string A.empty txt]
+    above @ [A.empty, txt]
   in
 
   (* SubjectAlternativeName *)
@@ -243,7 +227,7 @@ let configure term () =
   let above =
     let name = Utils.option (dom ^ " (default)") (fun x -> x) certificate_hostname in
     let txt = "Certificate server name: " ^ name in
-    above @ [I.string A.empty txt]
+    above @ [A.empty, txt]
   in
 
   (* otr config *)
@@ -252,7 +236,7 @@ let configure term () =
   let above' versions =
     let text = "OTR versions: " in
     let v = String.concat ~sep:", " (List.map Otr.State.version_to_string versions) in
-    above @ [I.string A.empty (text ^ v)]
+    above @ [A.empty, text ^ v]
   in
   let versions = if v3 then [ `V3 ] else [] in
   let prefix = "OTR protocol version 2 support? " in
@@ -270,7 +254,7 @@ let configure term () =
   let above' pols =
     let txt = "OTR policies: " in
     let p = String.concat ~sep:", " (List.map Otr.State.policy_to_string pols) in
-    above @ [I.string A.empty (txt ^ p)]
+    above @ [A.empty, txt ^ p]
   in
 
   let prefix = "Require encryption? " in
@@ -307,7 +291,7 @@ let configure term () =
 
   let above =
     let fp = User.pp_binary_fingerprint (Otr.Utils.own_fingerprint dsa) in
-    above' pols @ [I.string A.empty ("Your OTR fingerprint is " ^ fp)]
+    above' pols @ [A.empty, "Your OTR fingerprint is " ^ fp]
   in
 
   (read_line ~above ~prefix:"Path to notification callback: " term >|= function
