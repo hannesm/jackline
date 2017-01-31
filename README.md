@@ -1,25 +1,17 @@
 [![Build Status](https://travis-ci.org/hannesm/jackline.svg?branch=master)](https://travis-ci.org/hannesm/jackline)
 
-### [Jackline](https://en.wikipedia.org/wiki/Jackline)
+### [Jackline](https://en.wikipedia.org/wiki/Jackline) - a minimalistic secure XMPP client
 
 ![Screenshot](http://berlin.ccc.de/~hannes/jackline2.png)
 
-The goal is a minimalistic graphical user interface for a secure (fail
-hard!) and trustworthy XMPP client.
-
-This goal is achieved with clean-slate libraries (OCaml-TLS,
-OCaml-OTR) and few features: no support for HTML markup, avatars,
-which music you're playing, timezone you're living in, ...
-
-You can [read about this project (January
-2017)](https://hannes.nqsb.io/Posts/Jackline).
-
 This is unreleased software... feedback welcome!
 
-Failing hard means that the configuration has to include the trust anchor for
-the server certificate (or the SHA256 fingerprint of the certificate) -
-otherwise there is no way how jackline could ensure to talk to the correct XMPP
-server.  There won't be any 'ignore ssl warnings' option.
+You can [read more about jackline (January
+2017)](https://hannes.nqsb.io/Posts/Jackline).
+
+Jackline uses several clean-slate libraries (OCaml-TLS,
+OCaml-OTR) and only has a minimal few features: no support for HTML markup, avatars,
+which music you're playing, timezone you're living in, ...
 
 Supported features:
 - single XMPP account
@@ -39,12 +31,20 @@ NB: jackline and
 [torsocks](https://trac.torproject.org/projects/tor/wiki/doc/torsocks) are
 friends: `torify jackline` works.
 
-Trusted code base is at the moment:
+### Security and trusted code base
+
+The configuration file has to include the trust anchor for the server
+certificate (or the SHA256 fingerprint of the certificate) - otherwise there is
+no way how to ensure talking to the correct XMPP server.  There
+won't be any 'ignore ssl warnings' option.
+
+The trusted code base contains at the moment:
 - [OCaml-OTR](https://github.com/hannesm/ocaml-otr)
 - [OCaml-TLS](https://github.com/mirleft/ocaml-tls)
 - [XMPP](https://github.com/hannesm/xmpp)
 - [XML](https://github.com/ermine/xml)
 - [OCaml compiler](http://ocaml.org/) (and its runtime)
+- underlying UNIX system
 
 Transitive dependencies are only partially listed.  For a complete
 list, use ``opam list --required-by=jackline --recursive``.
@@ -64,13 +64,12 @@ but I've some [work-in-progress](https://github.com/hannesm/conex).
 
 ### Installing jackline
 
-First be aware that this is unreleased software.  Bug reports are welcome
-(pull requests as well).  There might be a release later (but the XML/XMPP
-library needs some refactoring first).
+Be aware that this is unreleased software.  Bug reports are welcome
+(pull requests as well).
 
 Get OCaml (>= 4.02.3), get opam (1.2),
 [aspcud](http://www.cs.uni-potsdam.de/wv/aspcud/) and
-[gmp](http://gmplib.org/) are also required.
+[gmp](http://gmplib.org/) are required as well.
 If you have an older OCaml compiler, run `opam switch 4.04.0`.
 
 Run the following commands:
@@ -96,7 +95,7 @@ Read the `jackline --help` output:
 
 ### Configuration
 
-When you start `jackline` for the first time (or with an empty configuration
+When you start jackline for the first time (or with an empty configuration
 directory), it starts an interactive configuration dialog asking about account
 details.  There is no need to provide optional information.  Hostname and which
 common name should appear in the certificate is derived from the jabber id.
