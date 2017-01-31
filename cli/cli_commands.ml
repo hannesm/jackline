@@ -501,15 +501,20 @@ let handle_connect p c_mvar =
                `Offline,
                Muc.new_member nick ~jid:real_jid affiliation role presence status :: r.Muc.members
              | Some m ->
-               (* XXX MUC need to be a bit smarter here *)
                m.Muc.presence,
                { Muc.nickname = nick ; jid = real_jid ; affiliation ; role ; presence ; status } ::
                List.filter (fun m -> m.Muc.nickname <> nick) r.Muc.members
            in
-           let msg = presence_msg old presence status in
-           let msg = User.message ~kind:`Presence (`From jid) false true msg in
-           let r = Muc.new_message r msg in
-           Contact.replace_room state.contacts { r with Muc.members }) ;
+           let r = { r with Muc.members } in
+           let r =
+             if old = presence then
+               r
+             else
+               let msg = presence_msg old presence status in
+               let msg = User.message ~kind:`Presence (`From jid) false true msg in
+               Muc.new_message r msg
+           in
+           Contact.replace_room state.contacts r );
         Lwt_mvar.put state.contact_mvar (`Room r) >>= fun () ->
         Lwt.return (`Ok state)
     in
