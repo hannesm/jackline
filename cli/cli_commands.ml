@@ -261,12 +261,12 @@ let handle_connect p c_mvar =
   in
 
   let log ?(kind = `Warning) dir msg =
-    let exec state = add_status ~kind state dir msg ; Lwt.return (`Ok state) in
+    let exec state = add_status ~kind state dir (Utils.validate_utf8 msg) ; Lwt.return (`Ok state) in
     p exec
   and locallog ?(kind = `Warning) str msg =
     let exec state =
       let dir = `Local (state.active_contact, str) in
-      add_status ~kind state dir msg ;
+      add_status ~kind state dir (Utils.validate_utf8 msg) ;
       Lwt.return (`Ok state)
     in
     p exec
