@@ -331,7 +331,7 @@ let handle_connect p c_mvar =
     let exec state =
       let body = Utils.option None (fun x -> Some (Utils.validate_utf8 x)) body in
       let state, room = find_room state (Xjid.t_to_bare jid) false in
-      let room = Utils.option room (fun x -> { room with Muc.topic = Some x }) topic in
+      let room = Utils.option room (fun x -> { room with Muc.topic = Some (Utils.validate_utf8 x) }) topic in
       let state, room = match body with
         | None -> (state, room)
         | Some msg ->

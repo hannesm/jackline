@@ -1,3 +1,4 @@
+open Astring
 
 type features = [
   | `Hidden | `Public
@@ -144,11 +145,15 @@ let new_room ~jid ?(topic=None) ~my_nick ?(members=[]) ?(features=[]) ?(autojoin
 let short_member_info m =
   Printf.sprintf " %s %s (role: %s) (affiliation: %s)" (User.presence_to_char m.presence) m.nickname (role_to_string m.role) (affiliation_to_string m.affiliation)
 
+let topic_to_s r =
+  Utils.option
+    "no topic"
+    (fun x -> String.concat ~sep:" " (String.cuts ~sep:"\n" x))
+    r.topic
+
 let info r =
-  let topic = match r.topic with
-    | None -> "no topic"
-    | Some x -> "topic: " ^ x
-  and features = "features: " ^ String.concat "," (List.map feature_to_string r.features)
+  let topic = topic_to_s r
+  and features = "features: " ^ String.concat ~sep:"," (List.map feature_to_string r.features)
   and members = List.filter (fun m -> m.role <> `None ) r.members
                 |> List.map short_member_info
   in
@@ -243,11 +248,11 @@ let oneline room =
   and size = List.length (List.filter (fun m -> m.presence <> `Offline) room.members)
   in
   Printf.sprintf
-    "%s(%d) %s%s"
+    "%s(%d) %s - %s"
     (User.presence_to_char presence)
     size
     (Xjid.bare_jid_to_string room.room_jid)
-    (Utils.option "" (fun t -> " - " ^ t) room.topic)
+    (topic_to_s room)
 
 let oneline_with_member _ m =
   let presence = m.presence
