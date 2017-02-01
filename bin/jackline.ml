@@ -119,7 +119,7 @@ let start_client cfgdir debug unicode fd_gui fd_nfy () =
   let state = Cli_state.empty_state cfgdir config users connect_mvar state_mvar in
 
   let greetings = [
-    "welcome to jackline r" ^ Utils.version ;
+    "welcome to jackline " ^ Utils.version ;
     "type /help for command list" ;
     "* configurable colours!  Put '((Presence \"cyan\") (Success \"lightgreen\"))' in your " ^ cfgdir ^ "/colours.sexp (see https://github.com/hannesm/jackline#colours for details)" ;
     "* improved MUC support: join&leave messages; autojoin on (re)connect; /rooms discovery" ]
