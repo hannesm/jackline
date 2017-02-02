@@ -340,6 +340,9 @@ let handle_connect p c_mvar =
             (match Contact.received (`Room room) id with
              | `Room r -> (state, r)
              | _ -> assert false)
+          | None, Some x when x = room.Muc.my_nick ->
+            (* no need to repeat ourselves *)
+            (state, room)
           | _ ->
             let state = notify state (`Bare room.Muc.room_jid) in
             let msg = User.message ?timestamp ~kind:`GroupChat (`From jid) false true msg in
