@@ -196,16 +196,15 @@ encrypted session, red if not and the contact is online, black if the contact is
 offline or a groupchat.  Inverse highlights the active contact, and if the buddy
 name in the status bar is inverted, logging is turned on.
 
-Other errors are red, warnings are green.
-
-The default colours are:
-- Chat empty
-- GroupChat empty
-- Presence gray 18
-- Info gray 18
-- Warning yellow
-- Error red
-- Success green
+Default colours are:
+- Chat "empty"
+- GroupChat "empty"
+- Transit "gray 18"
+- Presence "gray 12"
+- Info "gray 18"
+- Warning "yellow"
+- Error "red"
+- Success "green"
 
 
 To draw all presence messages in cyan instead of gray, create a

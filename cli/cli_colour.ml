@@ -1,10 +1,13 @@
 open Notty
 open Astring
 
+
+
 module OrderedKind = struct
   type t = User.chatkind
 
   let compare (a : [< t]) (b : [< t]) = match a, b with
+    | `Transit, `Transit -> 0
     | `Chat, `Chat -> 0
     | `GroupChat, `GroupChat -> 0
     | `Presence, `Presence -> 0
@@ -12,6 +15,8 @@ module OrderedKind = struct
     | `Warning, `Warning -> 0
     | `Error, `Error -> 0
     | `Success, `Success -> 0
+    | `Transit, _ -> 1
+    | _, `Transit -> -1
     | `Chat, _ -> 1
     | _, `Chat -> -1
     | `GroupChat, _ -> 1
@@ -32,11 +37,12 @@ let c = ref M.empty
 
 let init () =
   let m =
-    M.add `Presence A.(gray 18)
-      (M.add `Info A.(gray 18)
-         (M.add `Warning A.yellow
-            (M.add `Error A.red
-               (M.add `Success A.green M.empty))))
+    M.add `Transit A.(gray 18)
+      (M.add `Presence A.(gray 12)
+         (M.add `Info A.(gray 18)
+            (M.add `Warning A.yellow
+               (M.add `Error A.red
+                  (M.add `Success A.green M.empty)))))
   in
   c := m
 

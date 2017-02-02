@@ -40,14 +40,14 @@ let format_message tz_offset_s now self buddy resource { User.direction ; encryp
           (tag, nick ^ ": ")
         | `From (`Bare _) -> (`Highlight, " ")
         | `Local (_, x) -> (`Default, "*" ^ x ^ " ")
-        | `To _ -> (`Default, if received then "-> " else "?> ") )
+        | `To _ when received -> (`Default, "-> ")
+        | `To _ -> (`Transit, "?> "))
     | `User _ ->
       let en = if encrypted then "O" else "-" in
       let style, pre = match direction with
         | `From _ -> (`Highlight, "<" ^ en ^ "- ")
-        | `To _   ->
-          let f = if received then "-" else "?" in
-          (`Default, f ^ en ^ "> ")
+        | `To _ when received -> (`Default, "-" ^ en ^ "> ")
+        | `To _ -> (`Transit, "?" ^ en ^ "> ")
         | `Local (_, x) when x = "" -> (`Default, "* ")
         | `Local (_, x) -> (`Default, "*" ^ x ^ "* ")
       in
@@ -68,7 +68,8 @@ let format_message tz_offset_s now self buddy resource { User.direction ; encryp
       (style, r ^ pre)
   and to_style st =
     match st, kind with
-    | `Default, x -> Cli_colour.kind x
+    | `Transit, `Chat | `Transit, `GroupChat -> Cli_colour.kind `Transit
+    | `Transit, x | `Default, x -> Cli_colour.kind x
     | `Highlight, `Chat | `Highlight, `GroupChat -> A.(st bold)
     | `Highlight, x -> Cli_colour.kind x
     | `Underline, `Chat | `Underline, `GroupChat -> A.(st underline)

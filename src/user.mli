@@ -88,6 +88,7 @@ type direction = [
 val jid_of_direction : direction -> Xjid.t
 
 type chatkind = [
+  | `Transit
   | `Chat
   | `GroupChat
   | `Presence

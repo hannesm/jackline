@@ -207,6 +207,7 @@ let jid_of_direction = function
   | `Local (j, _) -> j
 
 type chatkind = [
+  | `Transit
   | `Chat
   | `GroupChat
   | `Presence
