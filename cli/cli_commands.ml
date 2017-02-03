@@ -332,9 +332,17 @@ let handle_connect p c_mvar =
       let body = Utils.option None (fun x -> Some (Utils.validate_utf8 x)) body in
       let state, room = find_room state (Xjid.t_to_bare jid) false in
       let room = Utils.option room (fun x -> { room with Muc.topic = Some (Utils.validate_utf8 x) }) topic in
-      let state, room = match body with
-        | None -> (state, room)
-        | Some msg ->
+      let state, room = match timestamp, body with
+        | _, None -> (state, room)
+        | Some timestamp, Some msg ->
+          (* this is some chat history *)
+          let dir = match Xjid.resource jid with
+            | Some x when x = room.Muc.my_nick -> `To (`Bare room.Muc.room_jid, "")
+            | _ -> `From jid
+          in
+          let msg = User.message ~timestamp ~kind:`GroupChat dir false true msg in
+          (state, Muc.new_message room msg)
+        | None, Some msg ->
           match id, Xjid.resource jid with
           | Some id, Some x when x = room.Muc.my_nick ->
             (match Contact.received (`Room room) id with
