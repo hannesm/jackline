@@ -25,7 +25,8 @@ Supported features:
 I (so far successfully) try to preserve three core properties:
 - any data written on disk (using lots of silly parens) by jackline will stay being readable by every future jackline version
 - once the initial configuration file (and private key and maybe password) is created, it will never be written to by jackline
-- jackline will never transmit any data or open a network connection unless initiated by you (jackline contains a keep-alive and reconnect mechanism to re-establish a connection, but there won't be any "automatically connect on startup" feature)
+- jackline will never transmit any data or open a network connection unless initiated by you (this means no "autoconnect on startup", or "user is typing" indication sent).  There is an automated reconnect to the same server if the connection terminated.
+
 
 NB: jackline and
 [torsocks](https://trac.torproject.org/projects/tor/wiki/doc/torsocks) are
