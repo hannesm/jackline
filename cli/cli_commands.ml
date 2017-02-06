@@ -972,7 +972,7 @@ let handle_join nick r =
       in
       match Contact.find_room state.contacts jid with
       | None ->
-        let room = Muc.new_room ~jid ~my_nick () in
+        let room = Muc.new_room ?password ~jid ~my_nick () in
         join room
       | Some r -> match Muc.member r (`Full (("",""), r.Muc.my_nick)) with
         | None -> join { r with Muc.autojoin = true }
