@@ -96,7 +96,7 @@ let _ =
 
   (* multi user chat *)
   new_command
-    "join" "/join [?muc/nick]" "join (foo@bar.org/bla) chatroom foo on bar.org (or active contact) using nick bla (defaults to username)"
+    "join" "/join [?muc/nick] [password]" "join chatroom using nick (defaults to username) and password"
     (fun s ->
        " " :: List.map Xjid.bare_jid_to_string
          (Contact.fold (fun _ c acc ->
@@ -963,10 +963,10 @@ let adjust_otr_policy default_cfg cfg contact data err =
     _ -> err "/otrpolicy: unable to parse argument"
 
 let handle_join nick r =
-  let join jid my_nick =
+  let join ?password jid my_nick =
     let clos state s =
       let join r =
-        Xmpp_callbacks.Xep_muc.enter_room s ~nick:my_nick (Xjid.jid_to_xmpp_jid (`Bare jid)) >|= fun () ->
+        Xmpp_callbacks.Xep_muc.enter_room s ~nick:my_nick ?password (Xjid.jid_to_xmpp_jid (`Bare jid)) >|= fun () ->
         Contact.replace_room state.contacts r ;
         `Ok state
       in
@@ -983,9 +983,13 @@ let handle_join nick r =
     in
     (["joining room " ^ r], None, Some clos)
   in
-  match Xjid.string_to_jid r with
-  | Some (`Bare jid) -> join jid nick
-  | Some (`Full (bare, res)) -> join bare res
+  let jid, password = match Astring.String.cut ~sep:" " r with
+    | None -> r, None
+    | Some (a, b) -> a, Some b
+  in
+  match Xjid.string_to_jid jid with
+  | Some (`Bare jid) -> join ?password jid nick
+  | Some (`Full (bare, res)) -> join ?password bare res
   | None -> ([r ^ " is not a good jid"], None, None)
 
 let handle_leave buddy reason =
