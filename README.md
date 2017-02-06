@@ -218,7 +218,7 @@ Available colours ([notty documentation](https://pqwy.github.io/notty/Notty.A.ht
 - empty,
 - black, red, green, yellow, blue, magenta, cyan, white,
 - lightblack, lightred, lightgreen, lightyellow, lightblue, lightmagenta, lightcyan, lightwhite,
-- gray *n* (where `n >= 0 && n <= 5`,
+- gray *n* (where `n >= 0 && n <= 23`,
 - rgb *r* *g* *b* (where `r >= 0 && r <= 5 && g >= 0 && g <= 5 && b >= 0 && b <= 5`)
 
 ### FAQ
