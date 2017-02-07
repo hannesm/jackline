@@ -85,6 +85,14 @@ executed ``eval `opam config env` ``).
 To update, simply run `opam update` followed by `opam upgrade`.  This
 will get you the latest version (git master).
 
+### Compiling using a git checkout
+
+If you clone this repository, and install the required dependencies (see above),
+you can compile jackline by running `ocaml pkg/pkg.ml build`.  This will produce
+`_build/bin/jackline.native`.
+
+### Configuration
+
 Read the `jackline --help` output:
 ```
   -f configuration directory (defaults to ~/.config/ocaml-xmpp-client/)
@@ -93,8 +101,6 @@ Read the `jackline --help` output:
   --fd-gui File descriptor to receive GUI focus updates on.
   --fd-nfy File descriptor to send notification updates on.
 ```
-
-### Configuration
 
 When you start jackline for the first time (or with an empty configuration
 directory), it starts an interactive configuration dialog asking about account
