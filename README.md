@@ -88,8 +88,11 @@ will get you the latest version (git master).
 ### Compiling using a git checkout
 
 If you clone this repository, and install the required dependencies (see above),
-you can compile jackline by running `ocaml pkg/pkg.ml build`.  This will produce
-`_build/bin/jackline.native`.
+you can compile jackline by running
+```
+  ocaml pkg/pkg.ml build
+```
+This will produce `_build/bin/jackline.native`.
 
 ### Configuration
 
