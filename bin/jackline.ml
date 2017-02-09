@@ -41,14 +41,9 @@ let start_client cfgdir debug unicode fd_gui fd_nfy () =
   let tc = Unix.(tcgetattr stdin) in
   Unix.(tcsetattr stdin TCSANOW { tc with c_isig = false ; c_ixon = false ; c_ixoff = false }) ;
 
-  let load_or_gen_dsa = Persistency.load_dsa cfgdir >>= function
-    | None ->
-      let dsa = Nocrypto.Dsa.generate `Fips1024 in
-      Persistency.dump_dsa cfgdir dsa >|= fun _ -> dsa
-    | Some dsa -> Lwt.return dsa
-  in
+  Persistency.load_dsa cfgdir >>= fun dsa ->
 
-  Persistency.load_config load_or_gen_dsa cfgdir >>= (function
+  Persistency.load_config dsa cfgdir >>= (function
       | None ->
         Cli_config.configure term () >>= fun config ->
         Persistency.dump_config cfgdir config >>= fun () ->
