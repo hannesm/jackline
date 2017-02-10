@@ -42,6 +42,8 @@ let _ =
     "disconnect" "/disconnect" "disconnects from the server" (fun _ -> []) ;
   new_command
     "quit" "/quit" "exits this client" (fun _ -> []) ;
+  new_command
+    "filter" "/filter [val]" "display only messages which contain val (empty string resets filter)" (fun _ -> []) ;
 
   new_command
     "logheight" "/logheight [number]" "adjusts height of log to n" (fun _ -> []) ;
@@ -1093,6 +1095,8 @@ let exec input state contact isself p =
     (* disconnect *)
     | ("disconnect", _), Some _ -> handle_disconnect err
     | ("disconnect", _), None   -> err "/disconnect: not connected"
+
+    | ("filter", filter), _ -> ok { state with filter }
 
     (* need connection *)
     | (x, _), None when List.mem x online -> err ("/" ^ x ^ ": not connected")

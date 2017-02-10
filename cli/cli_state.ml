@@ -52,6 +52,7 @@ type state = {
   scrollback : int ;
   log_height : int ;
   buddy_width : int ;
+  filter : string option ;
 
   (* current input buffer *)
   input : input ;
@@ -341,6 +342,7 @@ let empty_state config_directory config contacts connect_mvar state_mvar =
 
     log_height          = 6         ;
     buddy_width         = 24        ;
+    filter              = None      ;
     input               = ([], [])
 }
 
@@ -471,6 +473,7 @@ let activate_contact state active =
         last_active_contact = ojid ;
         active_contact      = njid ;
         scrollback          = 0 ;
+        filter              = None ;
         window_mode         = BuddyList ;
         input               = Contact.input_buffer now }
     in

@@ -158,9 +158,10 @@ let render_buddy_list (w, h) state =
   let formatted = I.vcat to_render in
   I.vsnap ~align:`Top h formatted
 
-let horizontal_line buddy resource a scrollback width =
+let horizontal_line buddy resource a scrollback filter width =
   let pre = I.(Chars.hdash a 2 <|> I.char a ' ' 1 1)
   and scroll = if scrollback = 0 then I.empty else I.string a ("*scrolling " ^ string_of_int scrollback ^ "* ")
+  and filter = match filter with None -> I.empty | Some x -> I.string a ("*filter: " ^ x ^ "* ")
   and jid =
     let p = match buddy with
       | `User _ -> "buddy: "
@@ -201,7 +202,7 @@ let horizontal_line buddy resource a scrollback width =
         | `Member m -> tr m.Muc.presence m.Muc.status)
       resource
   in
-  v_space (Chars.hdash a 1) width (I.hcat [ pre ; scroll ; jid ]) I.(otr <|> presence_status)
+  v_space (Chars.hdash a 1) width (I.hcat [ pre ; scroll ; filter ; jid ]) I.(otr <|> presence_status)
 
 let status_line self mysession notify log a width =
   let a = A.(a ++ st bold) in
@@ -290,7 +291,7 @@ let render_state (width, height) state =
       let msgfmt = format_message tz_offset_s now (self state) active resource
       and msgfilter = msgfilter active state.active_contact
       and msgs strip msgfilter msgfmt =
-        let filter, fmt = match active with
+        let mfilter, fmt = match active with
           | `User x when x.User.self -> ((fun _ -> true), logfmt)
           | _ -> (msgfilter, msgfmt)
         in
@@ -298,7 +299,13 @@ let render_state (width, height) state =
           (* this is an upper limit *)
           (succ state.scrollback) * main_height
         in
-        let data = Utils.take_rev max (List.filter filter (Contact.messages active)) in
+        let filter = match state.filter with
+          | None -> (fun id -> id)
+          | Some x -> List.filter (fun { User.message ; _ } -> Astring.String.is_infix ~affix:x message)
+        in
+        let data = Utils.take_rev max
+            (List.filter mfilter (filter (Contact.messages active)))
+        in
         let image = render_wrapped_list strip chat_width (List.map fmt data) in
         let bottom = state.scrollback * main_height in
         I.vsnap ~align:`Bottom main_height (I.vcrop 0 bottom image)
@@ -323,7 +330,7 @@ let render_state (width, height) state =
         and mysession = selfsession state
         in
         status_line self mysession notify log a width
-      and hline = horizontal_line active resource a state.scrollback width
+      and hline = horizontal_line active resource a state.scrollback state.filter width
       in
       if log_height = 0 then
         I.(hline <-> status)
