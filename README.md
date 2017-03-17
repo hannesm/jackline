@@ -238,7 +238,7 @@ Available colours ([notty documentation](https://pqwy.github.io/notty/Notty.A.ht
 - I hate the default colours. -- [they're now customisable](https://github.com/hannesm/jackline/#colours)
 - Keys do not work on MacOSX -- [This](https://github.com/timothybasanov/terminal-app-function-keys#full-list-of-all-bindings) might be useful.
 - I want to receive notifications. -- A hook script can be defined during interactive configuration or `(notification_callback (/my/favorite/script.sh))` in `config.sexp`.  It is executed with three (or four) arguments: the local user's jabber id, a summary of the state of jackline, the event type that caused this execution, and perhaps other things; see `cli/cli_state.ml` search for `module Notify` for details.
-- I want a systray icon. -- there are two projects, [posiputt/jackification](https://github.com/posiputt/jackification), and [cfcs/misc](https://github.com/cfcs/misc/blob/master/jackline_systray.py)
+- I want a systray icon. -- there are several projects, [posiputt/jackification](https://github.com/posiputt/jackification), [cfcs/misc](https://github.com/cfcs/misc/blob/master/jackline_systray.py), [jackline-gtk](https://github.com/infinity0/jackline-gtk)
 - I want to have notifications on MacOSX. - Andrej wrote [a script](https://github.com/schoeke/notline) using terminal notifier; otherwise [this guide](https://gist.github.com/prebenlm/5562656) might help.
 - Support? -- join us at jackline@conference.jabber.ccc.de
 - The interface is inspired by [mcabber](http://mcabber.com)
