@@ -235,6 +235,78 @@ let readline_input = function
   | `Key (`Uchar chr, []) -> `Ok (fun (pre, post) -> pre @ [chr], post)
   | k -> `Unhandled k
 
+let forward_word pre post =
+  let inp, middle = match post with
+    | ws::xs -> (xs, [ws])
+    | [] -> ([], [])
+  in
+  let _, prep, post =
+    List.fold_left (fun (found, rp, rpp) char ->
+      if found then
+        (found, rp, char :: rpp)
+      else if Uucp.White.is_white_space char then
+        (true, rp, char :: rpp)
+      else
+        (false, char :: rp, rpp) )
+      (false, [], [])
+      inp
+  in
+  (pre @ middle @ (List.rev prep), List.rev post)
+
+let kill_word pre post =
+  let inp, _ = match post with
+    | ws::xs -> (xs, [ws])
+    | [] -> ([], [])
+  in
+  let _, prep, post =
+    List.fold_left (fun (found, rp, rpp) char ->
+      if found then
+        (found, rp, char :: rpp)
+      else if Uucp.White.is_white_space char then
+        (true, rp, char :: rpp)
+      else
+        (false, rp, rpp) )
+      (false, [], [])
+      inp
+  in
+  (pre @ (List.rev prep), List.rev post)
+
+let backward_word pre post =
+  let inp, middle = match List.rev pre with
+    | ws::xs -> (xs, [ws])
+    | [] -> ([], [])
+  in
+  let _, pre, prep =
+    List.fold_left (fun (found, rp, rpp) char ->
+      if found then
+        (found, char :: rp, rpp)
+      else if Uucp.White.is_white_space char then
+        (true, char :: rp, rpp)
+      else
+        (false, rp, char :: rpp) )
+      (false, [], [])
+      inp
+  in
+  (pre, prep @ middle @ post)
+
+let backward_kill_word pre post =
+  let inp, _ = match List.rev pre with
+    | ws::xs -> (xs, [ws])
+    | [] -> ([], [])
+  in
+  let _, pre, prep =
+    List.fold_left (fun (found, rp, rpp) char ->
+      if found then
+        (found, char :: rp, rpp)
+      else if Uucp.White.is_white_space char then
+        (true, char :: rp, rpp)
+      else
+        (false, rp, rpp) )
+      (false, [], [])
+      inp
+  in
+  (pre, prep @ post)
+
 let emacs_bindings = function
   | `Key (`Uchar 0x41, [`Ctrl]) (* C-a *) -> `Ok (fun (pre, post) -> ([], pre @ post))
   | `Key (`Uchar 0x45, [`Ctrl]) (* C-e *) -> `Ok (fun (pre, post) -> (pre @ post, []))
@@ -253,41 +325,16 @@ let emacs_bindings = function
         | [] -> ([], post)
         | hd::tl -> (List.rev tl, hd :: post))
 
-  | `Key (`Arrow `Left, [`Ctrl]) ->
-    `Ok (fun (pre, post) ->
-        let inp, middle = match List.rev pre with
-          | ws::xs -> (xs, [ws])
-          | [] -> ([], [])
-        in
-        let _, pre, prep =
-          List.fold_left (fun (found, rp, rpp) char ->
-              if found then
-                (found, char :: rp, rpp)
-              else if Uucp.White.is_white_space char then
-                (true, char :: rp, rpp)
-              else
-                (false, rp, char :: rpp) )
-            (false, [], [])
-            inp
-        in
-        (pre, prep @ middle @ post))
-  | `Key (`Arrow `Right, [`Ctrl]) ->
-    `Ok (fun (pre, post) ->
-        let inp, middle = match post with
-          | ws::xs -> (xs, [ws])
-          | [] -> ([], [])
-        in
-        let _, prep, post =
-          List.fold_left (fun (found, rp, rpp) char ->
-              if found then
-                (found, rp, char :: rpp)
-              else if Uucp.White.is_white_space char then
-                (true, rp, char :: rpp)
-              else
-                (false, char :: rp, rpp) )
-            (false, [], [])
-            inp
-        in
-        (pre @ middle @ (List.rev prep), List.rev post))
+  | `Key (`Arrow `Right, [`Ctrl]) -> `Ok (fun (pre, post) -> forward_word pre post)
+  | `Key (`Arrow `Right, [`Meta]) -> `Ok (fun (pre, post) -> forward_word pre post)
+  | `Key (`Uchar 0x66, [`Meta]) (* M-f *) -> `Ok (fun (pre, post) -> forward_word pre post)
+
+  | `Key (`Arrow `Left, [`Ctrl]) -> `Ok (fun (pre, post) -> backward_word pre post)
+  | `Key (`Arrow `Left, [`Meta]) -> `Ok (fun (pre, post) -> backward_word pre post)
+  | `Key (`Uchar 0x62, [`Meta]) (* M-b *) -> `Ok (fun (pre, post) -> backward_word pre post)
+
+  | `Key (`Uchar 0x64, [`Meta]) (* M-d *) -> `Ok (fun (pre, post) -> kill_word pre post)
+
+  | `Key (`Backspace, [`Meta]) -> `Ok (fun (pre, post) -> backward_kill_word pre post)
 
   | k -> `Unhandled k
