@@ -133,7 +133,7 @@ type groupchat = {
   expand : bool ;
   preserve_messages : bool ;
   message_history : User.message list ; (* persistent if preserve_messages *)
-  input_buffer : (int list * int list) ;
+  input_buffer : (Uchar.t list * Uchar.t list) ;
   readline_history : string list ;
   history_position : int ;
   autojoin : bool ;

@@ -125,7 +125,7 @@ type user = {
   properties        : property list ;
   preserve_messages : bool ;
   message_history   : message list ; (* persistent if preserve_messages is true *)
-  input_buffer: (int list * int list) ; (* not persistent *)
+  input_buffer: (Uchar.t list * Uchar.t list) ; (* not persistent *)
   readline_history  : string list ; (* not persistent *)
   history_position  : int ;
   otr_fingerprints  : fingerprint list ;

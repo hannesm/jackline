@@ -46,8 +46,8 @@ let read_line ?(above = []) ?(prefix = "") ?default ?(below = []) term =
       | `Unhandled k ->
         match k with
         | `Key (`Enter, []) -> Lwt.return (char_list_to_str (pre @ post))
-        | `Key (`Uchar 0x43, [`Ctrl]) -> Lwt.fail (Invalid_argument "Ctrl-c")
-        | `Key (`Uchar 0x44, [`Ctrl]) -> Lwt.fail (Invalid_argument "Ctrl-d")
+        | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x43 -> Lwt.fail (Invalid_argument "Ctrl-c")
+        | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x44 -> Lwt.fail (Invalid_argument "Ctrl-d")
         | _ -> go (pre, post)
   in
   let pre = Utils.option [] str_to_char_list default in

@@ -8,7 +8,7 @@ val bare : contact -> Xjid.bare_jid
 val preserve_messages : contact -> bool
 val expanded : contact -> bool
 val messages : contact -> User.message list
-val input_buffer : contact -> (int list * int list)
+val input_buffer : contact -> (Uchar.t list * Uchar.t list)
 
 val readline_history : contact -> string list
 val add_readline_history : contact -> string -> contact
@@ -18,7 +18,7 @@ val set_history_position : contact -> int -> contact
 val received : contact -> string -> contact
 
 val expand : contact -> contact
-val set_input_buffer : contact -> (int list * int list) -> contact
+val set_input_buffer : contact -> (Uchar.t list * Uchar.t list) -> contact
 val set_preserve_messages : contact -> bool -> contact
 
 val reset : contact -> contact

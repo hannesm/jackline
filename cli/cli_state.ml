@@ -24,7 +24,7 @@ type connect_v =
   | Reconnect
   | Presence of (User.presence * string option * int option)
 
-type input = int list * int list
+type input = Uchar.t list * Uchar.t list
 
 type state = {
   (* set only initially *)

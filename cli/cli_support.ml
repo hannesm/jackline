@@ -4,17 +4,17 @@ open Notty
 module Chars = struct
   let hdash a w =
     if !Utils.unicode then
-      I.uchar a 0x2500 w 1
+      I.uchar a (Uchar.of_int 0x2500) w 1
     else
       I.char a '-' w 1
   and vdash a h =
     if !Utils.unicode then
-      I.uchar a 0x2502 1 h
+      I.uchar a (Uchar.of_int 0x2502) 1 h
     else
       I.char a '|' 1 h
   and star a w =
     if !Utils.unicode then
-      I.uchar a 0x2605 w 1
+      I.uchar a (Uchar.of_int 0x2605) w 1
     else
       I.char a '*' w 1
 end
@@ -199,7 +199,7 @@ let v_center left right width =
     else
       (I.(left <|> right), succ lw)
 
-let str_to_char_list str : int list =
+let str_to_char_list str : Uchar.t list =
   let open Uutf in
   List.rev (String.fold_utf_8 (fun acc _ -> function `Uchar i -> i :: acc | `Malformed _ -> acc) [] str)
 
@@ -235,7 +235,7 @@ let readline_input = function
   | `Key (`Uchar chr, []) -> `Ok (fun (pre, post) -> pre @ [chr], post)
   | k -> `Unhandled k
 
-let forward_word pre post =
+let split_forward post =
   let inp, middle = match post with
     | ws::xs -> (xs, [ws])
     | [] -> ([], [])
@@ -251,27 +251,17 @@ let forward_word pre post =
       (false, [], [])
       inp
   in
-  (pre @ middle @ (List.rev prep), List.rev post)
+  (middle, List.rev prep, List.rev post)
+
+let forward_word pre post =
+  let middle, prepost, post = split_forward post in
+  (pre @ middle @ prepost, post)
 
 let kill_word pre post =
-  let inp, _ = match post with
-    | ws::xs -> (xs, [ws])
-    | [] -> ([], [])
-  in
-  let _, prep, post =
-    List.fold_left (fun (found, rp, rpp) char ->
-      if found then
-        (found, rp, char :: rpp)
-      else if Uucp.White.is_white_space char then
-        (true, rp, char :: rpp)
-      else
-        (false, rp, rpp) )
-      (false, [], [])
-      inp
-  in
-  (pre @ (List.rev prep), List.rev post)
+  let _, prepost, post = split_forward post in
+  (pre @ prepost, post)
 
-let backward_word pre post =
+let split_backward pre =
   let inp, middle = match List.rev pre with
     | ws::xs -> (xs, [ws])
     | [] -> ([], [])
@@ -287,39 +277,29 @@ let backward_word pre post =
       (false, [], [])
       inp
   in
-  (pre, prep @ middle @ post)
+  (pre, prep, middle)
+
+let backward_word pre post =
+  let pre, prepost, middle = split_backward pre in
+  (pre, prepost @ middle @ post)
 
 let backward_kill_word pre post =
-  let inp, _ = match List.rev pre with
-    | ws::xs -> (xs, [ws])
-    | [] -> ([], [])
-  in
-  let _, pre, prep =
-    List.fold_left (fun (found, rp, rpp) char ->
-      if found then
-        (found, char :: rp, rpp)
-      else if Uucp.White.is_white_space char then
-        (true, char :: rp, rpp)
-      else
-        (false, rp, rpp) )
-      (false, [], [])
-      inp
-  in
-  (pre, prep @ post)
+  let pre, prepost, _ = split_backward pre in
+  (pre, prepost @ post)
 
 let emacs_bindings = function
-  | `Key (`Uchar 0x41, [`Ctrl]) (* C-a *) -> `Ok (fun (pre, post) -> ([], pre @ post))
-  | `Key (`Uchar 0x45, [`Ctrl]) (* C-e *) -> `Ok (fun (pre, post) -> (pre @ post, []))
+  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x41 (* C-a *) -> `Ok (fun (pre, post) -> ([], pre @ post))
+  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x45 (* C-e *) -> `Ok (fun (pre, post) -> (pre @ post, []))
 
-  | `Key (`Uchar 0x4b, [`Ctrl]) (* C-k *) -> `Ok (fun (pre, _) -> (pre, []))
-  | `Key (`Uchar 0x55, [`Ctrl]) (* C-u *) -> `Ok (fun (_, post) -> ([], post))
+  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x4b (* C-k *) -> `Ok (fun (pre, _) -> (pre, []))
+  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x55 (* C-u *) -> `Ok (fun (_, post) -> ([], post))
 
-  | `Key (`Uchar 0x46, [`Ctrl]) (* C-f *) ->
+  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x46 (* C-f *) ->
     `Ok (fun (pre, post) ->
         match post with
         | [] -> (pre, post)
         | hd::tl -> (pre @ [hd], tl))
-  | `Key (`Uchar 0x42, [`Ctrl]) (* C-b *) ->
+  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x42 (* C-b *) ->
     `Ok (fun (pre, post) ->
         match List.rev pre with
         | [] -> ([], post)
@@ -327,13 +307,13 @@ let emacs_bindings = function
 
   | `Key (`Arrow `Right, [`Ctrl]) -> `Ok (fun (pre, post) -> forward_word pre post)
   | `Key (`Arrow `Right, [`Meta]) -> `Ok (fun (pre, post) -> forward_word pre post)
-  | `Key (`Uchar 0x66, [`Meta]) (* M-f *) -> `Ok (fun (pre, post) -> forward_word pre post)
+  | `Key (`Uchar x, [`Meta]) when Uchar.to_int x = 0x66 (* M-f *) -> `Ok (fun (pre, post) -> forward_word pre post)
 
   | `Key (`Arrow `Left, [`Ctrl]) -> `Ok (fun (pre, post) -> backward_word pre post)
   | `Key (`Arrow `Left, [`Meta]) -> `Ok (fun (pre, post) -> backward_word pre post)
-  | `Key (`Uchar 0x62, [`Meta]) (* M-b *) -> `Ok (fun (pre, post) -> backward_word pre post)
+  | `Key (`Uchar x, [`Meta]) when Uchar.to_int x = 0x62 (* M-b *) -> `Ok (fun (pre, post) -> backward_word pre post)
 
-  | `Key (`Uchar 0x64, [`Meta]) (* M-d *) -> `Ok (fun (pre, post) -> kill_word pre post)
+  | `Key (`Uchar x, [`Meta]) when Uchar.to_int x = 0x64 (* M-d *) -> `Ok (fun (pre, post) -> kill_word pre post)
 
   | `Key (`Backspace, [`Meta]) -> `Ok (fun (pre, post) -> backward_kill_word pre post)
 

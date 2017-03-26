@@ -28,6 +28,9 @@ depends: [
   "notty"
   "sexplib"
   "hex"
-  "uutf"
+  "uchar"
+  "uucp" {>= "2.0.0"}
+  "uuseg" {>= "1.0.0"}
+  "uutf" {>= "1.0.0"}
 ]
 available: [ ocaml-version >= "4.02.2" ]
