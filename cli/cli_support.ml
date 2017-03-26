@@ -186,8 +186,8 @@ let v_center left right width =
   and rw = I.width right
   in
   match rw, lw >= width with
-  | 0, true -> (I.hcrop (lw - width + 1) 0 left, width)
-  | 0, false -> (left, succ lw)
+  | 0, true -> (I.hcrop (lw - width + 1) 0 left, pred width)
+  | 0, false -> (left, lw)
   | _, _ ->
     if lw + rw >= width then
       let leftw = min (max (width - rw) (width / 2)) lw in
@@ -195,9 +195,9 @@ let v_center left right width =
       let l = I.hcrop (lw - leftw) 0 left
       and r = I.hcrop 0 (rw - rightw) right
       in
-      (I.(l <|> r), succ leftw)
+      (I.(l <|> r), leftw)
     else
-      (I.(left <|> right), succ lw)
+      (I.(left <|> right), lw)
 
 let str_to_char_list str : Uchar.t list =
   let open Uutf in
