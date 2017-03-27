@@ -3,7 +3,7 @@ true : warn(+A-4-44-48-58)
 "src" : include
 "cli" : include
 
-true : package(sexplib astring)
+true : package(sexplib astring uchar)
 
 <src/xconfig.ml>: package(otr ppx_sexp_conv)
 <src/utils.ml>: package(uutf)
@@ -14,7 +14,7 @@ true : package(sexplib astring)
 <src/xmpp_connection.ml>: package(erm_xmpp lwt tls tls.lwt)
 
 <cli/*>: package(notty lwt)
-<cli/cli_support.ml>: package(uutf)
+<cli/cli_support.ml>: package(uutf uucp uuseg)
 <cli/cli_client.ml>: package(otr erm_xmpp ptime ptime.clock.os)
 <cli/cli_input.ml>: package(erm_xmpp otr)
 <cli/cli_commands.ml>: package(otr erm_xmpp)
