@@ -235,7 +235,7 @@ let readline_input = function
   | `Key (`Uchar chr, []) -> `Ok (fun (pre, post) -> pre @ [chr], post)
   | k -> `Unhandled k
 
-let split_forward post =
+let split_forward post delete =
   let inp, middle = match post with
     | ws::xs -> (xs, [ws])
     | [] -> ([], [])
@@ -247,21 +247,24 @@ let split_forward post =
       else if Uucp.White.is_white_space char then
         (true, rp, char :: rpp)
       else
-        (false, char :: rp, rpp) )
+        if delete then
+          (false, rp, rpp)
+        else
+          (false, char :: rp, rpp) )
       (false, [], [])
       inp
   in
   (middle, List.rev prep, List.rev post)
 
 let forward_word pre post =
-  let middle, prepost, post = split_forward post in
+  let middle, prepost, post = split_forward post false in
   (pre @ middle @ prepost, post)
 
 let kill_word pre post =
-  let _, prepost, post = split_forward post in
+  let _, prepost, post = split_forward post true in
   (pre @ prepost, post)
 
-let split_backward pre =
+let split_backward pre delete =
   let inp, middle = match List.rev pre with
     | ws::xs -> (xs, [ws])
     | [] -> ([], [])
@@ -273,18 +276,21 @@ let split_backward pre =
       else if Uucp.White.is_white_space char then
         (true, char :: rp, rpp)
       else
-        (false, rp, char :: rpp) )
+        if delete then
+          (false, rp, rpp)
+        else
+          (false, rp, char :: rpp) )
       (false, [], [])
       inp
   in
   (pre, prep, middle)
 
 let backward_word pre post =
-  let pre, prepost, middle = split_backward pre in
+  let pre, prepost, middle = split_backward pre false in
   (pre, prepost @ middle @ post)
 
 let backward_kill_word pre post =
-  let pre, prepost, _ = split_backward pre in
+  let pre, prepost, _ = split_backward pre true in
   (pre, prepost @ post)
 
 let emacs_bindings = function
