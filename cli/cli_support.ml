@@ -259,8 +259,8 @@ let forward_word pre post =
   (pre @ middle @ prepost, post)
 
 let kill_word pre post =
-  let _, prepost, post = split_forward post in
-  (pre @ prepost, post)
+  let _, _, post = split_forward post in
+  (pre, post)
 
 let split_backward pre =
   let inp, middle = match List.rev pre with
@@ -285,8 +285,8 @@ let backward_word pre post =
   (pre, prepost @ middle @ post)
 
 let backward_kill_word pre post =
-  let pre, prepost, _ = split_backward pre in
-  (pre, prepost @ post)
+  let pre, _, _ = split_backward pre in
+  (pre, post)
 
 let emacs_bindings = function
   | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x41 (* C-a *) -> `Ok (fun (pre, post) -> ([], pre @ post))
