@@ -252,14 +252,14 @@ let split_forward post =
       (false, [], [])
       inp
   in
-  (middle, List.rev prep, List.rev post)
+  (middle @ List.rev prep, List.rev post)
 
 let forward_word pre post =
-  let middle, prepost, post = split_forward post in
-  (pre @ middle @ prepost, post)
+  let middle, post = split_forward post in
+  (pre @ middle, post)
 
 let kill_word pre post =
-  let _, _, post = split_forward post in
+  let _, post = split_forward post in
   (pre, post)
 
 let split_backward pre =
@@ -278,14 +278,14 @@ let split_backward pre =
       (false, [], [])
       inp
   in
-  (pre, prep, middle)
+  (pre, prep @ middle)
 
 let backward_word pre post =
-  let pre, prepost, middle = split_backward pre in
-  (pre, prepost @ middle @ post)
+  let pre, middle = split_backward pre in
+  (pre, middle @ post)
 
 let backward_kill_word pre post =
-  let pre, _, _ = split_backward pre in
+  let pre, _ = split_backward pre in
   (pre, post)
 
 let emacs_bindings = function
