@@ -45,9 +45,15 @@ let write_data fd data =
   in
   write 0
 
-let ensure_create dir =
-  Lwt.catch (fun () -> Lwt_unix.access dir [ Unix.F_OK ; Unix.X_OK ])
-    (fun _ -> Lwt_unix.mkdir dir 0o700)
+let rec ensure_create dir =
+  Lwt.catch
+    (fun () -> Lwt_unix.access dir [ Unix.F_OK ; Unix.X_OK ])
+    (fun _ ->
+       Lwt.catch
+         (fun () -> Lwt_unix.mkdir dir 0o700)
+         (fun _ ->
+            ensure_create (Filename.dirname dir) >>= fun () ->
+            ensure_create dir))
 
 let open_append dir file =
   ensure_create dir >>= fun () ->
