@@ -175,14 +175,17 @@ let configure term () =
     "Certificate fingerprint (leave empty to instead specify CA file): "
   and below =
     let str1, str2 =
+      let host =
+        Utils.option dom (fun x -> x) hostname
+      in
       let hostport =
-        Utils.option dom (fun x -> x) hostname ^ ":" ^
-        string_of_int (Utils.option 5222 (fun x -> x) port)
+        host ^ ":" ^ string_of_int (Utils.option 5222 (fun x -> x) port)
       in
       "If you have `tlsclient` installed, run: "
       ^ "`tlsclient -z --starttls=xmpp " ^ hostport ^ "`",
       "Alternatively: `openssl s_client -connect " ^ hostport
-      ^ " -starttls xmpp | openssl x509 -sha256 -fingerprint -noout`"
+      ^ " -starttls xmpp -xmpphost " ^ host
+      ^ " | openssl x509 -sha256 -fingerprint -noout`"
     in
     [A.empty, str1; A.empty, str2]
   and transform fp =
