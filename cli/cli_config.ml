@@ -184,8 +184,7 @@ let configure term () =
       "If you have `tlsclient` installed, run: "
       ^ "`tlsclient -z --starttls=xmpp " ^ hostport ^ "`",
       "Alternatively: `openssl s_client -connect " ^ hostport
-      ^ " -starttls xmpp -xmpphost " ^ host
-      ^ " | openssl x509 -sha256 -fingerprint -noout`"
+      ^ " -starttls xmpp | openssl x509 -sha256 -fingerprint -noout` (add -xmpphost " ^ host ^ " if available)"
     in
     [A.empty, str1; A.empty, str2]
   and transform fp =
