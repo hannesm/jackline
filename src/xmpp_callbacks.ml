@@ -316,14 +316,16 @@ let session_callback (kind, show, status, priority) mvar t =
           | _ -> fail BadRequest) >>= fun () ->
          match el with
          | Xml.Xmlelement ((ns_roster, "query"), attrs, els) when ns_roster = Roster.ns_roster ->
-           let _, items = Roster.decode attrs els in
-           if List.length items = 1 then
-             let mods = List.map roster_callback items in
-             let users = List.fold_left (fun acc -> function None -> acc | Some x -> x :: acc) [] mods in
-             t.user_data.update_users users true >|= fun () ->
-             IQResult None
-           else
-             fail BadRequest
+           begin match snd (Roster.decode attrs els) with
+             | [ item ] ->
+               let users = match roster_callback item with
+                 | None -> []
+                 | Some x -> [x]
+               in
+               t.user_data.update_users users true >|= fun () ->
+               IQResult None
+             | _ -> fail BadRequest
+           end
          | _ -> fail BadRequest) ;
 
   register_stanza_handler t (ns_client, "message")
