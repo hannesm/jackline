@@ -58,11 +58,11 @@ type state = {
   input : input ;
 }
 
-let add_status ?kind state dir msg =
+let add_status ?timestamp ?kind state dir msg =
   match Contact.find_user state.contacts (fst state.config.Xconfig.jid) with
   | None -> assert false
   | Some self ->
-     let self = User.insert_message ?kind self dir false true msg in
+     let self = User.insert_message ?timestamp ?kind self dir false true msg in
      Contact.replace_user state.contacts self
 
 let active state =
