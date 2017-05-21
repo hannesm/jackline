@@ -22,8 +22,8 @@ let rewrap term above below (prefix, inp, inp2) (width, _) =
   let col, row =
     let col = I.width inp in
     let h = I.(height (above <-> content <-> inp)) in
-    let height = if col mod width = 0 then succ h else h in
-    (succ (col mod width), height)
+    let height = if col = width then h else pred h in
+    (col mod width, height)
   in
   Notty_lwt.Term.cursor term (Some (col, row))
 
