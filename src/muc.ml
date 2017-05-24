@@ -137,7 +137,7 @@ type groupchat = {
   readline_history : string list ;
   history_position : int ;
   autojoin : bool ;
-  password : string option ;
+  password : string option ; (* persistent *)
 }
 
 let new_room ~jid ?password ?topic ~my_nick ?(members=[]) ?(features=[]) ?(autojoin = true) ?(preserve_messages=false) () =
@@ -197,27 +197,31 @@ let t_of_sexp t _version =
   match t with
   | Sexp.List l ->
     (match
-       List.fold_left (fun (room_jid, my_nick, preserve_messages, autojoin) v -> match v with
+       List.fold_left (fun (room_jid, my_nick, preserve_messages, autojoin, password) v -> match v with
            | Sexp.List [ Sexp.Atom "room_jid" ; jabberid ] ->
              assert (room_jid = None);
              let room_jid = Xjid.bare_jid_of_sexp jabberid in
-             (Some room_jid, my_nick, preserve_messages, autojoin)
+             (Some room_jid, my_nick, preserve_messages, autojoin, password)
            | Sexp.List [ Sexp.Atom "my_nick" ; Sexp.Atom nick ] ->
              assert (my_nick = None);
-             (room_jid, Some nick, preserve_messages, autojoin)
+             (room_jid, Some nick, preserve_messages, autojoin, password)
            | Sexp.List [ Sexp.Atom "preserve_messages" ; hf ] ->
              assert (preserve_messages = None) ;
              let preserve_messages = bool_of_sexp hf in
-             (room_jid, my_nick, Some preserve_messages, autojoin)
+             (room_jid, my_nick, Some preserve_messages, autojoin, password)
            | Sexp.List [ Sexp.Atom "autojoin" ; hf ] ->
              assert (autojoin = None) ;
              let autojoin = bool_of_sexp hf in
-             (room_jid, my_nick, preserve_messages, Some autojoin)
+             (room_jid, my_nick, preserve_messages, Some autojoin, password)
+           | Sexp.List [ Sexp.Atom "password" ; pw ] ->
+             assert (password = None) ;
+             let pw = option_of_sexp string_of_sexp pw in
+             (room_jid, my_nick, preserve_messages, autojoin, pw)
            | _ -> assert false)
-         (None, None, None, None) l
+         (None, None, None, None, None) l
      with
-     | Some room_jid, Some my_nick, Some preserve_messages, Some autojoin ->
-       Some (new_room ~jid:room_jid ~my_nick ~preserve_messages ~autojoin ())
+     | Some room_jid, Some my_nick, Some preserve_messages, Some autojoin, password ->
+       Some (new_room ~jid:room_jid ?password ~my_nick ~preserve_messages ~autojoin ())
      | _ -> None )
   | _ -> None
 
@@ -229,7 +233,8 @@ let sexp_of_t t =
     "room_jid"          , Xjid.sexp_of_bare_jid t.room_jid ;
     "my_nick"           , sexp_of_string t.my_nick ;
     "preserve_messages" , sexp_of_bool t.preserve_messages ;
-    "autojoin"       , sexp_of_bool t.autojoin ;
+    "autojoin"          , sexp_of_bool t.autojoin ;
+    "password"          , sexp_of_option sexp_of_string t.password ;
   ]
 
 let marshal_room room =
