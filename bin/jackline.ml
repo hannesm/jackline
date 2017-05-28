@@ -29,7 +29,16 @@ let start_client cfgdir debug unicode fd_gui fd_nfy () =
 
   Printexc.register_printer (function
       | Tls_lwt.Tls_alert x -> Some ("TLS alert: " ^ Tls.Packet.alert_type_to_string x)
-      | Tls_lwt.Tls_failure f -> Some ("TLS failure: " ^ Tls.Engine.string_of_failure f)
+      | Tls_lwt.Tls_failure f -> Some ("TLS failure: " ^
+        begin match f with
+        | `Error (`AuthenticationFailure (`InvalidFingerprint cert)) ->
+            "AuthenticationFailure: InvalidFingerprint: " ^
+            begin match
+              Hex.of_cstruct (X509.fingerprint cert `SHA256)
+            with `Hex s -> s end
+        | _ ->
+            Tls.Engine.string_of_failure f
+        end )
       | _ -> None) ;
 
   Nocrypto_entropy_lwt.initialize () >>= fun () ->
