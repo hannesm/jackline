@@ -376,47 +376,76 @@ let quit state =
 let redraw_interval = 0.04
 
 (* this is rendering and drawing stuff to terminal, waiting for updates of the ui_mvar... *)
-let rec loop term size redrawer mvar input_mvar state =
+let rec loop term size redrawer mvar input_mvar state tc =
   let reset state =
     let buddies = Contact.fold (fun _ b acc -> Contact.reset b :: acc) state.contacts [] in
     List.iter (Contact.replace_contact state.contacts) buddies
   in
   Lwt_engine.stop_event redrawer ;
-  let redraw = Lwt_engine.on_timer redraw_interval false (fun _ ->
-      let image, cursorc =
-        try
-          render_state size state
-        with e ->
-          let e = Cli_colour.kind `Error, (Printexc.to_string e)
-          and note =
-            "While trying to render the UI.  Try to scroll to another buddy \
-             (Page Up/Down), switch rendering of buddy list (F12), or clear \
-             this buddies messages (/clear<ret>); please report this bug \
-             (including the offending characters and the error message)\n"
+  (match state.window_mode with
+   | Raw ->
+     Notty_lwt.Term.release term >>= fun () ->
+     let mfilter m = match m.User.direction with `From _ -> true | _ -> false in
+     let filter = match state.filter with
+       | None -> (fun id -> id)
+       | Some x -> List.filter (fun { User.message ; _ } -> Astring.String.is_infix ~affix:x message)
+     in
+     let active = active state in
+     let data = Utils.take_rev (snd size)
+         (List.filter mfilter (filter (Contact.messages active)))
+     in
+     Unix.(tcsetattr stdin TCSANOW tc) ;
+     let data = List.flatten (List.map (fun m ->
+         Astring.String.cuts ~sep:"\n" ~empty:false m.User.message)
+         data) in
+     List.iter print_endline data ;
+     print_endline "press Enter to continue" ;
+     let _ = read_line () in
+     Unix.(tcsetattr stdin TCSANOW { tc with c_isig = false ; c_ixon = false ; c_ixoff = false }) ;
+     let state = { state with window_mode = BuddyList } in
+     let term = Notty_lwt.Term.create ~mouse:false () in
+     Lwt.async (Cli_input.read_terminal term mvar input_mvar) ;
+     Lwt.return (state, term)
+   | _ -> Lwt.return (state, term)) >>= fun (state, term) ->
+  let redraw =
+    Lwt_engine.on_timer redraw_interval false (fun _ ->
+        match state.window_mode with
+        | Raw -> ()
+        | _ ->
+          let image, cursorc =
+            try
+              render_state size state
+            with e ->
+              let e = Cli_colour.kind `Error, (Printexc.to_string e)
+              and note =
+                "While trying to render the UI.  Try to scroll to another buddy \
+                 (Page Up/Down), switch rendering of buddy list (F12), or clear \
+                 this buddies messages (/clear<ret>); please report this bug \
+                 (including the offending characters and the error message)\n"
+              in
+              let w = fst size in
+              (render_wrapped_list true w [e ; A.empty, note], 1)
           in
-          let w = fst size in
-          (render_wrapped_list true w [e ; A.empty, note], 1)
-      in
-      Lwt.async (fun () ->
-          Notty_lwt.Term.image term image >>= fun () ->
-          Notty_lwt.Term.cursor term (Some (cursorc, snd size))))
+          Lwt.async (fun () ->
+              Notty_lwt.Term.image term image >>= fun () ->
+              Notty_lwt.Term.cursor term (Some (cursorc, snd size))))
   in
   Lwt_mvar.take mvar >>= fun action ->
   Lwt.catch (fun () -> action state)
     (fun exn ->
        add_status ~kind:`Error state (`Local ((`Full state.config.Xconfig.jid), "error")) (Printexc.to_string exn) ;
        Lwt.return (`Failure state)) >>= function
-  | `Ok state -> loop term size redraw mvar input_mvar state
-  | `Resize size -> loop term size redraw mvar input_mvar state
-  | `Disconnect state -> reset state ; loop term size redraw mvar input_mvar state
+  | `Ok state -> loop term size redraw mvar input_mvar state tc
+  | `Resize size -> loop term size redraw mvar input_mvar state tc
+  | `Disconnect state -> reset state ; loop term size redraw mvar input_mvar state tc
   | `Failure state ->
     reset state ;
     ignore (Lwt_engine.on_timer 10. false
               (fun _ -> Lwt.async (fun () -> Lwt_mvar.put state.connect_mvar Reconnect))) ;
-    loop term size redraw mvar input_mvar state
+    loop term size redraw mvar input_mvar state tc
   | `Ask c ->
     c state input_mvar mvar >>= fun s ->
-    loop term size redraw mvar input_mvar s
+    loop term size redraw mvar input_mvar s tc
   | `Quit state ->
     quit state >>= fun () ->
     Lwt.return state
