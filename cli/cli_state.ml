@@ -200,6 +200,8 @@ let (reading : bool ref) = ref true
 
 let (xmpp_session : Xmpp_callbacks.user_data Xmpp_callbacks.XMPPClient.session_data option ref) = ref None
 
+let (connecting : bool ref) = ref false
+
 module Connect = struct
   let disconnect () =
     Xmpp_callbacks.Keepalive.cancel_keepalive () ;
@@ -229,6 +231,9 @@ module Connect = struct
       in
       Lwt.async (fun () -> selflog ui_mvar "connecting" ("to " ^ host ^ " (" ^ addr ^ ")"))
     in
+    Lwt.async (fun () ->
+        let out = match hostname with None -> domain | Some x -> x in
+        selflog ui_mvar "resolving" out) ;
     Xmpp_callbacks.resolve hostname port domain >|= fun sa ->
     report sa ;
     sa
@@ -298,7 +303,9 @@ module Connect = struct
       Lwt_mvar.take mvar >>= function
         | Cancel -> reconnect_loop None presence
         | Connect user_data ->
+           connecting := true ;
            connect user_data presence >>= fun () ->
+           connecting := false ;
            reconnect_loop None presence
         | Success user_data ->
            Lwt_mvar.put state_mvar Connected >>= fun () ->
@@ -308,7 +315,9 @@ module Connect = struct
         | Reconnect ->
            match !xmpp_session, user_data with
            | None, Some u ->
+              connecting := true ;
               connect u presence >>= fun () ->
+              connecting := false ;
               reconnect_loop (Some u) presence
            | _, u -> reconnect_loop u presence
     in

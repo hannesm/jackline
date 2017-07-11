@@ -1132,7 +1132,8 @@ let exec input state contact isself p =
     let err msg = err msg ; ok state in
     match other, !xmpp_session with
     (* connect *)
-    | ("connect", _), None   -> handle_connect p state.connect_mvar >>= fun () -> ok state
+    | ("connect", _), None when !Cli_state.connecting -> err "/connect: already connecting"
+    | ("connect", _), None -> handle_connect p state.connect_mvar >>= fun () -> ok state
     | ("connect", _), Some _ -> err "/connect: already connected"
 
     (* disconnect *)

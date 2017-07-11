@@ -391,27 +391,27 @@ let resolve (hostname : string option) (port : int option) (jid_idn : string) =
       - TODO: if not available, use DNS SRV record of jid_idn
       - TODO: use some result type here *)
   let getaddrinfo host service =
-    let open Unix in
-    try Some (List.hd (getaddrinfo host service
-                         [AI_SOCKTYPE SOCK_STREAM ; AI_FAMILY PF_INET])).ai_addr
-    with _ -> None
+    let open Lwt_unix in
+    Lwt.catch (fun () ->
+        getaddrinfo host service [AI_SOCKTYPE SOCK_STREAM ; AI_FAMILY PF_INET] >|= function
+        | hd::_ -> Some hd.ai_addr
+        | _ -> None)
+      (fun _ -> Lwt.return None)
   in
   let rec resolve ?(service = "xmpp-client") host =
-    match getaddrinfo host service with
-    | None when service = "" -> fail (Invalid_argument ("could not resolve hostname " ^ host))
+    getaddrinfo host service >>= function
+    | None when service = "" -> Lwt.fail (Invalid_argument ("could not resolve hostname " ^ host))
     | None -> resolve ~service:"" host
     | Some (Unix.ADDR_INET (ip, _)) when service = "" -> Lwt.return (ip, 5222)
     | Some (Unix.ADDR_INET (ip, port)) -> Lwt.return (ip, port)
-    | Some (Unix.ADDR_UNIX _) -> fail (Invalid_argument "received unix address")
+    | Some (Unix.ADDR_UNIX _) -> Lwt.fail (Invalid_argument "received unix address")
   in
   (match hostname with
-   | Some x ->
-     (try Lwt.return (Unix.inet_addr_of_string x, 5222)
-      with _ -> resolve x)
+   | Some x -> (try Lwt.return (Unix.inet_addr_of_string x, 5222) with _ -> resolve x)
    | None -> resolve jid_idn) >>= fun res ->
   match port, res with
-  | Some x, (ip, _) -> Lwt.return (Unix.ADDR_INET (ip, x))
-  | None, (ip, port) -> Lwt.return (Unix.ADDR_INET (ip, port))
+  | Some x, (ip, _) -> Lwt.return (Lwt_unix.ADDR_INET (ip, x))
+  | None, (ip, port) -> Lwt.return (Lwt_unix.ADDR_INET (ip, port))
 
 let connect socket_data myjid certname password presence authenticator user_data mvar =
   let module Socket_module =
