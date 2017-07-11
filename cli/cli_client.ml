@@ -322,6 +322,7 @@ let render_state (width, height) state =
         and msgfmt x = A.empty, x.User.message
         in
         msgs false p msgfmt
+    and hline = horizontal_line active resource a state.scrollback state.filter width
     and bottom =
       let self = self state in
       let status =
@@ -330,19 +331,23 @@ let render_state (width, height) state =
         and mysession = selfsession state
         in
         status_line self mysession notify log a width
-      and hline = horizontal_line active resource a state.scrollback state.filter width
-      in
-      if log_height = 0 then
-        I.(hline <-> status)
-      else
-        let logs =
+      and logs =
+        if log_height = 0 then
+          I.empty
+        else
           let msgs = Utils.take_rev log_height self.User.message_history in
           let l = render_wrapped_list true width (List.map logfmt msgs) in
           I.vsnap ~align:`Bottom log_height l
-        in
-        I.(hline <-> logs <-> status)
+      in
+      I.(logs <-> status)
     in
-    (I.(main <-> bottom <-> input), cursorc)
+    let disp =
+      if state.config.Xconfig.log_top then
+        I.(bottom <-> main <-> hline <-> input)
+      else
+        I.(main <-> hline <-> bottom <-> input)
+    in
+    (disp, cursorc)
 
 let quit state =
   Utils.option

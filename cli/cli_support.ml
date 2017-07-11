@@ -133,6 +133,7 @@ let split_unicode strip len a str =
   else
     words strip a len str
 
+(* XXX: may not terminate? *)
 let rec split_ascii strip len str acc =
   let open Astring.String in
   if length str <= len then

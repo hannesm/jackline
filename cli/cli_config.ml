@@ -298,7 +298,14 @@ let configure term () =
 
   (read_line ~above ~prefix:"Path to notification callback: " term >|= function
    | "" -> None
-   | x -> Some x) >|= fun notification_callback ->
+   | x -> Some x) >>= fun notification_callback ->
+
+  let above =
+    let x = match notification_callback with None -> "none" | Some x -> x in
+    above @ [A.empty, "Notification callback " ^ x]
+  in
+
+  read_yes_no ~above ~prefix:"event log at top (default is bottom)?" false term >|= fun log_top ->
 
   Xconfig.({
       version = current_version ;
@@ -311,5 +318,6 @@ let configure term () =
       otr_config ;
       dsa ;
       certificate_hostname ;
-      notification_callback
+      notification_callback ;
+      log_top ;
     })
