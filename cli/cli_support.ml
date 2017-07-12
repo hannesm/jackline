@@ -295,6 +295,8 @@ let emacs_bindings = function
   | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x4b (* C-k *) -> `Ok (fun (pre, _) -> (pre, []))
   | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x55 (* C-u *) -> `Ok (fun (_, post) -> ([], post))
 
+  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x57 (* C-w *) -> `Ok (fun (pre, post) -> backward_kill_word pre post)
+
   | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x46 (* C-f *) ->
     `Ok (fun (pre, post) ->
         match post with
