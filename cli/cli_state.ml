@@ -56,6 +56,8 @@ type state = {
 
   (* current input buffer *)
   input : input ;
+  (* kill ring *)
+  kill : Uchar.t list ;
 }
 
 let add_status ?timestamp ?kind state dir msg =
@@ -352,7 +354,8 @@ let empty_state config_directory config contacts connect_mvar state_mvar =
     log_height          = 6         ;
     buddy_width         = 24        ;
     filter              = None      ;
-    input               = ([], [])
+    input               = ([], [])  ;
+    kill                = []
 }
 
 

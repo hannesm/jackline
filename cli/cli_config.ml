@@ -42,7 +42,7 @@ let read_line ?(above = []) ?(prefix = "") ?default ?(below = []) term =
     | `Ok f -> go (f (pre, post))
     | `Unhandled k ->
       match emacs_bindings k with
-      | `Ok f -> go (f (pre, post))
+      | `Ok f -> go (fst (f (pre, post) []))
       | `Unhandled k ->
         match k with
         | `Key (`Enter, []) -> Lwt.return (char_list_to_str (pre @ post))

@@ -259,8 +259,8 @@ let forward_word pre post =
   (pre @ middle, post)
 
 let kill_word pre post =
-  let _, post = split_forward post in
-  (pre, post)
+  let middle, post = split_forward post in
+  (pre, post), middle
 
 let split_backward pre =
   let inp, middle = match List.rev pre with
@@ -285,39 +285,41 @@ let backward_word pre post =
   (pre, middle @ post)
 
 let backward_kill_word pre post =
-  let pre, _ = split_backward pre in
-  (pre, post)
+  let pre, middle = split_backward pre in
+  (pre, post), middle
 
 let emacs_bindings = function
-  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x41 (* C-a *) -> `Ok (fun (pre, post) -> ([], pre @ post))
-  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x45 (* C-e *) -> `Ok (fun (pre, post) -> (pre @ post, []))
+  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x41 (* C-a *) -> `Ok (fun (pre, post) k -> (([], pre @ post), k))
+  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x45 (* C-e *) -> `Ok (fun (pre, post) k -> ((pre @ post, []), k))
 
-  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x4b (* C-k *) -> `Ok (fun (pre, _) -> (pre, []))
-  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x55 (* C-u *) -> `Ok (fun (_, post) -> ([], post))
+  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x4b (* C-k *) -> `Ok (fun (pre, post) _ -> ((pre, []), post))
+  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x55 (* C-u *) -> `Ok (fun (pre, post) _ -> (([], post), pre))
 
-  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x57 (* C-w *) -> `Ok (fun (pre, post) -> backward_kill_word pre post)
+  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x57 (* C-w *) -> `Ok (fun (pre, post) _ -> backward_kill_word pre post)
+
+  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x59 (* C-y *) -> `Ok (fun (pre, post) k -> ((pre @ k, post), k))
 
   | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x46 (* C-f *) ->
-    `Ok (fun (pre, post) ->
+    `Ok (fun (pre, post) k ->
         match post with
-        | [] -> (pre, post)
-        | hd::tl -> (pre @ [hd], tl))
+        | [] -> ((pre, post), k)
+        | hd::tl -> ((pre @ [hd], tl), k))
   | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x42 (* C-b *) ->
-    `Ok (fun (pre, post) ->
+    `Ok (fun (pre, post) k ->
         match List.rev pre with
-        | [] -> ([], post)
-        | hd::tl -> (List.rev tl, hd :: post))
+        | [] -> (([], post), k)
+        | hd::tl -> ((List.rev tl, hd :: post), k))
 
-  | `Key (`Arrow `Right, [`Ctrl]) -> `Ok (fun (pre, post) -> forward_word pre post)
-  | `Key (`Arrow `Right, [`Meta]) -> `Ok (fun (pre, post) -> forward_word pre post)
-  | `Key (`Uchar x, [`Meta]) when Uchar.to_int x = 0x66 (* M-f *) -> `Ok (fun (pre, post) -> forward_word pre post)
+  | `Key (`Arrow `Right, [`Ctrl]) -> `Ok (fun (pre, post) k -> (forward_word pre post, k))
+  | `Key (`Arrow `Right, [`Meta]) -> `Ok (fun (pre, post) k -> (forward_word pre post, k))
+  | `Key (`Uchar x, [`Meta]) when Uchar.to_int x = 0x66 (* M-f *) -> `Ok (fun (pre, post) k -> (forward_word pre post, k))
 
-  | `Key (`Arrow `Left, [`Ctrl]) -> `Ok (fun (pre, post) -> backward_word pre post)
-  | `Key (`Arrow `Left, [`Meta]) -> `Ok (fun (pre, post) -> backward_word pre post)
-  | `Key (`Uchar x, [`Meta]) when Uchar.to_int x = 0x62 (* M-b *) -> `Ok (fun (pre, post) -> backward_word pre post)
+  | `Key (`Arrow `Left, [`Ctrl]) -> `Ok (fun (pre, post) k -> (backward_word pre post, k))
+  | `Key (`Arrow `Left, [`Meta]) -> `Ok (fun (pre, post) k -> (backward_word pre post, k))
+  | `Key (`Uchar x, [`Meta]) when Uchar.to_int x = 0x62 (* M-b *) -> `Ok (fun (pre, post) k -> (backward_word pre post, k))
 
-  | `Key (`Uchar x, [`Meta]) when Uchar.to_int x = 0x64 (* M-d *) -> `Ok (fun (pre, post) -> kill_word pre post)
+  | `Key (`Uchar x, [`Meta]) when Uchar.to_int x = 0x64 (* M-d *) -> `Ok (fun (pre, post) _ -> kill_word pre post)
 
-  | `Key (`Backspace, [`Meta]) -> `Ok (fun (pre, post) -> backward_kill_word pre post)
+  | `Key (`Backspace, [`Meta]) -> `Ok (fun (pre, post) _ -> backward_kill_word pre post)
 
   | k -> `Unhandled k

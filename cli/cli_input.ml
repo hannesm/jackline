@@ -167,7 +167,6 @@ let k_to_s = function
 *)
 
 let read_terminal term mvar input_mvar () =
-  (* XXX: emacs key bindings: C- wy[mark, kill, yank] C-_-[undo/redo] *)
   let p = Lwt_mvar.put mvar
   and ok s = Lwt.return (`Ok s)
   in
@@ -176,7 +175,9 @@ let read_terminal term mvar input_mvar () =
     match readline_input e with
     | `Ok f -> p (fun s -> ok (let input = f s.input in { s with input })) >>= fun () -> loop ()
     | `Unhandled k -> match emacs_bindings k with
-      | `Ok f -> p (fun s -> ok (let input = f s.input in { s with input })) >>= fun () -> loop ()
+      | `Ok f -> p (fun s ->
+          let input, kill = f s.input s.kill in
+          ok ({ s with input ; kill })) >>= fun () -> loop ()
       | `Unhandled k ->
         if not !reading then
           (* command and message processing *)
