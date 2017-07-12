@@ -672,9 +672,12 @@ let handle_add state s a (msg : (?kind:User.chatkind -> string -> string -> unit
     msg ~kind:`Error "error" "parsing of jid failed (user@node)" ;
     Lwt.return (`Ok state)
 
-let handle_fingerprint user err fp =
+let handle_fingerprint readonly_state user err fp =
   let manual_fp = string_normalize_fingerprint fp in
   if String.length manual_fp = 40 then
+    if `Hex manual_fp = Hex.of_string (Otr.Utils.own_fingerprint readonly_state.config.Xconfig.dsa) then
+      err "You tried to add your own OTR fingerprint, not your contact's."
+    else
     let fp = User.find_raw_fp user manual_fp in
     let user = User.verify_fp user fp `Manual in
     (["verified " ^ manual_fp], Some (`User user), None)
@@ -1255,7 +1258,7 @@ let exec input state contact isself p =
           if isself then
             err "/fingerprint: won't talk to myself"
           else
-            need_user (fun u -> handle_fingerprint u err fp)
+            need_user (fun u -> handle_fingerprint state u err fp)
 
         | ("revoke", None), _ -> help ~err:"/revoke: argument required" (Some "revoke")
         | ("revoke", Some fp), _ -> need_user (fun u -> handle_revoke u err fp)
