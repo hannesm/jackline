@@ -189,8 +189,8 @@ Keybindings
 - `Ctrl-PgUp` (or `Ctrl-p`), `Ctrl-PgDown` (or `Ctrl-n`) scrolls chat window
 - `<tab>` tab completion (largest prefix, suggestions are displayed in grey while typingx)
 - `Ctrl-a` (jump to beginning of line), `Ctrl-e` (jump to end of line), `Ctrl-k` (kill text to the right of cursor), `Ctrl-u` (kill text to the left of cursor), `Ctrl-left` (jump word backwards), `Ctrl-right` (jump word forwards), `Ctrl-f` (forward one character), `Ctrl-b` (backward one character)
-- `Ctrl-space` (mark, indicated by underline), `Ctrl-w` (cut), `Ctrl-y` (yank) [currently broken]
-- `Ctrl-_` undo [currently broken]
+- ~~`Ctrl-space` (mark, indicated by underline)~~, `Ctrl-w` (cut), `Ctrl-y` (yank)
+- ~~`Ctrl-_` undo~~
 
 `/help` prints the available commands, `/help command` more detailed help of the given command.
 
