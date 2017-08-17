@@ -68,10 +68,12 @@ but I've some [work-in-progress](https://github.com/hannesm/conex).
 Be aware that this is unreleased software.  Bug reports are welcome
 (pull requests as well).
 
-Get OCaml (>= 4.02.3), get opam (1.2),
+Get OCaml (>= 4.02.3), get opam (1.2.2),
 [aspcud](http://www.cs.uni-potsdam.de/wv/aspcud/) and
 [gmp](http://gmplib.org/) are required as well.
-If you have an older OCaml compiler, run `opam switch 4.04.0`.
+If you have an older OCaml compiler, run `opam switch 4.04.2` and follow instructions.
+
+In case you have an old opam (1.2.0), you need to `opam pin add cstruct 2.4.1`.
 
 Run the following commands:
 - `opam repo add xmpp-dev https://github.com/hannesm/xmpp-opam.git`
@@ -79,7 +81,7 @@ Run the following commands:
 - `opam install jackline`
 
 Now you should have a `~/.opam/system/bin/jackline` (or
-`~/.opam/4.04.0/bin/jackline`), which should be in your `PATH` (if you
+`~/.opam/4.04.2/bin/jackline`), which should be in your `PATH` (if you
 executed ``eval `opam config env` ``).
 
 To update, simply run `opam update` followed by `opam upgrade`.  This
