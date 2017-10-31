@@ -179,7 +179,7 @@ let v_space f width left right =
   if len <= 0 then
     I.hpad 0 len I.(left <|> right)
   else
-    let fill = I.tile len 1 f in
+    let fill = I.tabulate len 1 (fun _ _ -> f) in
     I.hcat [ left ; fill ; right ]
 
 let v_center left right width =
@@ -233,6 +233,7 @@ let readline_input = function
         match List.rev pre with
         | [] -> ([], post)
         | hd::tl -> (List.rev tl, hd :: post))
+  | `Key (`ASCII chr, []) -> `Ok (fun (pre, post) -> pre @ [Notty.Unescape.uchar (`ASCII chr)], post)
   | `Key (`Uchar chr, []) -> `Ok (fun (pre, post) -> pre @ [chr], post)
   | k -> `Unhandled k
 
@@ -289,22 +290,22 @@ let backward_kill_word pre post =
   (pre, post), middle
 
 let emacs_bindings = function
-  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x41 (* C-a *) -> `Ok (fun (pre, post) k -> (([], pre @ post), k))
-  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x45 (* C-e *) -> `Ok (fun (pre, post) k -> ((pre @ post, []), k))
+  | `Key (`ASCII 'A', [`Ctrl]) -> `Ok (fun (pre, post) k -> (([], pre @ post), k))
+  | `Key (`ASCII 'E', [`Ctrl]) -> `Ok (fun (pre, post) k -> ((pre @ post, []), k))
 
-  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x4b (* C-k *) -> `Ok (fun (pre, post) _ -> ((pre, []), post))
-  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x55 (* C-u *) -> `Ok (fun (pre, post) _ -> (([], post), pre))
+  | `Key (`ASCII 'K', [`Ctrl]) -> `Ok (fun (pre, post) _ -> ((pre, []), post))
+  | `Key (`ASCII 'U', [`Ctrl]) -> `Ok (fun (pre, post) _ -> (([], post), pre))
 
-  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x57 (* C-w *) -> `Ok (fun (pre, post) _ -> backward_kill_word pre post)
+  | `Key (`ASCII 'W', [`Ctrl]) -> `Ok (fun (pre, post) _ -> backward_kill_word pre post)
 
-  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x59 (* C-y *) -> `Ok (fun (pre, post) k -> ((pre @ k, post), k))
+  | `Key (`ASCII 'Y', [`Ctrl]) -> `Ok (fun (pre, post) k -> ((pre @ k, post), k))
 
-  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x46 (* C-f *) ->
+  | `Key (`ASCII 'F', [`Ctrl]) ->
     `Ok (fun (pre, post) k ->
         match post with
         | [] -> ((pre, post), k)
         | hd::tl -> ((pre @ [hd], tl), k))
-  | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x42 (* C-b *) ->
+  | `Key (`ASCII 'B', [`Ctrl]) ->
     `Ok (fun (pre, post) k ->
         match List.rev pre with
         | [] -> (([], post), k)
@@ -312,13 +313,13 @@ let emacs_bindings = function
 
   | `Key (`Arrow `Right, [`Ctrl]) -> `Ok (fun (pre, post) k -> (forward_word pre post, k))
   | `Key (`Arrow `Right, [`Meta]) -> `Ok (fun (pre, post) k -> (forward_word pre post, k))
-  | `Key (`Uchar x, [`Meta]) when Uchar.to_int x = 0x66 (* M-f *) -> `Ok (fun (pre, post) k -> (forward_word pre post, k))
+  | `Key (`ASCII 'F', [`Meta]) -> `Ok (fun (pre, post) k -> (forward_word pre post, k))
 
   | `Key (`Arrow `Left, [`Ctrl]) -> `Ok (fun (pre, post) k -> (backward_word pre post, k))
   | `Key (`Arrow `Left, [`Meta]) -> `Ok (fun (pre, post) k -> (backward_word pre post, k))
-  | `Key (`Uchar x, [`Meta]) when Uchar.to_int x = 0x62 (* M-b *) -> `Ok (fun (pre, post) k -> (backward_word pre post, k))
+  | `Key (`ASCII 'B', [`Meta]) -> `Ok (fun (pre, post) k -> (backward_word pre post, k))
 
-  | `Key (`Uchar x, [`Meta]) when Uchar.to_int x = 0x64 (* M-d *) -> `Ok (fun (pre, post) _ -> kill_word pre post)
+  | `Key (`ASCII 'D', [`Meta]) -> `Ok (fun (pre, post) _ -> kill_word pre post)
 
   | `Key (`Backspace, [`Meta]) -> `Ok (fun (pre, post) _ -> backward_kill_word pre post)
 

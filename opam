@@ -25,7 +25,7 @@ depends: [
   "otr" {>= "0.2.1"}
   "astring"
   "ptime" {>= "0.8.0"}
-  "notty"
+  "notty" {>= "0.2.0"}
   "sexplib"
   "hex"
   "uchar"

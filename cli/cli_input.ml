@@ -147,7 +147,7 @@ let m_to_s ms =
   to_s [] ms
 
 let k_to_s = function
-  | `Key (`Uchar chr, ms) -> Printf.sprintf "uchar 0x%X:%s" chr (m_to_s ms)
+  | `Key (`Uchar chr, ms) -> Printf.sprintf "uchar 0x%X:%s" (Uchar.to_int chr) (m_to_s ms)
   | `Key (`Escape, ms) -> "escape:" ^ m_to_s ms
   | `Key (`Enter, ms) -> "enter:" ^ m_to_s ms
   | `Key (`Tab, ms) -> "tab:" ^ m_to_s ms
@@ -327,19 +327,19 @@ let read_terminal term mvar input_mvar () =
           | `Key (`Arrow `Up, []) -> p (fun s -> ok (history s Up)) >>= fun () -> loop ()
           | `Key (`Arrow `Down, []) -> p (fun s -> ok (history s Down)) >>= fun () -> loop ()
 
-          | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x44 (* C-d *) -> p (fun s -> Lwt.return (`Quit s))
+          | `Key (`ASCII 'D', [`Ctrl]) -> p (fun s -> Lwt.return (`Quit s))
 
           (* UI navigation and toggles *)
           | `Key (`Page `Up, []) -> p (fun s -> ok (navigate_buddy_list s Up)) >>= fun () -> loop ()
           | `Key (`Page `Down, []) -> p (fun s -> ok (navigate_buddy_list s Down)) >>= fun () -> loop ()
 
           | `Key (`Page `Up, [`Ctrl]) -> p (fun s -> ok (navigate_message_buffer s Up)) >>= fun () -> loop ()
-          | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x50 (* C-p *) -> p (fun s -> ok (navigate_message_buffer s Up)) >>= fun () -> loop ()
+          | `Key (`ASCII 'P', [`Ctrl]) -> p (fun s -> ok (navigate_message_buffer s Up)) >>= fun () -> loop ()
           | `Key (`Page `Down, [`Ctrl]) -> p (fun s -> ok (navigate_message_buffer s Down)) >>= fun () -> loop ()
-          | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x4E (* C-n *) -> p (fun s -> ok (navigate_message_buffer s Down)) >>= fun () -> loop ()
+          | `Key (`ASCII 'N', [`Ctrl]) -> p (fun s -> ok (navigate_message_buffer s Down)) >>= fun () -> loop ()
 
-          | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x58 (* C-x *) -> p (fun s -> ok (activate_contact s s.last_active_contact)) >>= fun () -> loop ()
-          | `Key (`Uchar x, [`Ctrl]) when Uchar.to_int x = 0x51 (* C-q *) ->
+          | `Key (`ASCII 'X', [`Ctrl]) -> p (fun s -> ok (activate_contact s s.last_active_contact)) >>= fun () -> loop ()
+          | `Key (`ASCII 'Q', [`Ctrl]) ->
             let handle s =
               let s = match List.rev s.notifications with
                 | x::_ -> activate_contact s x
