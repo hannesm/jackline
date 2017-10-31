@@ -9,8 +9,6 @@ env:
 matrix:
   include:
   - os: linux
-    env: OCAML_VERSION=4.02
-  - os: linux
     env: OCAML_VERSION=4.03
   - os: linux
     env: OCAML_VERSION=4.04

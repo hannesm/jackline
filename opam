@@ -33,4 +33,4 @@ depends: [
   "uuseg" {>= "1.0.0"}
   "uutf" {>= "1.0.0"}
 ]
-available: [ ocaml-version >= "4.02.2" ]
+available: [ ocaml-version >= "4.03.0" ]
