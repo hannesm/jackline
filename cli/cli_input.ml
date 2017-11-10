@@ -84,8 +84,8 @@ let next_crypto_buddy state =
           | Some x -> 0, Some x
           | None ->
             match
-              match Xjid.compare_bare_jid bare bare' with
-              | 0 -> begin match res with None -> 0 | Some x -> String.compare x res' end
+              match Xjid.compare_bare_jid bare' bare with
+              | 0 -> begin match res with None -> 0 | Some x -> String.compare res' x end
               | x -> x
             with
             | 0 -> 0, Some (succ i)
@@ -93,12 +93,13 @@ let next_crypto_buddy state =
             | _ -> succ i, None)
         (0, None) enc_contacts
     in
-    match next with
-    | None -> state
-    | Some start ->
-      let num = List.length enc_contacts in
-      let next = List.nth enc_contacts (start mod num) in
-      activate_contact state (`Full next)
+    let idx = match next with
+      | None -> 0
+      | Some start -> start
+    in
+    let num = List.length enc_contacts in
+    let next = List.nth enc_contacts (idx mod num) in
+    activate_contact state (`Full next)
 
 
 let warn jid user add_msg =
