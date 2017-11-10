@@ -184,6 +184,7 @@ Keybindings
 - `Left`, `Right`, `Home`, `End` navigate in input line
 - `Ctrl-q` jumps to next notification
 - `Ctrl-x` jumps to last active user
+- `Ctrl-c` cycle to next crypto user
 - `F5` toggles display of offline contacts
 - `F12` toggles between display of contact list, full screen chat, and raw (only received messages)
 - `F11` and `Shift-F11` (or `Ctrl-F11`) increases and decreases width of contact list (`/buddywidth`)

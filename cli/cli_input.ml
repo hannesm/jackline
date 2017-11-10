@@ -50,6 +50,57 @@ let navigate_buddy_list state direction =
   | Down -> set_active (succ active_idx mod l)
   | Up -> set_active ((l + pred active_idx) mod l)
 
+let next_crypto_buddy state =
+  let all = all_jids state in
+  let active_idx = Utils.find_index Xjid.jid_matches state.active_contact 0 all in
+  let enc_contacts =
+    let cs =
+      Contact.fold (fun bare c acc ->
+          match c with
+          | `Room _ -> acc
+          | `User u ->
+            match List.filter (fun s -> Otr.State.is_encrypted s.User.otr) u.User.active_sessions with
+            | [] -> acc
+            | xs -> (List.map (fun s -> (bare, s.User.resource)) xs) @ acc)
+        state.contacts []
+    in
+    List.sort (fun (bare, res) (bare', res') ->
+        match Xjid.compare_bare_jid bare bare' with
+        | 0 -> String.compare res res'
+        | x -> x) cs
+  in
+  match enc_contacts with
+  | [] -> state
+  | [ x ] -> activate_contact state (`Full x)
+  | _ ->
+    let bare, res =
+      match List.nth all active_idx with
+      | `Full (a, b) -> (a, Some b)
+      | `Bare a -> (a, None)
+    in
+    let _, next =
+      List.fold_left (fun (i, r) (bare', res') ->
+          match r with
+          | Some x -> 0, Some x
+          | None ->
+            match
+              match Xjid.compare_bare_jid bare bare' with
+              | 0 -> begin match res with None -> 0 | Some x -> String.compare x res' end
+              | x -> x
+            with
+            | 0 -> 0, Some (succ i)
+            | 1 -> 0, Some i
+            | _ -> succ i, None)
+        (0, None) enc_contacts
+    in
+    match next with
+    | None -> state
+    | Some start ->
+      let num = List.length enc_contacts in
+      let next = List.nth enc_contacts (start mod num) in
+      activate_contact state (`Full next)
+
+
 let warn jid user add_msg =
   let last_msg =
     try Some (List.find
@@ -332,6 +383,8 @@ let read_terminal term mvar input_mvar () =
           (* UI navigation and toggles *)
           | `Key (`Page `Up, []) -> p (fun s -> ok (navigate_buddy_list s Up)) >>= fun () -> loop ()
           | `Key (`Page `Down, []) -> p (fun s -> ok (navigate_buddy_list s Down)) >>= fun () -> loop ()
+
+          | `Key (`ASCII 'C', [`Ctrl]) -> p (fun s -> ok (next_crypto_buddy s)) >>= fun () -> loop ()
 
           | `Key (`Page `Up, [`Ctrl]) -> p (fun s -> ok (navigate_message_buffer s Up)) >>= fun () -> loop ()
           | `Key (`ASCII 'P', [`Ctrl]) -> p (fun s -> ok (navigate_message_buffer s Up)) >>= fun () -> loop ()
