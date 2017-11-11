@@ -51,55 +51,60 @@ let navigate_buddy_list state direction =
   | Up -> set_active ((l + pred active_idx) mod l)
 
 let next_crypto_buddy state =
-  let all = all_jids state in
-  let active_idx = Utils.find_index Xjid.jid_matches state.active_contact 0 all in
   let enc_contacts =
-    let cs =
-      Contact.fold (fun bare c acc ->
-          match c with
-          | `Room _ -> acc
-          | `User u ->
-            match List.filter (fun s -> Otr.State.is_encrypted s.User.otr) u.User.active_sessions with
-            | [] -> acc
-            | xs -> (List.map (fun s -> (bare, s.User.resource)) xs) @ acc)
-        state.contacts []
-    in
-    List.sort (fun (bare, res) (bare', res') ->
-        match Xjid.compare_bare_jid bare bare' with
-        | 0 -> String.compare res res'
-        | x -> x) cs
+    List.fold_left (fun acc c ->
+        match c with
+        | `Room _ -> acc
+        | `User u ->
+          if Contact.expanded c then begin
+            List.fold_left
+              (fun acc -> function
+                 | `Session s when User.encrypted s.User.otr ->
+                   let jid = `Full (u.User.bare_jid, s.User.resource) in
+                   jid :: acc
+                 | _ -> acc)
+              acc (active_resources state c)
+          end else begin
+            match User.active_session u with
+              | Some s when User.encrypted s.User.otr ->
+                `Bare u.User.bare_jid :: acc
+              | _ -> acc
+          end)
+      [] (active_contacts state)
   in
-  match enc_contacts with
+  match List.rev enc_contacts with
   | [] -> state
-  | [ x ] -> activate_contact state (`Full x)
-  | _ ->
-    let bare, res =
-      match List.nth all active_idx with
-      | `Full (a, b) -> (a, Some b)
-      | `Bare a -> (a, None)
-    in
+  | [ x ] -> activate_contact state x
+  | act ->
+    let us = state.active_contact in
     let _, next =
-      List.fold_left (fun (i, r) (bare', res') ->
+      List.fold_left (fun (i, r) jid ->
           match r with
           | Some x -> 0, Some x
           | None ->
-            match
-              match Xjid.compare_bare_jid bare' bare with
-              | 0 -> begin match res with None -> 0 | Some x -> String.compare res' x end
-              | x -> x
-            with
+            let r =
+              match jid, us with
+              | `Bare bare, `Bare bare' -> Xjid.compare_bare_jid bare bare'
+              | `Full (bare, _), `Bare bare' -> Xjid.compare_bare_jid bare bare'
+              | `Bare bare, `Full (bare', _) -> Xjid.compare_bare_jid bare bare'
+              | `Full (bare, res), `Full (bare', res') ->
+                match Xjid.compare_bare_jid bare' bare with
+                | 0 -> String.compare res' res
+                | x -> x
+            in
+            match r with
             | 0 -> 0, Some (succ i)
             | 1 -> 0, Some i
             | _ -> succ i, None)
-        (0, None) enc_contacts
+        (0, None) act
     in
     let idx = match next with
       | None -> 0
       | Some start -> start
     in
-    let num = List.length enc_contacts in
-    let next = List.nth enc_contacts (idx mod num) in
-    activate_contact state (`Full next)
+    let num = List.length act in
+    let next = List.nth act (idx mod num) in
+    activate_contact state next
 
 
 let warn jid user add_msg =
