@@ -95,6 +95,9 @@ let _ =
     (fun _ -> [ "shared" ; "question" ; "answer" ; "abort" ]) ;
   new_command
     "remove" "/remove" "remove current user from roster" (fun _ -> []) ;
+  new_command
+    "alias" "/alias [nick]"
+    "add/remove local alias" (fun _ -> []) ;
 
   (* multi user chat *)
   new_command
@@ -1277,6 +1280,13 @@ let exec input state contact isself p =
                    `Ok state
                  in
                  ([m], None, Some clos))
+
+        | ("alias", alias), _ ->
+           if isself then
+             err "/alias: cannot adjust own alias"
+           else
+             let c = Contact.set_alias contact alias in
+             ([], Some c, None)
 
         | ("otrpolicy", None), _ ->
           need_user
