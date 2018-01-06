@@ -20,6 +20,7 @@ val received : contact -> string -> contact
 val expand : contact -> contact
 val set_input_buffer : contact -> (Uchar.t list * Uchar.t list) -> contact
 val set_preserve_messages : contact -> bool -> contact
+val set_alias : contact -> string option -> contact
 
 val reset : contact -> contact
 val clear_messages : contact -> contact
