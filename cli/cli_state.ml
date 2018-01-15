@@ -262,7 +262,7 @@ module Connect = struct
           (match config.Xconfig.authenticator with
            | `Trust_anchor x -> X509_lwt.authenticator (`Ca_file x)
            | `Fingerprint fp ->
-             let time = Unix.gettimeofday () in
+             let time = Ptime_clock.now () in
              let fp =
                Nocrypto.Uncommon.Cs.of_hex
                  (String.map (function ':' -> ' ' | x -> x) fp)

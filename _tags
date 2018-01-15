@@ -18,7 +18,7 @@ true : package(sexplib astring uchar)
 <cli/cli_client.ml>: package(otr erm_xmpp ptime ptime.clock.os)
 <cli/cli_input.ml>: package(erm_xmpp otr)
 <cli/cli_commands.ml>: package(hex otr erm_xmpp)
-<cli/cli_config.ml>: package(nocrypto otr tls.lwt x509)
+<cli/cli_config.ml>: package(nocrypto otr tls.lwt x509 ptime ptime.clock.os)
 <cli/cli_state.ml>: package(hex nocrypto erm_xmpp tls.lwt x509)
 
 <bin/jackline.{ml,byte,native}>: package(erm_xmpp hex lwt notty notty.lwt nocrypto otr sexplib tls tls.lwt ptime ptime.clock.os)

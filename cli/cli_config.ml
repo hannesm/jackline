@@ -207,7 +207,7 @@ let configure term () =
     ask above "CA file: " (fun x -> x) (fun x -> if Sys.file_exists x then `Ok x else `Invalid) term >>= fun trust_anchor ->
     Lwt_unix.access trust_anchor [ Unix.F_OK ; Unix.R_OK ] >>= fun () ->
     X509_lwt.certs_of_pem trust_anchor >>= fun tas ->
-    (match X509.Validation.valid_cas ~time:(Unix.time ()) tas with
+    (match X509.Validation.valid_cas ~time:(Ptime_clock.now ()) tas with
      | [] -> Lwt.fail (Invalid_argument "trust anchor file is empty!")
      | _ -> Lwt.return (`Trust_anchor trust_anchor))
   | Some fp -> Lwt.return (`Fingerprint fp) ) >>= fun authenticator ->
