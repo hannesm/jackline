@@ -39,6 +39,7 @@ let start_client cfgdir debug unicode fd_gui fd_nfy () =
   let term = Notty_lwt.Term.create ~mouse:false () in
 
   let tc = Unix.(tcgetattr stdin) in
+  let tcout = Unix.(tcgetattr stdout) in
   Unix.(tcsetattr stdin TCSANOW { tc with c_isig = false ; c_ixon = false ; c_ixoff = false }) ;
 
   Persistency.load_dsa cfgdir >>= fun dsa ->
@@ -144,6 +145,8 @@ let start_client cfgdir debug unicode fd_gui fd_nfy () =
 
   Lwt_mvar.put state.Cli_state.state_mvar Cli_state.Quit >>= fun () ->
 
+  Unix.tcsetattr Unix.stdin Unix.TCSANOW tc ;
+  Unix.tcsetattr Unix.stdout Unix.TCSANOW tcout ;
   (* cancel history dumper *)
   Lwt_engine.stop_event hist_dumper ;
   (* store histories a last time *)
