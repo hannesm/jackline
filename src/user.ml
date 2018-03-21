@@ -557,6 +557,9 @@ let t_of_sexp t version =
   | Sexp.List l ->
     (match
        List.fold_left (fun (name, jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config) v -> match v with
+           | Sexp.List [ Sexp.Atom "alias" ; _ ] ->
+             (* ignore for now until the PR is settled *)
+             (name, jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config)
            | Sexp.List [ Sexp.Atom "name" ; nam ] ->
              assert (name = None);
              let name = match version with
