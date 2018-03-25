@@ -504,7 +504,7 @@ let verification_status_of_sexp = function
   | Sexp.List [ Sexp.Atom "Verified" ; vs ] ->
      let vs = list_of_sexp (pair_of_sexp verify_of_sexp date_of_sexp) vs in
      `Verified vs
-  | _ -> assert false
+  | _ -> `Unverified
 
 
 let sexp_of_verification_status = function
@@ -533,7 +533,7 @@ let fingerprint_of_sexp = function
                | Sexp.List [ Sexp.Atom "last" ; d ] ->
                   let last = date_of_sexp d in
                   (data, verified, resources, session_count, first, Some last)
-               | _ -> assert false)
+               | _ -> (data, verified, resources, session_count, first, last))
                (None, None, None, None, None, None) l
       with
       | Some data, Some verified, Some resources, Some session_count, Some first, Some last ->
@@ -557,9 +557,6 @@ let t_of_sexp t version =
   | Sexp.List l ->
     (match
        List.fold_left (fun (name, jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config) v -> match v with
-           | Sexp.List [ Sexp.Atom "alias" ; _ ] ->
-             (* ignore for now until the PR is settled *)
-             (name, jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config)
            | Sexp.List [ Sexp.Atom "name" ; nam ] ->
              assert (name = None);
              let name = match version with
@@ -601,7 +598,7 @@ let t_of_sexp t version =
              assert (otr_config = None);
              let otr_config = option_of_sexp Otr.State.config_of_sexp cfg in
              (name, jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config)
-           | _ -> assert false)
+           | _ -> (name, jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config))
          (None, None, None, None, None, None, None, None) l
      with
      | Some name, Some jid, Some groups, Some preserve_messages, Some properties, Some subscription, Some otr_fingerprints, otr_custom_config ->

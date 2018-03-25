@@ -122,7 +122,7 @@ let t_of_sexp dsa t =
           | Sexp.List [ Sexp.Atom "log_top" ; c ] ->
             let log_top = bool_of_sexp c in
             (ver, jid, prio, host, port, pass, auth, cert, notification, log_top)
-          | _ -> assert false)
+          | _ -> (ver, jid, prio, host, port, pass, auth, cert, notification, log_top))
         (None, None, None, None, None, None, None, None, None, false) l
      with
      | Some version, Some jid, Some priority, Some hostname, Some port, password, Some authenticator, certificate_hostname, notification_callback, log_top ->

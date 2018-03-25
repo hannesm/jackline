@@ -198,9 +198,6 @@ let t_of_sexp t _version =
   | Sexp.List l ->
     (match
        List.fold_left (fun (room_jid, my_nick, preserve_messages, autojoin, password) v -> match v with
-           | Sexp.List [ Sexp.Atom "alias" ; _ ] ->
-             (* ignore for now until the PR is settled *)
-             (room_jid, my_nick, preserve_messages, autojoin, password)
            | Sexp.List [ Sexp.Atom "room_jid" ; jabberid ] ->
              assert (room_jid = None);
              let room_jid = Xjid.bare_jid_of_sexp jabberid in
@@ -220,7 +217,7 @@ let t_of_sexp t _version =
              assert (password = None) ;
              let pw = option_of_sexp string_of_sexp pw in
              (room_jid, my_nick, preserve_messages, autojoin, pw)
-           | _ -> assert false)
+           | _ -> (room_jid, my_nick, preserve_messages, autojoin, password))
          (None, None, None, None, None) l
      with
      | Some room_jid, Some my_nick, Some preserve_messages, Some autojoin, password ->
