@@ -6,6 +6,7 @@ env:
   global:
     - PACKAGE="jackline"
     - EXTRA_REMOTES="https://github.com/hannesm/xmpp-opam.git"
+    - TESTS=false
 matrix:
   include:
   - os: linux
