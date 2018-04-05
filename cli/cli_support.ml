@@ -133,7 +133,6 @@ let split_unicode strip len a str =
   else
     words strip a len str
 
-(* XXX: may not terminate? *)
 let rec split_ascii strip len str acc =
   let open Astring.String in
   if length str <= len then
@@ -141,7 +140,7 @@ let rec split_ascii strip len str acc =
   else
     let l, r =
       match find ~rev:true ~start:len ((=) ' ') str with
-      | None -> with_range ~len str, with_range ~first:len str
+      | None | Some 0 -> with_range ~len str, with_range ~first:len str
       | Some idx ->
         let first = if strip then succ idx else idx in
         with_range ~len:idx str, with_range ~first str
