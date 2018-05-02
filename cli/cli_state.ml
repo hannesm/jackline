@@ -305,10 +305,14 @@ module Connect = struct
       Lwt_mvar.take mvar >>= function
         | Cancel -> reconnect_loop None presence
         | Connect user_data ->
-           connecting := true ;
-           connect user_data presence >>= fun () ->
-           connecting := false ;
-           reconnect_loop None presence
+          (if not !connecting then begin
+              connecting := true ;
+              connect user_data presence >>= fun () ->
+              connecting := false ;
+              Lwt.return_unit
+            end else
+             Lwt.return_unit) >>= fun () ->
+          reconnect_loop None presence
         | Success user_data ->
            Lwt_mvar.put state_mvar Connected >>= fun () ->
            reconnect_loop (Some user_data) presence
@@ -317,9 +321,13 @@ module Connect = struct
         | Reconnect ->
            match !xmpp_session, user_data with
            | None, Some u ->
-              connecting := true ;
-              connect u presence >>= fun () ->
-              connecting := false ;
+             (if not !connecting then begin
+                 connecting := true ;
+                 connect u presence >>= fun () ->
+                 connecting := false ;
+                 Lwt.return_unit
+               end else
+                 Lwt.return_unit) >>= fun () ->
               reconnect_loop (Some u) presence
            | _, u -> reconnect_loop u presence
     in
