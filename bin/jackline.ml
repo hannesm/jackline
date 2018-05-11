@@ -90,12 +90,15 @@ let start_client cfgdir debug unicode fd_gui fd_nfy () =
     Contact.replace_user users u
   in
 
-  (if debug then
-     Persistency.open_append (Unix.getenv "PWD") "out.txt" >|= fun fd ->
+  (match debug with
+   | None -> Lwt.return (fun () -> Lwt.return_unit)
+   | Some filename ->
+     let file = if String.equal filename "true" then "out.txt" else filename in
+     (* I used to use getenv "PWD", but this breaks on (at least) ksh *)
+     let dir, file = Filename.(dirname file, basename file) in
+     Persistency.open_append dir file >|= fun fd ->
      Xmpp_connection.debug_out := Some fd ;
-     (fun () -> Lwt_unix.close fd)
-   else
-     Lwt.return (fun () -> Lwt.return_unit)) >>= fun closing ->
+     (fun () -> Lwt_unix.close fd)) >>= fun closing ->
 
   let ui_mvar = Lwt_mvar.create_empty () in
 
@@ -150,7 +153,7 @@ let start_client cfgdir debug unicode fd_gui fd_nfy () =
   Persistency.dump_histories cfgdir users
 
 let config_dir = ref ""
-let debug = ref false
+let debug = ref None
 let fd_gui = ref None
 let fd_nfy = ref None
 let ascii = ref false
@@ -174,7 +177,7 @@ let usage = "usage " ^ Sys.argv.(0)
 
 let arglist = [
   ("-f", Arg.String (fun d -> config_dir := d), "configuration directory (defaults to ~/.config/ocaml-xmpp-client/)") ;
-  ("-d", Arg.Bool (fun d -> debug := d), "log to out.txt in current working directory") ;
+  ("-d", Arg.String (fun d -> debug := Some d), "debug log (either filename or out.txt)") ;
   ("-a", Arg.Bool (fun a -> ascii := a), "ASCII only output") ;
   ("--fd-gui", Arg.String (fun fd -> fd_gui := Some fd), "File descriptor to receive GUI focus updates on.") ;
   ("--fd-nfy", Arg.String (fun fd -> fd_nfy := Some fd), "File descriptor to send notification updates on.")

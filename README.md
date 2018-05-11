@@ -101,7 +101,7 @@ This will produce `_build/bin/jackline.native`.
 Read the `jackline --help` output:
 ```
   -f configuration directory (defaults to ~/.config/ocaml-xmpp-client/)
-  -d log to out.txt in current working directory
+  -d debug log (either filename or out.txt)
   -a ASCII only output
   --fd-gui File descriptor to receive GUI focus updates on.
   --fd-nfy File descriptor to send notification updates on.
