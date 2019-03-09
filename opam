@@ -1,7 +1,7 @@
-opam-version: "1.2"
+opam-version: "2.0"
 name:         "jackline"
 homepage:     "https://github.com/hannesm/jackline"
-dev-repo:     "https://github.com/hannesm/jackline.git"
+dev-repo:     "git+https://github.com/hannesm/jackline.git"
 bug-reports:  "https://github.com/hannesm/jackline/issues"
 author:       ["Hannes Mehnert <hannes@mehnert.org>"]
 maintainer:   ["Hannes Mehnert <hannes@mehnert.org>"]
@@ -13,6 +13,7 @@ build: [
 ]
 
 depends: [
+  "ocaml" {>= "4.03.0"}
   "ocamlfind" {build}
   "ocamlbuild" {build}
   "ppx_sexp_conv" {build}
@@ -25,12 +26,12 @@ depends: [
   "otr" {>= "0.2.1"}
   "astring"
   "ptime" {>= "0.8.0"}
-  "notty" {>= "0.2.0"}
+  "notty" {>= "0.2.2"}
   "sexplib"
   "hex"
   "uchar"
+  "cstruct-lwt"
   "uucp" {>= "2.0.0"}
   "uuseg" {>= "1.0.0"}
   "uutf" {>= "1.0.0"}
 ]
-available: [ ocaml-version >= "4.03.0" ]

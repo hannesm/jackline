@@ -68,20 +68,19 @@ but I've some [work-in-progress](https://github.com/hannesm/conex).
 Be aware that this is unreleased software.  Bug reports are welcome
 (pull requests as well).
 
-Get OCaml (>= 4.03.0), get opam (1.2.2),
-[aspcud](http://www.cs.uni-potsdam.de/wv/aspcud/) and
-[gmp](http://gmplib.org/) are required as well.
-If you have an older OCaml compiler, run `opam switch 4.04.2` and follow instructions.
-
-In case you have an old opam (1.2.0), you need to `opam pin add cstruct 2.4.1`.
+Get OCaml (>= 4.06.0), get opam (>= 2.0.0),
+[gmp](http://gmplib.org/) is required as well.
+If you have an older OCaml compiler, run `opam switch 4.07.1` and follow instructions.
 
 Run the following commands:
-- `opam repo add xmpp-dev https://github.com/hannesm/xmpp-opam.git`
+- `opam repo add jackline-opam https://github.com/hannesm/jackline-opam.git`
 - `opam update`
 - `opam install jackline`
 
+You can enable signature verification (using [conex](https://github.com/hannesm/conex)) for that repository by following the steps in [the README](https://github.com/hannesm/jackline-opam).
+
 Now you should have a `~/.opam/system/bin/jackline` (or
-`~/.opam/4.04.2/bin/jackline`), which should be in your `PATH` (if you
+`~/.opam/4.07.1/bin/jackline`), which should be in your `PATH` (if you
 executed ``eval `opam config env` ``).
 
 To update, simply run `opam update` followed by `opam upgrade`.  This
