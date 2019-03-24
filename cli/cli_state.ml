@@ -93,9 +93,9 @@ let maybe_clear state =
     Lwt.async (fun () -> Lwt_mvar.put newstate.state_mvar Clear) ;
   newstate
 
-let selflog mvar from message =
+let selflog mvar ?(kind=`Info) from message =
   let c s =
-    add_status ~kind:`Info s (`Local ((`Full s.config.Xconfig.jid), from)) message ;
+    add_status ~kind s (`Local ((`Full s.config.Xconfig.jid), from)) message ;
     Lwt.return (`Ok s)
   in
   Lwt_mvar.put mvar c
@@ -236,7 +236,7 @@ module Connect = struct
     Lwt.async (fun () ->
         let out = match hostname with None -> domain | Some x -> x in
         selflog ui_mvar "resolving" out) ;
-    Xmpp_callbacks.resolve hostname port domain >|= fun sa ->
+    Xmpp_callbacks.resolve ~selflog:(selflog ui_mvar) hostname port domain >|= fun sa ->
     report sa ;
     sa
 
