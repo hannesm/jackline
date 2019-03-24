@@ -12,3 +12,4 @@ PKG notty notty.lwt
 PKG ptime ptime.clock.os
 PKG ppx_sexp_conv
 PKG astring
+PKG dns-client.lwt
