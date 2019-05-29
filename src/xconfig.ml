@@ -20,6 +20,7 @@ type t = {
   certificate_hostname : string option ;
   notification_callback : string option ;
   log_top : bool ;
+  muc_max_stanzas : int option ;
 }
 
 let current_version = 3
@@ -49,11 +50,11 @@ let t_of_sexp dsa t =
   match t with
   | Sexp.List l ->
     (match
-      List.fold_left (fun (ver, jid, prio, host, port, pass, auth, cert, notification, log_top) -> function
+      List.fold_left (fun (ver, jid, prio, host, port, pass, auth, cert, notification, log_top, muc_max_stanzas) -> function
           | Sexp.List [ Sexp.Atom "version" ; v ] ->
             assert (ver = None) ;
             let version = int_of_sexp v in
-            (Some version, jid, prio, host, port, pass, auth, cert, notification, log_top)
+            (Some version, jid, prio, host, port, pass, auth, cert, notification, log_top, muc_max_stanzas)
           | Sexp.List [ Sexp.Atom "jid" ; Sexp.Atom v ] ->
             assert (jid = None) ;
             let jid =
@@ -61,16 +62,16 @@ let t_of_sexp dsa t =
               | None -> raise (Invalid_argument "parse error in jid")
               | Some x -> x
             in
-            (ver, Some jid, prio, host, port, pass, auth, cert, notification, log_top)
+            (ver, Some jid, prio, host, port, pass, auth, cert, notification, log_top, muc_max_stanzas)
           | Sexp.List [ Sexp.Atom "priority" ; p ] ->
             assert (prio = None) ;
             let prio = option_of_sexp int_of_sexp p
             in
-            (ver, jid, Some prio, host, port, pass, auth, cert, notification, log_top)
+            (ver, jid, Some prio, host, port, pass, auth, cert, notification, log_top, muc_max_stanzas)
           | Sexp.List [ Sexp.Atom "hostname" ; h ] ->
             assert (host = None) ;
             let host = option_of_sexp string_of_sexp h in
-            (ver, jid, prio, Some host, port, pass, auth, cert, notification, log_top)
+            (ver, jid, prio, Some host, port, pass, auth, cert, notification, log_top, muc_max_stanzas)
           | Sexp.List [ Sexp.Atom "port" ; p ] ->
             assert (port = None) ;
             let port =
@@ -80,59 +81,63 @@ let t_of_sexp dsa t =
                 if p = 5222 then None else Some p
               | _ -> option_of_sexp int_of_sexp p
             in
-            (ver, jid, prio, host, Some port, pass, auth, cert, notification, log_top)
+            (ver, jid, prio, host, Some port, pass, auth, cert, notification, log_top, muc_max_stanzas)
           | Sexp.List [ Sexp.Atom "password" ; password ] ->
             assert (pass = None) ;
             let pass = match ver with
               | Some x when x < 3 -> string_of_sexp password
               | _ -> raise (Invalid_argument "password stored in V3+ file")
             in
-            (ver, jid, prio, host, port, Some pass, auth, cert, notification, log_top)
+            (ver, jid, prio, host, port, Some pass, auth, cert, notification, log_top, muc_max_stanzas)
           | Sexp.List [ Sexp.Atom "trust_anchor" ; trust_anchor ] ->
             assert (auth = None) ;
             (match ver with
              | Some 0 ->
                let auth = Some (`Trust_anchor (string_of_sexp trust_anchor)) in
-               (ver, jid, prio, host, port, pass, auth, cert, notification, log_top)
+               (ver, jid, prio, host, port, pass, auth, cert, notification, log_top, muc_max_stanzas)
              | Some 1 -> ( match option_of_sexp string_of_sexp trust_anchor with
-                 | None -> (ver, jid, prio, host, port, pass, auth, cert, notification, log_top)
-                 | Some x -> (ver, jid, prio, host, port, pass, Some (`Trust_anchor x), cert, notification, log_top) )
+                 | None -> (ver, jid, prio, host, port, pass, auth, cert, notification, log_top, muc_max_stanzas)
+                 | Some x -> (ver, jid, prio, host, port, pass, Some (`Trust_anchor x), cert, notification, log_top, muc_max_stanzas) )
              | _ -> raise (Invalid_argument "unexpected element: trust_anchor") )
           | Sexp.List [ Sexp.Atom "tls_fingerprint" ; tls_fp ] ->
             assert (auth = None) ;
             ( match ver with
               | Some 1 ->
                 ( match option_of_sexp string_of_sexp tls_fp with
-                  | None -> (ver, jid, prio, host, port, pass, auth, cert, notification, log_top)
-                  | Some x -> (ver, jid, prio, host, port, pass, Some (`Fingerprint x), cert, notification, log_top) )
+                  | None -> (ver, jid, prio, host, port, pass, auth, cert, notification, log_top, muc_max_stanzas)
+                  | Some x -> (ver, jid, prio, host, port, pass, Some (`Fingerprint x), cert, notification, log_top, muc_max_stanzas) )
               | _ -> raise (Invalid_argument "unexpected element: tls_fingerprint") )
           | Sexp.List [ Sexp.Atom "authenticator" ; authenticator ] ->
             assert (auth = None) ;
-            (ver, jid, prio, host, port, pass, Some (auth_of_sexp authenticator), cert, notification, log_top)
+            (ver, jid, prio, host, port, pass, Some (auth_of_sexp authenticator), cert, notification, log_top, muc_max_stanzas)
           | Sexp.List [ Sexp.Atom "otr_config" ; _ ] ->
-            (ver, jid, prio, host, port, pass, auth, cert, notification, log_top)
+            (ver, jid, prio, host, port, pass, auth, cert, notification, log_top, muc_max_stanzas)
           | Sexp.List [ Sexp.Atom "certificate_hostname" ; c ] ->
             assert (cert = None) ;
             let cert = option_of_sexp string_of_sexp c in
-            (ver, jid, prio, host, port, pass, auth, cert, notification, log_top)
+            (ver, jid, prio, host, port, pass, auth, cert, notification, log_top, muc_max_stanzas)
           | Sexp.List [ Sexp.Atom "notification_callback" ; c ] ->
             assert (notification = None) ;
             let notification = option_of_sexp string_of_sexp c in
-            (ver, jid, prio, host, port, pass, auth, cert, notification, log_top)
+            (ver, jid, prio, host, port, pass, auth, cert, notification, log_top, muc_max_stanzas)
           | Sexp.List [ Sexp.Atom "log_top" ; c ] ->
             let log_top = bool_of_sexp c in
-            (ver, jid, prio, host, port, pass, auth, cert, notification, log_top)
-          | _ -> (ver, jid, prio, host, port, pass, auth, cert, notification, log_top))
-        (None, None, None, None, None, None, None, None, None, false) l
+            (ver, jid, prio, host, port, pass, auth, cert, notification, log_top, muc_max_stanzas)
+          | Sexp.List [ Sexp.Atom "muc_max_stanzas" ; p ] ->
+            assert (muc_max_stanzas = None) ;
+            let mms = option_of_sexp int_of_sexp p in
+            (ver, jid, prio, host, port, pass, auth, cert, notification, log_top, mms)
+          | _ -> (ver, jid, prio, host, port, pass, auth, cert, notification, log_top, muc_max_stanzas))
+        (None, None, None, None, None, None, None, None, None, false, None) l
      with
-     | Some version, Some jid, Some priority, Some hostname, Some port, password, Some authenticator, certificate_hostname, notification_callback, log_top ->
-       { version ; jid ; priority ; hostname ; port ; password ; authenticator ; otr_config ; dsa ; certificate_hostname ; notification_callback ; log_top }
-     | Some version, Some jid, None, Some hostname, Some port, password, Some authenticator, certificate_hostname, notification_callback, log_top ->
-       { version ; jid ; priority = None ; hostname ; port ; password ; authenticator ; otr_config ; dsa ; certificate_hostname ; notification_callback ; log_top }
-     | Some version, Some jid, Some priority, None, Some port, password, Some authenticator, certificate_hostname, notification_callback, log_top ->
-       { version ; jid ; priority ; hostname = None ; port ; password ; authenticator ; otr_config ; dsa ; certificate_hostname ; notification_callback ; log_top }
-     | Some version, Some jid, None, None, Some port, password, Some authenticator, certificate_hostname, notification_callback, log_top ->
-       { version ; jid ; priority = None ; hostname = None ; port ; password ; authenticator ; otr_config ; dsa ; certificate_hostname ; notification_callback ; log_top }
+     | Some version, Some jid, Some priority, Some hostname, Some port, password, Some authenticator, certificate_hostname, notification_callback, log_top, muc_max_stanzas ->
+       { version ; jid ; priority ; hostname ; port ; password ; authenticator ; otr_config ; dsa ; certificate_hostname ; notification_callback ; log_top ; muc_max_stanzas }
+     | Some version, Some jid, None, Some hostname, Some port, password, Some authenticator, certificate_hostname, notification_callback, log_top, muc_max_stanzas ->
+       { version ; jid ; priority = None ; hostname ; port ; password ; authenticator ; otr_config ; dsa ; certificate_hostname ; notification_callback ; log_top ; muc_max_stanzas }
+     | Some version, Some jid, Some priority, None, Some port, password, Some authenticator, certificate_hostname, notification_callback, log_top, muc_max_stanzas ->
+       { version ; jid ; priority ; hostname = None ; port ; password ; authenticator ; otr_config ; dsa ; certificate_hostname ; notification_callback ; log_top ; muc_max_stanzas }
+     | Some version, Some jid, None, None, Some port, password, Some authenticator, certificate_hostname, notification_callback, log_top, muc_max_stanzas ->
+       { version ; jid ; priority = None ; hostname = None ; port ; password ; authenticator ; otr_config ; dsa ; certificate_hostname ; notification_callback ; log_top ; muc_max_stanzas }
      | _ -> raise (Invalid_argument "broken config") )
   | _ -> raise (Invalid_argument "broken config")
 
@@ -151,6 +156,7 @@ let sexp_of_t t =
     "certificate_hostname" , sexp_of_option sexp_of_string t.certificate_hostname ;
     "notification_callback", sexp_of_option sexp_of_string t.notification_callback ;
     "log_top"              , sexp_of_bool t.log_top ;
+    "muc_max_stanzas"      , sexp_of_option sexp_of_int t.muc_max_stanzas ;
   ]
 
 let load_config dsa bytes =

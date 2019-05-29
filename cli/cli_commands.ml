@@ -1010,11 +1010,11 @@ let adjust_otr_policy default_cfg cfg contact data err =
   with
     _ -> err "/otrpolicy: unable to parse argument"
 
-let handle_join nick r =
+let handle_join ?maxstanzas nick r =
   let join ?password jid my_nick =
     let clos state s =
       let join r =
-        Xmpp_callbacks.Xep_muc.enter_room s ~nick:my_nick ?password (Xjid.jid_to_xmpp_jid (`Bare jid)) >|= fun () ->
+        Xmpp_callbacks.Xep_muc.enter_room s ?maxstanzas ~nick:my_nick ?password (Xjid.jid_to_xmpp_jid (`Bare jid)) >|= fun () ->
         Contact.replace_room state.contacts r ;
         `Ok state
       in
@@ -1234,13 +1234,17 @@ let exec input state contact isself p =
 
         (* join *)
         | ("join", Some a), Some _ ->
-          let my_nick = fst (fst state.config.Xconfig.jid) in
-          handle_join my_nick a
+          let my_nick = fst (fst state.config.Xconfig.jid)
+          and maxstanzas = state.config.Xconfig.muc_max_stanzas
+          in
+          handle_join ?maxstanzas my_nick a
         | ("join", None), Some _ ->
           (match contact with
            | `Room r ->
-             let my_nick = r.Muc.my_nick in
-             handle_join my_nick (Xjid.bare_jid_to_string r.Muc.room_jid)
+             let my_nick = r.Muc.my_nick
+             and maxstanzas = state.config.Xconfig.muc_max_stanzas
+             in
+             handle_join ?maxstanzas my_nick (Xjid.bare_jid_to_string r.Muc.room_jid)
            | _ -> (["/join: active contact is not a room"], None, None))
 
         | ("leave", reason), Some _ -> handle_leave contact reason

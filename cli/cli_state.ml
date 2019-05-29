@@ -294,8 +294,9 @@ module Connect = struct
                      let nick = r.Muc.my_nick
                      and jid = Xjid.jid_to_xmpp_jid (`Bare r.Muc.room_jid)
                      and password = r.Muc.password
+                     and maxstanzas = config.Xconfig.muc_max_stanzas
                      in
-                     Xmpp_callbacks.Xep_muc.enter_room session ?password ~nick jid) auto_rooms) >|= fun session ->
+                     Xmpp_callbacks.Xep_muc.enter_room session ?maxstanzas ?password ~nick jid) auto_rooms) >|= fun session ->
             xmpp_session := Some session ;
             Lwt.async (fun () -> Xmpp_callbacks.parse_loop session))
             (fun exn -> Lwt_unix.close socket >>= fun () -> failure exn))

@@ -321,4 +321,5 @@ let configure term () =
       certificate_hostname ;
       notification_callback ;
       log_top ;
+      muc_max_stanzas = None ;
     })
