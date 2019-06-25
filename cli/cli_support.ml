@@ -244,7 +244,14 @@ let readline_input : [ `Key of Notty.Unescape.key
         | [] -> ([], post)
         | hd::tl -> (List.rev tl, hd :: post))
   | `Key (`ASCII chr, []), _ ->
-    `Ok (fun (pre, post) -> pre @ [Notty.Unescape.uchar (`ASCII chr)], post)
+    `Ok (fun (pre, post) ->
+        let ch = Notty.Unescape.uchar (`ASCII chr) in
+        if `Cc = Uucp.Gc.general_category ch
+        then (pre @ [Uchar.of_int 0xFFFD], post)
+        else (pre @ [ch], post))
+  | `Key (`Uchar chr, []), _ when `Cc = Uucp.Gc.general_category chr ->
+    (* control characters get replaced with the replacement character: *)
+    `Ok (fun (pre, post) -> pre @ [Uchar.of_int 0xFFFD], post)
   | `Key (`Uchar chr, []), _ -> `Ok (fun (pre, post) -> pre @ [chr], post)
   | (`Key _ | `Resize _ | `Mouse _) as k, _  -> `Unhandled k
 
