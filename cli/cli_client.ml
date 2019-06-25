@@ -273,13 +273,20 @@ let render_state (width, height) state =
     let input, cursorc =
       let pre, post = state.input in
 
-      let iinp =
-        let inp = Array.of_list pre in
-        I.uchars A.empty inp
-      and iinp2 =
-        let inp2 = Array.of_list post in
-        I.uchars A.empty inp2
+      let split_lines lines : Notty.image =
+        let line_of_list lst img =
+          Notty.Infix.(I.uchars A.empty (Array.of_list lst) <-> img) in
+        List.fold_right
+          (fun ch (line_acc, acc: Uchar.t list * Notty.image) ->
+             if Uchar.(equal (of_char '\n')) ch
+             then [], line_of_list line_acc acc
+             else ch::line_acc, acc)
+          (lines:Uchar.t list) ([], I.empty)
+        |> function | [], acc -> acc
+                    | last, img -> line_of_list last img
       in
+      let iinp = split_lines pre
+      and iinp2 = split_lines post in
       let r = match post with
         | [] ->
           let input = char_list_to_str pre in
