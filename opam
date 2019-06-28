@@ -13,7 +13,7 @@ build: [
 ]
 
 depends: [
-  "ocaml" {>= "4.03.0"}
+  "ocaml" {>= "4.05.0"}
   "ocamlfind" {build}
   "ocamlbuild" {build}
   "ppx_sexp_conv" {build}
@@ -35,3 +35,23 @@ depends: [
   "uuseg" {>= "1.0.0"}
   "uutf" {>= "1.0.0"}
 ]
+synopsis: "Jackline - a minimalistic secure XMPP client"
+description: """
+Jackline uses several clean-slate libraries (OCaml-TLS, OCaml-OTR) and only has
+a minimal few features: no support for HTML markup, avatars, which music you're
+playing, timezone you're living in, ...
+
+Supported features:
+- single XMPP account
+- OTR (built-in and enabled by default)
+- strict TLS certificate verification
+- plain text (no HTML!)
+- [XEP-0184](http://xmpp.org/extensions/xep-0184.html) (Message Delivery Receipts)
+- _no_ import of OTR keys or configuration
+- _no_ plaintext connections to XMPP server
+
+Preserving three core properties:
+- any data written on disk (using lots of silly parens) by jackline will stay being readable by every future jackline version
+- once the initial configuration file (and private key and maybe password) is created, it will never be written to by jackline
+- jackline will never transmit any data or open a network connection unless initiated by you (this means no 'autoconnect on startup', or 'user is typing' indication sent).  There is an automated reconnect to the same server if the connection terminated.
+"""
