@@ -44,6 +44,8 @@ let _ =
     "quit" "/quit" "exits this client" (fun _ -> []) ;
   new_command
     "filter" "/filter [val]" "display only messages which contain val (empty string resets filter)" (fun _ -> []) ;
+  new_command
+    "ignore_presence" "/ignore_presence" "hide presence updates (join, away, etc)" (fun _ -> []) ;
 
   new_command
     "logheight" "/logheight [number]" "adjusts height of log to n" (fun _ -> []) ;
@@ -1144,6 +1146,8 @@ let exec input state contact isself p =
     | ("disconnect", _), None   -> err "/disconnect: not connected"
 
     | ("filter", filter), _ -> ok { state with filter }
+
+    | ("ignore_presence", _), _ -> ok { state with ignore_presence = not state.ignore_presence }
 
     (* need connection *)
     | (x, _), None when List.mem x online -> err ("/" ^ x ^ ": not connected")
