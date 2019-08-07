@@ -245,4 +245,4 @@ Available colours ([notty documentation](https://pqwy.github.io/notty/Notty.A.ht
 - Support? -- join us at jackline@conference.jabber.ccc.de
 - The interface is inspired by [mcabber](http://mcabber.com)
 - The installation failed on OpenBSD - try with a larger stack size: `ulimit -s 8192` should be good
-- How do I increase the multi-user chat history? - insert `(muc_max_stanzas (500)` in your `config.sexp` (where 500 is the amount of messages to request from the server)
+- How do I increase the multi-user chat history? - insert `(muc_max_stanzas (500))` in your `config.sexp` (where 500 is the amount of messages to request from the server)
