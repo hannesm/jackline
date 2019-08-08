@@ -73,11 +73,9 @@ Get OCaml (>= 4.05.0), get opam (>= 2.0.0),
 If you have an older OCaml compiler, run `opam switch 4.07.1` and follow instructions.
 
 Run the following commands:
-- `opam repo add jackline-opam https://github.com/hannesm/jackline-opam.git`
+- `opam repo add xmpp-opam git+https://github.com/hannesm/xmpp-opam.git
 - `opam update`
 - `opam install jackline`
-
-You can enable signature verification (using [conex](https://github.com/hannesm/conex)) for that repository by following the steps in [the README](https://github.com/hannesm/jackline-opam).
 
 Now you should have a `~/.opam/system/bin/jackline` (or
 `~/.opam/4.07.1/bin/jackline`), which should be in your `PATH` (if you
@@ -94,6 +92,15 @@ you can compile jackline by running
   ocaml pkg/pkg.ml build
 ```
 This will produce `_build/bin/jackline.native`.
+
+### Signed opam packages
+
+This is work-in-progress and at the moment won't install the latest jackline version.
+
+An alternative which uses cryptographically signed packages with [conex](https://github.com/hannesm/conex) is to follow the steps in [the README](https://github.com/hannesm/jackline-opam) (at the moment, this won't install the latest version).
+- `opam repo add jackline-opam https://github.com/hannesm/jackline-opam.git`
+- `opam update
+- `opam install jackline`
 
 ### Configuration
 
