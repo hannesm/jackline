@@ -267,7 +267,7 @@ module Connect = struct
                Nocrypto.Uncommon.Cs.of_hex
                  (String.map (function ':' -> ' ' | x -> x) fp)
              in
-             let fingerprints = [(certname, fp)]
+             let fingerprints = [ Domain_name.of_string_exn certname, fp ]
              and hash = `SHA256
              in
              let auth = X509.Authenticator.server_cert_fingerprint ~time ~hash ~fingerprints in
