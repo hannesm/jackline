@@ -393,7 +393,7 @@ let resolve ~(selflog:?kind:User.chatkind -> string -> string -> unit Lwt.t) (ho
   let udns_getaddrinfo host : Lwt_unix.inet_addr option Lwt.t =
     match Domain_name.of_string host with
     | Result.Error _ -> Lwt.return None
-    | Ok host -> Udns_client_lwt.(
+    | Ok host -> Dns_client_lwt.(
         gethostbyname @@ create
           ~nameserver:(`UDP, (Unix.inet_addr_of_string "91.239.100.100", 53)) ()
       ) host >|= function Result.Error _ -> None |
