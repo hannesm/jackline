@@ -303,8 +303,14 @@ let render_state (width, height) state =
           | None -> (fun id -> id)
           | Some x -> List.filter (fun { User.message ; _ } -> Astring.String.is_infix ~affix:x message)
         in
+        let presence_filter =
+          if state.ignore_presence
+          then List.filter (function { User.kind = `Presence ; _ } -> false
+                                   | _ -> true)
+          else (fun id -> id)
+        in
         let data = Utils.take_rev max
-            (List.filter mfilter (filter (Contact.messages active)))
+            (List.filter mfilter (presence_filter (filter (Contact.messages active))))
         in
         let image = render_wrapped_list strip chat_width (List.map fmt data) in
         let bottom = state.scrollback * main_height in
