@@ -77,6 +77,8 @@ Run the following commands:
 - `opam update`
 - `opam install jackline`
 
+A cryptographically signed package (using [conex](https://github.com/hannesm/conex)) is available, you have to follow the steps in [the README](https://github.com/hannesm/jackline-opam).
+
 Now you should have a `~/.opam/system/bin/jackline` (or
 `~/.opam/4.07.1/bin/jackline`), which should be in your `PATH` (if you
 executed ``eval `opam config env` ``).
@@ -92,15 +94,6 @@ you can compile jackline by running
   ocaml pkg/pkg.ml build
 ```
 This will produce `_build/bin/jackline.native`.
-
-### Signed opam packages
-
-This is work-in-progress and at the moment won't install the latest jackline version.
-
-An alternative which uses cryptographically signed packages with [conex](https://github.com/hannesm/conex) is to follow the steps in [the README](https://github.com/hannesm/jackline-opam) (at the moment, this won't install the latest version).
-- `opam repo add jackline-opam https://github.com/hannesm/jackline-opam.git`
-- `opam update
-- `opam install jackline`
 
 ### Configuration
 
