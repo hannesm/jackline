@@ -13,7 +13,7 @@ build: [
 ]
 
 depends: [
-  "ocaml" {>= "4.05.0"}
+  "ocaml" {>= "4.07.0"}
   "ocamlfind" {build}
   "ocamlbuild" {build}
   "ppx_sexp_conv" {build}
@@ -27,6 +27,7 @@ depends: [
   "otr" {>= "0.2.1"}
   "astring"
   "ptime" {>= "0.8.0"}
+  "mtime"
   "notty" {>= "0.2.2"}
   "sexplib"
   "hex"
@@ -35,6 +36,7 @@ depends: [
   "uucp" {>= "2.0.0"}
   "uuseg" {>= "1.0.0"}
   "uutf" {>= "1.0.0"}
+  "dns-client" { >= "4.2.0" }
 ]
 synopsis: "Jackline - a minimalistic secure XMPP client"
 description: """

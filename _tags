@@ -1,5 +1,5 @@
 true : color(always), bin_annot, principal, safe_string
-true : warn(+A-4-44-48-58)
+true : warn(+A-4-42-44-48-58)
 "src" : include
 "cli" : include
 
@@ -10,6 +10,7 @@ true : package(sexplib astring uchar ptime erm_xmpp lwt tls tls.lwt hex otr x509
 <src/persistency.ml>: package(lwt.unix nocrypto)
 <src/xjid.{ml,mli}>: package(ppx_sexp_conv)
 <src/user.{ml,mli}>: package(ppx_sexp_conv ptime.clock.os)
+<src/xmpp_callbacks.ml>: package(dns-client.lwt mtime.clock.os)
 
 <cli/*>: package(notty lwt)
 <cli/cli_support.ml>: package(uutf uucp uuseg)
@@ -17,4 +18,4 @@ true : package(sexplib astring uchar ptime erm_xmpp lwt tls tls.lwt hex otr x509
 <cli/cli_config.ml>: package(nocrypto ptime.clock.os)
 <cli/cli_state.ml>: package(nocrypto)
 
-<bin/jackline.{ml,byte,native}>: package(lwt.unix notty notty.lwt nocrypto sexplib ptime.clock.os)
+<bin/jackline.{ml,byte,native}>: package(lwt.unix notty notty.lwt nocrypto sexplib ptime.clock.os dns-client.lwt mtime.clock.os)

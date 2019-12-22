@@ -5,7 +5,7 @@ open Xmpp_connection
 module ID =
 struct
   type t = string
-  let compare = Pervasives.compare
+  let compare = String.compare
 end
 module IDCallback = Map.Make(ID)
 
@@ -140,8 +140,8 @@ let delayed_timestamp = function
   | None -> None
   | Some delay ->
     match Ptime.of_rfc3339 delay.delay_stamp with
-    | Result.Ok (time, _, _) -> Some time
-    | Result.Error _ -> None (* XXX: report properly *)
+    | Ok (time, _, _) -> Some time
+    | Error _ -> None (* XXX: report properly *)
 
 let receipt_id = function
   | Xml.Xmlelement ((ns_rec, "received"), attrs, _) when ns_rec = ns_receipts ->
@@ -383,35 +383,54 @@ let tls_epoch_to_line t =
         Ciphersuite.sexp_of_ciphersuite cipher ]))
   | `Error -> `Error "error while fetching TLS parameters"
 
-let resolve (hostname : string option) (port : int option) (jid_idn : string) =
-  (* this is a mess, only to resolve a hostname
-      - if an IP is provided, don't leak that to getaddrinfo
-      - Unix.getaddrinfo and Unix.inet_addr_of_string may throw -> need to catch exceptions
-      - Unix.getaddrinfo "xmpp-client" may not work (e.g. on some MacOSX versions), but Unix.getaddrinfo "" does
-      - TODO: if not available, use DNS SRV record of jid_idn
-      - TODO: use some result type here *)
-  let getaddrinfo host service =
+let resolve ~(selflog:?kind:User.chatkind -> string -> string -> unit Lwt.t) (hostname : string option) (port : int option) (jid_idn : string) =
+  (* use DNS SRV record *)
+  let udns_getaddrinfo host : Lwt_unix.inet_addr option Lwt.t =
+    match Domain_name.of_string host with
+    | Error _ -> Lwt.return None
+    | Ok host -> match Domain_name.host host with
+      | Error _ -> Lwt.return None
+      | Ok host ->
+        Dns_client_lwt.(
+          gethostbyname @@ create ~clock:Mtime_clock.now_ns
+            ~nameserver:(`UDP, (Unix.inet_addr_of_string "91.239.100.100", 53)) ()
+        ) host >|= function
+        | Result.Error _ -> None
+        | Ok ip -> Some (Ipaddr.V4.to_string ip |> Unix.inet_addr_of_string)
+  in
+  let lwt_getaddrinfo host : Lwt_unix.inet_addr option Lwt.t =
+    (* this is a mess, only to resolve a hostname
+       - if an IP is provided, don't leak that to getaddrinfo
+       - Unix.getaddrinfo and Unix.inet_addr_of_string may throw -> need to catch exceptions
+       - Unix.getaddrinfo "xmpp-client" may not work (e.g. on some MacOSX versions), but Unix.getaddrinfo "" does *)
+    Lwt.async (fun() ->
+        selflog ~kind:`Warning "connecting"
+          "DEPRECATION: You are using LD_PRELOAD, but since jackline's recent \
+           switch to the pure OCaml implementation for DNS resolution, \
+           LD_PRELOAD-based tools like 'torsocks' will not be able to \
+           intercept the getaddrinfo() library calls like they used to. For \
+           now we will detect the use of LD_PRELOAD and revert to the old \
+           method of using libc's resolver, but in the future this will change.") ;
     let open Lwt_unix in
-    Lwt.catch (fun () ->
-        getaddrinfo host service [AI_SOCKTYPE SOCK_STREAM ; AI_FAMILY PF_INET] >|= function
-        | hd::_ -> Some hd.ai_addr
-        | _ -> None)
+    Lwt.try_bind
+      (fun () -> getaddrinfo host "" [])
+      (function
+        | { ai_addr = ADDR_INET (addr,_) ; _ } :: _ -> Lwt.return (Some addr)
+        | _ -> Lwt.return None)
       (fun _ -> Lwt.return None)
   in
   let rec resolve ?(service = "xmpp-client") host =
-    getaddrinfo host service >>= function
+    (if Sys.getenv_opt "LD_PRELOAD" = None then
+       udns_getaddrinfo else lwt_getaddrinfo
+    ) host >>= function
     | None when service = "" -> Lwt.fail (Invalid_argument ("could not resolve hostname " ^ host))
-    | None -> resolve ~service:"" host
-    | Some (Unix.ADDR_INET (ip, _)) when service = "" -> Lwt.return (ip, 5222)
-    | Some (Unix.ADDR_INET (ip, port)) -> Lwt.return (ip, port)
-    | Some (Unix.ADDR_UNIX _) -> Lwt.fail (Invalid_argument "received unix address")
+    | None -> resolve ~service:"" host (* TODO when/how often do we want to retry? *)
+    | Some ip -> Lwt.return ip
   in
   (match hostname with
-   | Some x -> (try Lwt.return (Unix.inet_addr_of_string x, 5222) with _ -> resolve x)
-   | None -> resolve jid_idn) >>= fun res ->
-  match port, res with
-  | Some x, (ip, _) -> Lwt.return (Lwt_unix.ADDR_INET (ip, x))
-  | None, (ip, port) -> Lwt.return (Lwt_unix.ADDR_INET (ip, port))
+   | Some x -> (try Lwt.return (Unix.inet_addr_of_string x) with _ -> resolve x)
+   | None -> resolve jid_idn) >|= fun ip ->
+  Lwt_unix.ADDR_INET (ip, match port with Some x -> x | _ -> 5222)
 
 let connect socket_data myjid certname password presence authenticator user_data mvar =
   let module Socket_module =
