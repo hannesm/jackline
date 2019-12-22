@@ -1,5 +1,5 @@
 true : color(always), bin_annot, principal, safe_string
-true : warn(+A-4-44-48-58)
+true : warn(+A-4-42-44-48-58)
 "src" : include
 "cli" : include
 
