@@ -68,7 +68,7 @@ but I've some [work-in-progress](https://github.com/hannesm/conex).
 Be aware that this is unreleased software.  Bug reports are welcome
 (pull requests as well).
 
-Get OCaml (>= 4.05.0), get opam (>= 2.0.0),
+Get OCaml (>= 4.07.0), get opam (>= 2.0.0),
 [gmp](http://gmplib.org/) is required as well.
 If you have an older OCaml compiler, run `opam switch 4.07.1` and follow instructions.
 
