@@ -1,0 +1,13 @@
+#!/usr/bin/make -f
+
+DH_VERBOSE=1
+
+clean:
+	ocaml pkg/pkg.ml clean
+
+build:
+	ocaml pkg/pkg.ml build
+	mv _build/bin/jackline.native _build/bin/jackline
+
+%:
+	fakeroot dh $@

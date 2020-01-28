@@ -1,0 +1,6 @@
+jackline (0.0.1) unstable; urgency=medium
+
+  [ MAINTAINER ]
+  * debian package scaffolding
+
+ -- Your Name <user@localhost>  Sat, 01 Feb 2020 21:10:16 +0100

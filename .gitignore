@@ -5,3 +5,11 @@ _build/
 *.byte
 *.native
 *.install
+
+*~
+.*.swp
+
+debian/jackline.substvars
+debian/.debhelper
+debian/jackline/
+debian/files
