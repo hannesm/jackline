@@ -10,4 +10,4 @@ build:
 	mv _build/bin/jackline.native _build/bin/jackline
 
 %:
-	fakeroot dh $@
+	dh $@

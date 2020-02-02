@@ -1,13 +1,13 @@
 Source: jackline
 Maintainer: Robur <debian@robur.coop>
 Build-Depends: debhelper
+Rules-Requires-Root: no
 Section: ocaml
 Priority: optional
 Homepage: https://github.com/hannesm/jackline/
 Vcs-Git: https://github.com/hannesm/jackline.git
 Vcs-Browser: https://github.com/hannesm/jackline/
 Standards-Version: 4.1.0
-Description: WTF.
 
 Package: jackline
 Section: net
