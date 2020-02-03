@@ -260,19 +260,16 @@ module Connect = struct
             | None -> JID.to_idn (Xjid.jid_to_xmpp_jid (`Full config.Xconfig.jid))
             | Some x -> x
           in
-          (match config.Xconfig.authenticator with
-           | `Trust_anchor x -> X509_lwt.authenticator (`Ca_file x)
-           | `Fingerprint fp ->
-             let time = Ptime_clock.now () in
-             let fp =
-               Nocrypto.Uncommon.Cs.of_hex
-                 (String.map (function ':' -> ' ' | x -> x) fp)
-             in
-             let fingerprints = [ Domain_name.of_string_exn certname, fp ]
-             and hash = `SHA256
-             in
-             let auth = X509.Authenticator.server_cert_fingerprint ~time ~hash ~fingerprints in
-             Lwt.return auth) >>= fun authenticator ->
+          (let a =
+             match config.Xconfig.authenticator with
+             | `Trust_anchor x -> `Ca_file x
+             | `Fingerprint fp ->
+               let host =
+                 Domain_name.host_exn (Domain_name.of_string_exn certname)
+               in
+               `Hex_cert_fingerprints (`SHA256, [ host, fp ])
+           in
+           X509_lwt.authenticator a) >>= fun authenticator ->
           let kind, show = Xmpp_callbacks.presence_to_xmpp p in
           let socket = Lwt_unix.(socket PF_INET SOCK_STREAM 0) in
           Lwt.catch (fun () ->
