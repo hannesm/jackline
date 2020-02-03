@@ -232,6 +232,44 @@ Available colours ([notty documentation](https://pqwy.github.io/notty/Notty.A.ht
 - gray *n* (where `n >= 0 && n <= 23`,
 - rgb *r* *g* *b* (where `r >= 0 && r <= 5 && g >= 0 && g <= 5 && b >= 0 && b <= 5`)
 
+### Debian package
+
+To produce a debian package containing the `jackline` executable, you must install:
+
+```bash
+apt install --no-install-recommends git-buildpackage lintian
+```
+
+Then, to produce an unsigned package, stand in the root of the `jackline`
+working directory and execute:
+```bash
+make -C debian debian-test
+```
+
+To produce a signed package (which requires making a GPG signing key available
+to the debian tooling):
+```bash
+make -C debian debian-signed
+```
+The signed package will launch an editor for the `debian/changelog` file which
+keeps track of release versions. It will automatically bump the version number
+and commit this to the master branch, so this should be used by the debian
+package maintainer. The last few commits will automatically be added to the
+change log (prefixed with `*`); you can edit these as you want (remove/add/elaborate).
+Once you have produced a package you should push the revised changelog to the
+master branch.
+
+Packages will be produced in the parent directory of the working directory,
+so if you have `jackline` checked out as `/home/user/jackline` the packages
+will end up in `/home/user`.
+To list the package metadata: `dpkg --info ../jackline_1.2.3_amd64.deb`.
+To install it, you can use `sudo dpkg -i ../jackline_1.2.3_amd64.deb`
+
+To clean up the working directory:
+```bash
+make -C debian clean
+```
+
 ### FAQ
 
 - How do I update the fingerprint of the server certificate (getting authentication failure messages)? -- Currently you have to edit `config.sexp`:  find the `(Fingerprint XXX)` data, and replace XXX with the new fingerprint (`openssl s_client -connect SERVER:5222 -starttls xmpp | openssl x509 -fingerprint -sha256 -noout` might be useful (or [tlsclient](https://github.com/hannesm/tlsclient) using `tlsclient --starttls xmpp -z SERVER:5222`).
