@@ -1,0 +1,3 @@
+--tar-ignore=.git
+--tar-ignore=.gitignore
+--tar-ignore=debian/tmp-switch

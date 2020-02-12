@@ -1,0 +1,19 @@
+Source: jackline
+Maintainer: Robur Debian Packaging Team <debian@robur.coop>
+Build-Depends: debhelper-compat (= 12), opam, libgmp-dev
+Rules-Requires-Root: no
+Section: ocaml
+Priority: optional
+Homepage: https://github.com/hannesm/jackline/
+Vcs-Git: https://github.com/hannesm/jackline.git
+Vcs-Browser: https://github.com/hannesm/jackline/
+Standards-Version: 4.1.0
+
+Package: jackline
+Section: net
+Priority: optional
+Tag: implemented-in::ocaml, role::program
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: XMPP client written in OCaml.
+ Jackline is a minimalistic secure XMPP client written in OCaml.

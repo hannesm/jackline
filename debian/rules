@@ -1,0 +1,28 @@
+#!/usr/bin/make -f
+
+OPAM_SWITCH := tmp-switch
+OPAM_SWITCH_PATH := $(abspath .)/debian/$(OPAM_SWITCH)
+WITH_OPAM_SWITCH := opam exec --switch=$(OPAM_SWITCH_PATH) --set-switch
+XMPP_OPAM_REPO := git+https://github.com/hannesm/xmpp-opam.git
+
+export DH_OPTIONS = -Xdebian/$(OPAM_SWITCH) -v
+# NOTE that debian/source/options MUST contain
+#     --tar-ignore=debian/$(OPAM_SWITCH)
+
+.PHONY: x-prepare
+x-prepare:
+	opam init -a --bare --bypass-checks
+	opam switch create $(OPAM_SWITCH_PATH) 4.07.1
+	opam repo add --switch=$(OPAM_SWITCH_PATH) xmpp-opam $(XMPP_OPAM_REPO)
+	opam install --switch=$(OPAM_SWITCH_PATH) -y --deps-only .
+
+clean:
+	-$(WITH_OPAM_SWITCH) ocaml pkg/pkg.ml clean
+	dh clean
+
+build:
+	$(WITH_OPAM_SWITCH) ocaml pkg/pkg.ml build
+	mv _build/bin/jackline.native _build/bin/jackline
+
+%:
+	dh $@
