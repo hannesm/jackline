@@ -9,8 +9,16 @@ export DH_OPTIONS = -Xdebian/$(OPAM_SWITCH) -v
 # NOTE that debian/source/options MUST contain
 #     --tar-ignore=debian/$(OPAM_SWITCH)
 
+DCH_GIT_REVISION := $(shell git describe --always HEAD)
+DCH_VERSION := $(shell date +%Y%m%d)
+DCH_TIMESTAMP := $(shell date -R)
+
+debian/changelog: debian/changelog.in
+	sed -e 's/@@VERSION@@/0~$(DCH_VERSION)+g$(DCH_GIT_REVISION)/' \
+		-e 's/@@TIMESTAMP@@/$(DCH_TIMESTAMP)/' $< > $@
+
 .PHONY: x-prepare
-x-prepare:
+x-prepare: debian/changelog
 	opam init -a --bare --bypass-checks
 	opam switch create $(OPAM_SWITCH_PATH) 4.07.1
 	opam repo add --switch=$(OPAM_SWITCH_PATH) xmpp-opam $(XMPP_OPAM_REPO)

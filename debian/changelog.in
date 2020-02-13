@@ -1,0 +1,6 @@
+jackline (@@VERSION@@) unstable; urgency=medium
+
+  * Initial version of Debian packaging.
+  * For the Jackline change log, please see CHANGES.md.gz.
+
+ -- Robur Debian Packaging Team <debian@robur.coop>  @@TIMESTAMP@@
