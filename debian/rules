@@ -3,14 +3,31 @@
 # Work around Debian bug #908203 in Debian stable.
 export OPAMEXTERNALSOLVER = mccs
 
+OCAML_VERSION := 4.07.1
+OPAM_CONFIG := $(shell readlink -f $$HOME)/.opam/config
 OPAM_SWITCH := tmp-switch
 OPAM_SWITCH_PATH := $(abspath .)/debian/$(OPAM_SWITCH)
+OPAM_SWITCH_CONFIG := $(OPAM_SWITCH_PATH)/_opam/.opam-switch/switch-config
 WITH_OPAM_SWITCH := opam exec --switch=$(OPAM_SWITCH_PATH) --set-switch
 XMPP_OPAM_REPO := git+https://github.com/hannesm/xmpp-opam.git
 
 export DH_OPTIONS = -Xdebian/$(OPAM_SWITCH) -v
 # NOTE that debian/source/options MUST contain
 #     --tar-ignore=debian/$(OPAM_SWITCH)
+
+# If we are running in an environment where OPAM has not been initialised,
+# then do so.
+$(OPAM_CONFIG):
+	opam init -a --bare --bypass-checks
+
+# Create a temporary OPAM switch for building all of the package's OPAM
+# dependencies. This is deliberately only done once, and never cleaned up
+# automatically, as the 'clean' target will get run during a normal invocation
+# of 'debuild'. If you need to clean up the switch while developing the package
+# use 'opam switch remove' manually.
+$(OPAM_SWITCH_CONFIG): $(OPAM_CONFIG)
+	opam switch create $(OPAM_SWITCH_PATH) $(OCAML_VERSION)
+	opam repo add --switch=$(OPAM_SWITCH_PATH) xmpp-opam $(XMPP_OPAM_REPO)
 
 DCH_GIT_REVISION := $(shell git describe --always HEAD)
 DCH_VERSION := $(shell date +%Y%m%d)
@@ -20,18 +37,17 @@ debian/changelog: debian/changelog.in
 	sed -e 's/@@VERSION@@/0~$(DCH_VERSION)+g$(DCH_GIT_REVISION)/' \
 		-e 's/@@TIMESTAMP@@/$(DCH_TIMESTAMP)/' $< > $@
 
+# This target must be run manually (debian/rules x-prepare) before running
+# debuild or any other Debian tooling on the package directory.
 .PHONY: x-prepare
-x-prepare: debian/changelog
-	opam init -a --bare --bypass-checks
-	opam switch create $(OPAM_SWITCH_PATH) 4.07.1
-	opam repo add --switch=$(OPAM_SWITCH_PATH) xmpp-opam $(XMPP_OPAM_REPO)
-	opam install --switch=$(OPAM_SWITCH_PATH) -y --deps-only .
+x-prepare: debian/changelog $(OPAM_SWITCH_CONFIG)
 
 clean:
 	-$(WITH_OPAM_SWITCH) ocaml pkg/pkg.ml clean
 	dh clean
 
 build:
+	opam install --switch=$(OPAM_SWITCH_PATH) -y --deps-only .
 	$(WITH_OPAM_SWITCH) ocaml pkg/pkg.ml build
 	mv _build/bin/jackline.native _build/bin/jackline
 

@@ -1,3 +1,7 @@
 !jackline.install
+jackline/
+jackline.substvars
 tmp-switch/
 changelog
+.debhelper/
+files
