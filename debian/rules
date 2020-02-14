@@ -1,5 +1,8 @@
 #!/usr/bin/make -f
 
+# Work around Debian bug #908203 in Debian stable.
+export OPAMEXTERNALSOLVER = mccs
+
 OPAM_SWITCH := tmp-switch
 OPAM_SWITCH_PATH := $(abspath .)/debian/$(OPAM_SWITCH)
 WITH_OPAM_SWITCH := opam exec --switch=$(OPAM_SWITCH_PATH) --set-switch
