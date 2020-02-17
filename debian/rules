@@ -28,8 +28,10 @@ debian/changelog: debian/changelog.in
 
 # This target must be run manually ("debian/rules x-source") to generate the
 # Debian changelog and produce the Debian source package.
+# FIXME This needs to be run from a clean source tree, but can't use dh clean
+# FIXME since there is no debian/changelog. Maybe ignore _build/ to be safe?
 .PHONY: x-source
-x-source: clean debian/changelog
+x-source: debian/changelog
 	dpkg-source -b .
 
 clean:
