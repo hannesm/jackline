@@ -1,6 +1,6 @@
 Source: jackline
 Maintainer: Robur Debian Packaging Team <debian@robur.coop>
-Build-Depends: debhelper-compat (= 12), opam, mccs, libgmp-dev, git, wget, ca-certificates
+Build-Depends: debhelper (>= 11~), opam (>= 2.0.0), mccs, pkg-config, libgmp-dev
 Rules-Requires-Root: no
 Section: ocaml
 Priority: optional
