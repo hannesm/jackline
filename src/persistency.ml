@@ -200,9 +200,9 @@ let load_password cfgdir =
 let otr_dsa = "otr_dsa.sexp"
 
 let dump_dsa cfgdir dsa =
-  write cfgdir otr_dsa (Bytes.of_string (Sexp.to_string_hum (Nocrypto.Dsa.sexp_of_priv dsa)))
+  write cfgdir otr_dsa (Bytes.of_string (Sexp.to_string_hum (Mirage_crypto_pk.Dsa.sexp_of_priv dsa)))
 
 let load_dsa cfgdir =
   read cfgdir otr_dsa >|= function
   | None -> None
-  | Some x -> Some (Nocrypto.Dsa.priv_of_sexp (Sexp.of_string x))
+  | Some x -> Some (Mirage_crypto_pk.Dsa.priv_of_sexp (Sexp.of_string x))

@@ -300,7 +300,7 @@ let read_terminal term mvar input_mvar () =
                      in
                      let user = clear_input (active s) input in
                      let msg =
-                       try Some (Cstruct.to_string (Nocrypto.Uncommon.Cs.of_hex data)) with _ -> None
+                       try Some (Cstruct.to_string (Cstruct.of_hex data)) with _ -> None
                      in
                      let m, jid, kind = match user with
                        | `Room r -> msg, `Bare r.Muc.room_jid, Some Xmpp_callbacks.XMPPClient.Groupchat

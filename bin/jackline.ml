@@ -32,7 +32,7 @@ let start_client cfgdir debug unicode fd_gui fd_nfy () =
       | Tls_lwt.Tls_failure f -> Some ("TLS failure: " ^ Tls.Engine.string_of_failure f)
       | _ -> None) ;
 
-  Nocrypto_entropy_lwt.initialize () >>= fun () ->
+  Mirage_crypto_rng_unix.initialize ();
 
   Utils.unicode := unicode ;
 
