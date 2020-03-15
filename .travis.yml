@@ -9,11 +9,17 @@ env:
     - TESTS=false
 matrix:
   include:
+#  - os: linux
+#    env: OCAML_VERSION=4.07
+#  - os: linux
+#    env: OCAML_VERSION=4.08
+#  - os: osx
+#    env: OCAML_VERSION=4.08
   - os: linux
-    env: OCAML_VERSION=4.07
-  - os: linux
-    env: OCAML_VERSION=4.08
-  - os: osx
-    env: OCAML_VERSION=4.08
+    dist: bionic
+    before_install:
+      - sudo apt-add-repository -y ppa:avsm/ppa
+      - sudo apt-get -y install devscripts equivs lintian fakeroot
+    script: bash -ex .travis-build-deb.sh
 notifications:
   email: false
