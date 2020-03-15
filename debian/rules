@@ -18,7 +18,12 @@ ifneq ($(OPAM_DISABLE_SANDBOXING),)
 OPAM_INIT_ARGS := --disable-sandboxing
 endif
 
-DCH_GIT_REVISION := $(shell git describe --always HEAD)
+DCH_GIT_REVISION := $(shell test -d .git && git describe --always HEAD)
+# If we are not being run from a Git checkout, then we must be building a
+# binary package from an existing source package. In this case disable all
+# of the x-source related logic (and prevent calling out to 'git' which may
+# not even be present).
+ifneq ($(DCH_GIT_REVISION),)
 DCH_VERSION := $(shell date +%Y%m%d)
 DCH_TIMESTAMP := $(shell date -R)
 
@@ -33,6 +38,7 @@ debian/changelog: debian/changelog.in
 .PHONY: x-source
 x-source: debian/changelog
 	dpkg-source -b .
+endif
 
 clean:
 	-$(WITH_OPAM_SWITCH) ocaml pkg/pkg.ml clean || rm -r _build/
