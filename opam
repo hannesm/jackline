@@ -19,9 +19,10 @@ depends: [
   "ppx_sexp_conv" {build}
   "topkg" {build}
   "erm_xmpp" {>= "0.3"}
-  "tls" {>= "0.10.6"}
-  "nocrypto" {>= "0.5.0"}
-  "x509" {>= "0.9.0"}
+  "tls" {>= "0.11.0"}
+  "mirage-crypto"
+  "mirage-crypto-pk"
+  "x509" {>= "0.10.0"}
   "domain-name" {>= "0.2.0"}
   "lwt"
   "otr" {>= "0.2.1"}
@@ -37,6 +38,7 @@ depends: [
   "uuseg" {>= "1.0.0"}
   "uutf" {>= "1.0.0"}
   "dns-client" { >= "4.2.0" }
+  "base64"
 ]
 synopsis: "Jackline - a minimalistic secure XMPP client"
 description: """

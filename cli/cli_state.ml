@@ -388,9 +388,8 @@ let send s session ?kind jid id body =
 
 
 let random_string () =
-  let open Nocrypto in
-  let rnd = Rng.generate 12 in
-  Cstruct.to_string (Base64.encode rnd)
+  let rnd = Mirage_crypto_rng.generate 12 in
+  Base64.encode_string (Cstruct.to_string rnd)
 
 let notify state jid =
   let newstate =

@@ -16,7 +16,7 @@ type t = {
   password : string option ;
   authenticator : auth ;
   otr_config : Otr.State.config ;
-  dsa : Nocrypto.Dsa.priv ;
+  dsa : Mirage_crypto_pk.Dsa.priv ;
   certificate_hostname : string option ;
   notification_callback : string option ;
   log_top : bool ;
@@ -33,7 +33,7 @@ let dsa_of_cfg_sexp t =
            List.fold_left (fun (dsa, cfg) -> function
                | Sexp.List [ Sexp.Atom "policies" ; _ ] as p -> (dsa, p :: cfg)
                | Sexp.List [ Sexp.Atom "versions" ; _ ] as v -> (dsa, v :: cfg)
-               | Sexp.List [ Sexp.Atom "dsa" ; d ] -> (Some (Nocrypto.Dsa.priv_of_sexp d), cfg)
+               | Sexp.List [ Sexp.Atom "dsa" ; d ] -> (Some (Mirage_crypto_pk.Dsa.priv_of_sexp d), cfg)
                | _ -> raise (Invalid_argument "broken sexp while trying to find dsa"))
              (dsa, cfg) data
          | _ -> (dsa, cfg))

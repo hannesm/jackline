@@ -190,9 +190,7 @@ let configure term () =
     [A.empty, str1; A.empty, str2]
   and transform fp =
     let dotted_hex_to_cs hex =
-      try
-        Nocrypto.Uncommon.Cs.of_hex
-          (String.map (function ':' -> ' ' | x -> x) hex)
+      try Cstruct.of_hex (String.map (function ':' -> ' ' | x -> x) hex)
       with _ -> Cstruct.create 0
     in
     (fp, dotted_hex_to_cs fp)
@@ -289,7 +287,7 @@ let configure term () =
     pols @ if reveal then [ `REVEAL_MACS ] else []
   in
 
-  let dsa = Nocrypto.Dsa.generate `Fips1024 in
+  let dsa = Mirage_crypto_pk.Dsa.generate `Fips1024 in
   let otr_config = Otr.State.config versions policies in
 
   let above =

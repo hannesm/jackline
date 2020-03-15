@@ -182,7 +182,7 @@ val update_otr : user -> session -> Otr.State.session -> user
 val sorted_sessions : user -> session list
 
 (* locating a session, creating, ... *)
-val create_session : user -> string -> Otr.State.config -> Nocrypto.Dsa.priv -> user * session
+val create_session : user -> string -> Otr.State.config -> Mirage_crypto_pk.Dsa.priv -> user * session
 
 val find_session : user -> string -> session option
 val find_similar_session : user -> string -> session option
