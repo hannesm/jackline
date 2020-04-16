@@ -391,10 +391,8 @@ let resolve ~(selflog:?kind:User.chatkind -> string -> string -> unit Lwt.t) (ho
     | Ok host -> match Domain_name.host host with
       | Error _ -> Lwt.return None
       | Ok host ->
-        Dns_client_lwt.(
-          gethostbyname @@ create ~clock:Mtime_clock.now_ns
-            ~nameserver:(`UDP, (Unix.inet_addr_of_string "91.239.100.100", 53)) ()
-        ) host >|= function
+        let resolver = Dns_client_lwt.create ~clock:Mtime_clock.now_ns () in
+        Dns_client_lwt.gethostbyname resolver host >|= function
         | Result.Error _ -> None
         | Ok ip -> Some (Ipaddr.V4.to_string ip |> Unix.inet_addr_of_string)
   in
