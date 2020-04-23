@@ -10,7 +10,7 @@ true : package(sexplib astring uchar ptime erm_xmpp lwt tls tls.lwt hex otr x509
 <src/persistency.ml>: package(lwt.unix)
 <src/xjid.{ml,mli}>: package(ppx_sexp_conv)
 <src/user.{ml,mli}>: package(ppx_sexp_conv ptime.clock.os)
-<src/xmpp_callbacks.ml>: package(dns-client.lwt mtime.clock.os)
+<src/xmpp_callbacks.ml>: package(dns-client.lwt)
 
 <cli/*>: package(notty lwt)
 <cli/cli_support.ml>: package(uutf uucp uuseg)
