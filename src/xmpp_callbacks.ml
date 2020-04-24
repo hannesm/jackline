@@ -391,7 +391,7 @@ let resolve ~(selflog:?kind:User.chatkind -> string -> string -> unit Lwt.t) (ho
     | Ok host -> match Domain_name.host host with
       | Error _ -> Lwt.return None
       | Ok host ->
-        let resolver = Dns_client_lwt.create ~clock:Mtime_clock.now_ns () in
+        let resolver = Dns_client_lwt.create () in
         Dns_client_lwt.gethostbyname resolver host >|= function
         | Result.Error _ -> None
         | Ok ip -> Some (Ipaddr.V4.to_string ip |> Unix.inet_addr_of_string)
