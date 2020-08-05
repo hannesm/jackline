@@ -6,9 +6,12 @@ open Cli_state
 open Cli_support
 
 let print_time ~now ~tz_offset_s timestamp =
-  let daydiff, _ = Ptime.Span.to_d_ps (Ptime.diff now timestamp) in
+  let day_of_time t = match fst (Ptime.to_date_time ~tz_offset_s t) with
+    | (_, _, d) -> d
+  in
+  let daydiff = day_of_time now - day_of_time timestamp in
   let (_, m, d), ((hh, mm, ss), _) = Ptime.to_date_time ~tz_offset_s timestamp in
-  if daydiff = 0 then (* less than a day ago *)
+  if daydiff = 0 then (* same calendar day as now *)
     Printf.sprintf "%02d:%02d:%02d " hh mm ss
   else
     Printf.sprintf "%02d-%02d %02d:%02d " m d hh mm
