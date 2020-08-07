@@ -1,0 +1,5 @@
+(executable
+  (name jackline)
+  (package jackline)
+  (public_name jackline)
+  (libraries cli))
