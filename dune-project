@@ -31,7 +31,7 @@
     (uuseg            (>= 1.0.0))
     (uutf             (>= 1.0.0))
     (dns-client       (>= 4.5.0))
-    (cstruct-lwt      (>= 5.2.0))
+    (cstruct          (>= 5.2.0))
     (base64           (>= 3.4.0)))
   (synopsis "Jackline - a minimalistic secure XMPP client")
   (description
