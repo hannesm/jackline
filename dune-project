@@ -11,7 +11,7 @@
 (package
   (name jackline)
   (depends
-    (ocaml            (>= 4.07))
+    (ocaml            (>= 4.08))
     (ppx_sexp_conv    :build)
     (ppx_deriving     (>= 0.14.0))
     (erm_xmpp         (>= 0.3))
