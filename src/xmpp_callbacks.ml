@@ -385,18 +385,26 @@ let tls_epoch_to_line t =
 
 let resolve ~(selflog:?kind:User.chatkind -> string -> string -> unit Lwt.t) (hostname : string option) (port : int option) (jid_idn : string) =
   (* use DNS SRV record *)
-  let udns_getaddrinfo host : Lwt_unix.inet_addr option Lwt.t =
+  let udns_getaddrinfo host : Ipaddr.t list option Lwt.t =
     match Domain_name.of_string host with
     | Error _ -> Lwt.return None
     | Ok host -> match Domain_name.host host with
       | Error _ -> Lwt.return None
       | Ok host ->
         let resolver = Dns_client_lwt.create () in
-        Dns_client_lwt.gethostbyname resolver host >|= function
-        | Result.Error _ -> None
-        | Ok ip -> Some (Ipaddr.V4.to_string ip |> Unix.inet_addr_of_string)
+        (Dns_client_lwt.gethostbyname6 resolver host >|= function
+          | Result.Error _ -> None
+          | Ok ip -> Some (Ipaddr.V6 ip)) >>= fun ip6 ->
+        (Dns_client_lwt.gethostbyname resolver host >|= function
+          | Result.Error _ -> None
+          | Ok ip -> Some (Ipaddr.V4 ip)) >|= fun ip4 ->
+        match ip4, ip6 with
+        | None, None -> None
+        | Some v4, Some v6 -> Some [ v6 ; v4 ]
+        | None, Some v6 -> Some [ v6 ]
+        | Some v4, None -> Some [ v4 ]
   in
-  let lwt_getaddrinfo host : Lwt_unix.inet_addr option Lwt.t =
+  let lwt_getaddrinfo host : Ipaddr.t list option Lwt.t =
     (* this is a mess, only to resolve a hostname
        - if an IP is provided, don't leak that to getaddrinfo
        - Unix.getaddrinfo and Unix.inet_addr_of_string may throw -> need to catch exceptions
@@ -412,23 +420,35 @@ let resolve ~(selflog:?kind:User.chatkind -> string -> string -> unit Lwt.t) (ho
     let open Lwt_unix in
     Lwt.try_bind
       (fun () -> getaddrinfo host "" [])
-      (function
-        | { ai_addr = ADDR_INET (addr,_) ; _ } :: _ -> Lwt.return (Some addr)
-        | _ -> Lwt.return None)
+      (fun addr_info ->
+         let ips =
+           List.fold_left (fun acc -> function
+               | { ai_addr = ADDR_INET (addr,_) ; _ } ->
+                 let ip = Ipaddr_unix.of_inet_addr addr in
+                 if not (List.mem ip acc) then ip :: acc else acc
+               | _ -> acc) [] addr_info
+         in
+         match ips with
+         | [] -> Lwt.return None
+         | ips -> Lwt.return (Some (List.rev ips)))
       (fun _ -> Lwt.return None)
   in
   let rec resolve ?(service = "xmpp-client") host =
-    (if Sys.getenv_opt "LD_PRELOAD" = None then
-       udns_getaddrinfo else lwt_getaddrinfo
-    ) host >>= function
+    (match Sys.getenv_opt "LD_PRELOAD" with
+     | None -> udns_getaddrinfo
+     | Some _ -> lwt_getaddrinfo) host >>= function
     | None when service = "" -> Lwt.fail (Invalid_argument ("could not resolve hostname " ^ host))
     | None -> resolve ~service:"" host (* TODO when/how often do we want to retry? *)
     | Some ip -> Lwt.return ip
   in
   (match hostname with
-   | Some x -> (try Lwt.return (Unix.inet_addr_of_string x) with _ -> resolve x)
-   | None -> resolve jid_idn) >|= fun ip ->
-  Lwt_unix.ADDR_INET (ip, match port with Some x -> x | _ -> 5222)
+   | Some x -> (match Ipaddr.of_string x with Ok ip -> Lwt.return [ip] | Error _ -> resolve x)
+   | None -> resolve jid_idn) >|= fun ips ->
+  let port = match port with Some x -> x | _ -> 5222 in
+  List.map (function
+      | Ipaddr.V4 ip -> `V4, Lwt_unix.ADDR_INET (Ipaddr_unix.V4.to_inet_addr ip, port)
+      | Ipaddr.V6 ip -> `V6, Lwt_unix.ADDR_INET (Ipaddr_unix.V6.to_inet_addr ip, port))
+    ips
 
 let connect socket_data myjid certname password presence authenticator user_data mvar =
   let module Socket_module =

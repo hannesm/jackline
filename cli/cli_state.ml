@@ -223,39 +223,26 @@ module Connect = struct
     and hostname = config.Xconfig.hostname
     and port = config.Xconfig.port
     in
-    let report sockaddr =
-      let addr = match sockaddr with
-        | Unix.ADDR_INET (inet_addr, port) ->
-           Unix.string_of_inet_addr inet_addr ^ " on port " ^ string_of_int port
-        | Unix.ADDR_UNIX str -> str
-      and host = match hostname with
-        | Some x -> x
-        | None -> domain
-      in
-      Lwt.async (fun () -> selflog ui_mvar "connecting" ("to " ^ host ^ " (" ^ addr ^ ")"))
-    in
     Lwt.async (fun () ->
         let out = match hostname with None -> domain | Some x -> x in
         selflog ui_mvar "resolving" out) ;
-    Xmpp_callbacks.resolve ~selflog:(selflog ui_mvar) hostname port domain >|= fun sa ->
-    report sa ;
-    sa
+    Xmpp_callbacks.resolve ~selflog:(selflog ui_mvar) hostname port domain
 
   let connect_me config ui_mvar state_mvar users =
     let mvar = Lwt_mvar.create Cancel in
     let failure reason =
       disconnect () >>= fun () ->
-      Lwt.async (fun () -> selflog ui_mvar "session error" (Printexc.to_string reason)) ;
+      Lwt.async (fun () -> selflog ui_mvar "session error" reason) ;
       let conn () = Lwt_mvar.put mvar Reconnect in
       ignore (Lwt_engine.on_timer 10. false (fun _ -> Lwt.async conn)) ;
       Lwt.return_unit
     in
     let connect user_data (p, s, prio) =
       match config.Xconfig.password with
-      | None -> failure (Invalid_argument "no password provided, please restart")
+      | None -> failure "no password provided, please restart"
       | Some password ->
         Lwt.catch (fun () ->
-          resolve config ui_mvar >>= fun sockaddr ->
+          resolve config ui_mvar >>= fun sockaddrs ->
           let certname = match config.Xconfig.certificate_hostname with
             | None -> JID.to_idn (Xjid.jid_to_xmpp_jid (`Full config.Xconfig.jid))
             | Some x -> x
@@ -271,34 +258,49 @@ module Connect = struct
            in
            X509_lwt.authenticator a) >>= fun authenticator ->
           let kind, show = Xmpp_callbacks.presence_to_xmpp p in
-          let socket = Lwt_unix.(socket PF_INET SOCK_STREAM 0) in
-          Lwt.catch (fun () ->
-            Lwt_unix.connect socket sockaddr >>= fun () ->
-            Xmpp_callbacks.connect
-              socket
-              config.Xconfig.jid certname password
-              (kind, show, s, prio) authenticator user_data
-              (fun session ->
-                 Lwt_mvar.put mvar (Success user_data) >>= fun () ->
-                 let auto_rooms =
-                   Contact.fold
-                     (fun _ v acc ->
-                        match v with
-                        | `Room r when r.Muc.autojoin -> r :: acc
-                        | _ -> acc)
-                     users []
-                 in
-                 Lwt_list.iter_s (fun r ->
-                     let nick = r.Muc.my_nick
-                     and jid = Xjid.jid_to_xmpp_jid (`Bare r.Muc.room_jid)
-                     and password = r.Muc.password
-                     and maxstanzas = config.Xconfig.muc_max_stanzas
-                     in
-                     Xmpp_callbacks.Xep_muc.enter_room session ?maxstanzas ?password ~nick jid) auto_rooms) >|= fun session ->
-            xmpp_session := Some session ;
-            Lwt.async (fun () -> Xmpp_callbacks.parse_loop session))
-            (fun exn -> Lwt_unix.close socket >>= fun () -> failure exn))
-          (fun exn -> failure exn)
+
+          let rec connect_sa = function
+            | [] -> failure "no more IPs to connect to"
+            | (proto, sockaddr) :: tl ->
+              let addr = match sockaddr with
+                | Unix.ADDR_INET (inet_addr, port) ->
+                  Unix.string_of_inet_addr inet_addr ^ " on port " ^ string_of_int port
+                | Unix.ADDR_UNIX str -> str
+              in
+              Lwt.async (fun () -> selflog ui_mvar "connecting" ("to " ^ addr));
+              let proto = match proto with `V4 -> Lwt_unix.PF_INET | `V6 -> Lwt_unix.PF_INET6 in
+              let socket = Lwt_unix.(socket proto SOCK_STREAM 0) in
+              Lwt.catch
+                (fun () -> Lwt_unix.connect socket sockaddr)
+                (fun _ -> connect_sa tl) >>= fun () ->
+              Lwt.catch (fun () ->
+                  Xmpp_callbacks.connect
+                    socket
+                    config.Xconfig.jid certname password
+                    (kind, show, s, prio) authenticator user_data
+                    (fun session ->
+                       Lwt_mvar.put mvar (Success user_data) >>= fun () ->
+                       let auto_rooms =
+                         Contact.fold
+                           (fun _ v acc ->
+                              match v with
+                              | `Room r when r.Muc.autojoin -> r :: acc
+                              | _ -> acc)
+                           users []
+                       in
+                       Lwt_list.iter_s (fun r ->
+                           let nick = r.Muc.my_nick
+                           and jid = Xjid.jid_to_xmpp_jid (`Bare r.Muc.room_jid)
+                           and password = r.Muc.password
+                           and maxstanzas = config.Xconfig.muc_max_stanzas
+                           in
+                           Xmpp_callbacks.Xep_muc.enter_room session ?maxstanzas ?password ~nick jid) auto_rooms) >|= fun session ->
+                  xmpp_session := Some session ;
+                  Lwt.async (fun () -> Xmpp_callbacks.parse_loop session))
+                (fun exn -> Lwt_unix.close socket >>= fun () -> failure (Printexc.to_string exn))
+          in
+          connect_sa sockaddrs)
+          (fun exn -> failure (Printexc.to_string exn))
     in
     let rec reconnect_loop user_data presence =
       Lwt_mvar.take mvar >>= function
