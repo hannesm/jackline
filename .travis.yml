@@ -10,10 +10,12 @@ env:
 matrix:
   include:
   - os: linux
-    env: OCAML_VERSION=4.07
-  - os: linux
     env: OCAML_VERSION=4.08
   - os: osx
     env: OCAML_VERSION=4.08
+  - os: linux
+    env: OCAML_VERSION=4.09
+  - os: linux
+    env: OCAML_VERSION=4.10
 notifications:
   email: false
