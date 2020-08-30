@@ -68,9 +68,9 @@ but I've some [work-in-progress](https://github.com/hannesm/conex).
 Be aware that this is unreleased software.  Bug reports are welcome
 (pull requests as well).
 
-Get OCaml (>= 4.07.0), get opam (>= 2.0.0),
+Get OCaml (>= 4.08.0), get opam (>= 2.0.0),
 [gmp](http://gmplib.org/) is required as well.
-If you have an older OCaml compiler, run `opam switch 4.07.1` and follow instructions.
+If you have an older OCaml compiler, run `opam switch 4.08.1` and follow instructions.
 
 Run the following commands:
 - `opam repo add xmpp-opam git+https://github.com/hannesm/xmpp-opam.git
@@ -80,7 +80,7 @@ Run the following commands:
 A cryptographically signed package (using [conex](https://github.com/hannesm/conex)) is available, you have to follow the steps in [the README](https://github.com/hannesm/jackline-opam).
 
 Now you should have a `~/.opam/system/bin/jackline` (or
-`~/.opam/4.07.1/bin/jackline`), which should be in your `PATH` (if you
+`~/.opam/4.08.1/bin/jackline`), which should be in your `PATH` (if you
 executed ``eval `opam config env` ``).
 
 To update, simply run `opam update` followed by `opam upgrade`.  This
@@ -91,9 +91,9 @@ will get you the latest version (git master).
 If you clone this repository, and install the required dependencies (see above),
 you can compile jackline by running
 ```
-  ocaml pkg/pkg.ml build
+  dune build
 ```
-This will produce `_build/bin/jackline.native`.
+This will produce `_build/default/bin/jackline.exe`.
 
 ### Configuration
 
