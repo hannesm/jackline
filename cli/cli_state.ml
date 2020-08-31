@@ -260,7 +260,7 @@ module Connect = struct
           let kind, show = Xmpp_callbacks.presence_to_xmpp p in
 
           let rec connect_sa = function
-            | [] -> failure "no more IPs to connect to"
+            | [] -> failure "no more IPs to connect to" >|= fun () -> None
             | (proto, sockaddr) :: tl ->
               let addr = match sockaddr with
                 | Unix.ADDR_INET (inet_addr, port) ->
@@ -271,35 +271,37 @@ module Connect = struct
               let proto = match proto with `V4 -> Lwt_unix.PF_INET | `V6 -> Lwt_unix.PF_INET6 in
               let socket = Lwt_unix.(socket proto SOCK_STREAM 0) in
               Lwt.catch
-                (fun () -> Lwt_unix.connect socket sockaddr)
-                (fun _ -> connect_sa tl) >>= fun () ->
-              Lwt.catch (fun () ->
-                  Xmpp_callbacks.connect
-                    socket
-                    config.Xconfig.jid certname password
-                    (kind, show, s, prio) authenticator user_data
-                    (fun session ->
-                       Lwt_mvar.put mvar (Success user_data) >>= fun () ->
-                       let auto_rooms =
-                         Contact.fold
-                           (fun _ v acc ->
-                              match v with
-                              | `Room r when r.Muc.autojoin -> r :: acc
-                              | _ -> acc)
-                           users []
-                       in
-                       Lwt_list.iter_s (fun r ->
-                           let nick = r.Muc.my_nick
-                           and jid = Xjid.jid_to_xmpp_jid (`Bare r.Muc.room_jid)
-                           and password = r.Muc.password
-                           and maxstanzas = config.Xconfig.muc_max_stanzas
-                           in
-                           Xmpp_callbacks.Xep_muc.enter_room session ?maxstanzas ?password ~nick jid) auto_rooms) >|= fun session ->
-                  xmpp_session := Some session ;
-                  Lwt.async (fun () -> Xmpp_callbacks.parse_loop session))
-                (fun exn -> Lwt_unix.close socket >>= fun () -> failure (Printexc.to_string exn))
+                (fun () -> Lwt_unix.connect socket sockaddr >|= fun () -> Some socket)
+                (fun _ -> Lwt_unix.close socket >>= fun () -> connect_sa tl)
           in
-          connect_sa sockaddrs)
+          connect_sa sockaddrs >>= function
+          | None -> Lwt.return_unit
+          | Some socket ->
+            Lwt.catch (fun () ->
+                Xmpp_callbacks.connect
+                  socket
+                  config.Xconfig.jid certname password
+                  (kind, show, s, prio) authenticator user_data
+                  (fun session ->
+                     Lwt_mvar.put mvar (Success user_data) >>= fun () ->
+                     let auto_rooms =
+                       Contact.fold
+                         (fun _ v acc ->
+                            match v with
+                            | `Room r when r.Muc.autojoin -> r :: acc
+                            | _ -> acc)
+                         users []
+                     in
+                     Lwt_list.iter_s (fun r ->
+                         let nick = r.Muc.my_nick
+                         and jid = Xjid.jid_to_xmpp_jid (`Bare r.Muc.room_jid)
+                         and password = r.Muc.password
+                         and maxstanzas = config.Xconfig.muc_max_stanzas
+                         in
+                         Xmpp_callbacks.Xep_muc.enter_room session ?maxstanzas ?password ~nick jid) auto_rooms) >|= fun session ->
+                xmpp_session := Some session ;
+                Lwt.async (fun () -> Xmpp_callbacks.parse_loop session))
+              (fun exn -> Lwt_unix.close socket >>= fun () -> failure (Printexc.to_string exn)))
           (fun exn -> failure (Printexc.to_string exn))
     in
     let rec reconnect_loop user_data presence =
