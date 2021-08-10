@@ -280,7 +280,9 @@ module Connect = struct
             Lwt.catch (fun () ->
                 Xmpp_callbacks.connect
                   socket
-                  config.Xconfig.jid certname password
+                  config.Xconfig.jid
+                  (Domain_name.host_exn (Domain_name.of_string_exn certname))
+                  password
                   (kind, show, s, prio) authenticator user_data
                   (fun session ->
                      Lwt_mvar.put mvar (Success user_data) >>= fun () ->
