@@ -196,7 +196,7 @@ let configure term () =
     (fp, dotted_hex_to_cs fp)
   and valid = function
     | ("", _) -> `Ok None
-    | (fp, x) when Cstruct.len x = 32 -> `Ok (Some fp)
+    | (fp, x) when Cstruct.length x = 32 -> `Ok (Some fp)
     | _ -> `Invalid
   in
   ask above ~below prefix transform valid term >>= (function
