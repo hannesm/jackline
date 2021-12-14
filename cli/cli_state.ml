@@ -250,11 +250,7 @@ module Connect = struct
           (let a =
              match config.Xconfig.authenticator with
              | `Trust_anchor x -> `Ca_file x
-             | `Fingerprint fp ->
-               let host =
-                 Domain_name.host_exn (Domain_name.of_string_exn certname)
-               in
-               `Hex_cert_fingerprints (`SHA256, [ host, fp ])
+             | `Fingerprint fp -> `Hex_cert_fingerprint (`SHA256, fp)
            in
            X509_lwt.authenticator a) >>= fun authenticator ->
           let kind, show = Xmpp_callbacks.presence_to_xmpp p in
