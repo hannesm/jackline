@@ -1,4 +1,4 @@
 (library
   (name cli)
   (wrapped false)
-  (libraries xmpp_client notty notty.lwt lwt lwt.unix ptime.clock.os uucp uuseg uutf))
+  (libraries xmpp_client notty notty.lwt lwt lwt.unix ptime.clock.os uucp uuseg uutf happy-eyeballs-lwt))

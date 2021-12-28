@@ -32,7 +32,8 @@
     (uutf             (>= 1.0.0))
     (dns-client       (>= 4.5.0))
     (cstruct          (>= 6.0.0))
-    (base64           (>= 3.4.0)))
+    (base64           (>= 3.4.0))
+    (happy-eyeballs-lwt (>= 0.1.1)))
   (synopsis "Jackline - a minimalistic secure XMPP client")
   (description
     "\| Jackline uses several clean-slate libraries (OCaml-TLS, OCaml-OTR) and only has

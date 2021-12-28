@@ -49,6 +49,7 @@ depends: [
   "dns-client" {>= "4.5.0"}
   "cstruct" {>= "6.0.0"}
   "base64" {>= "3.4.0"}
+  "happy-eyeballs-lwt" {>= "0.1.1"}
 ]
 build: [
   ["dune" "subst"] {pinned}

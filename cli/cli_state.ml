@@ -218,17 +218,7 @@ module Connect = struct
     | None   ->
        Lwt.return_unit
 
-  let resolve config ui_mvar =
-    let domain = JID.to_idn (Xjid.jid_to_xmpp_jid (`Full config.Xconfig.jid))
-    and hostname = config.Xconfig.hostname
-    and port = config.Xconfig.port
-    in
-    Lwt.async (fun () ->
-        let out = match hostname with None -> domain | Some x -> x in
-        selflog ui_mvar "resolving" out) ;
-    Xmpp_callbacks.resolve ~selflog:(selflog ui_mvar) hostname port domain
-
-  let connect_me config ui_mvar state_mvar users =
+  let connect_me he config ui_mvar state_mvar users =
     let mvar = Lwt_mvar.create Cancel in
     let failure reason =
       disconnect () >>= fun () ->
@@ -241,74 +231,76 @@ module Connect = struct
       match config.Xconfig.password with
       | None -> failure "no password provided, please restart"
       | Some password ->
-        Lwt.catch (fun () ->
-          resolve config ui_mvar >>= fun sockaddrs ->
-          (let a, certname =
-             match config.Xconfig.authenticator with
-             | `Trust_anchor x ->
-               let h =
-                 Option.value
-                   ~default:(JID.to_idn (Xjid.jid_to_xmpp_jid (`Full config.Xconfig.jid)))
-                   config.Xconfig.certificate_hostname
-               in
-               `Ca_file x, Some (Domain_name.(host_exn (of_string_exn h)))
-             | `Fingerprint fp ->
-               if Option.is_some config.Xconfig.certificate_hostname then
-                 Lwt.async (fun () ->
-                     selflog ui_mvar "ignoring certificate hostname"
-                       "The certificate hostname is not considered when using fingerprint authenticator");
-               `Hex_cert_fingerprint (`SHA256, fp), None
-           in
-           X509_lwt.authenticator a >|= fun a -> a, certname)
-          >>= fun (authenticator, host) ->
-          let kind, show = Xmpp_callbacks.presence_to_xmpp p in
-
-          let rec connect_sa = function
-            | [] -> failure "no more IPs to connect to" >|= fun () -> None
-            | (proto, sockaddr) :: tl ->
-              let addr = match sockaddr with
-                | Unix.ADDR_INET (inet_addr, port) ->
-                  Unix.string_of_inet_addr inet_addr ^ " on port " ^ string_of_int port
-                | Unix.ADDR_UNIX str -> str
-              in
-              Lwt.async (fun () -> selflog ui_mvar "connecting" ("to " ^ addr));
-              let proto = match proto with `V4 -> Lwt_unix.PF_INET | `V6 -> Lwt_unix.PF_INET6 in
-              let socket = Lwt_unix.(socket proto SOCK_STREAM 0) in
-              Lwt.catch
-                (fun () -> Lwt_unix.connect socket sockaddr >|= fun () -> Some socket)
-                (fun _ -> Lwt_unix.close socket >>= fun () -> connect_sa tl)
+        match Sys.getenv_opt "LD_PRELOAD" with
+        | Some _ ->
+          failure
+            "You are using LD_PRELOAD, but since jackline's recent switch to \
+             the pure OCaml implementation for DNS resolution, \
+             LD_PRELOAD-based tools like 'torsocks' will not be able to \
+             intercept the getaddrinfo() library calls like they used to."
+        | None ->
+          let host, port =
+            let domain =
+              JID.to_idn (Xjid.jid_to_xmpp_jid (`Full config.Xconfig.jid))
+            and hostname = config.Xconfig.hostname
+            in
+            Option.value ~default:domain hostname,
+            Option.value ~default:5222 config.Xconfig.port
           in
-          connect_sa sockaddrs >>= function
-          | None -> Lwt.return_unit
-          | Some socket ->
-            Lwt.catch (fun () ->
-                Xmpp_callbacks.connect
-                  socket
-                  config.Xconfig.jid
-                  ?host
-                  password
-                  (kind, show, s, prio) authenticator user_data
-                  (fun session ->
-                     Lwt_mvar.put mvar (Success user_data) >>= fun () ->
-                     let auto_rooms =
-                       Contact.fold
-                         (fun _ v acc ->
-                            match v with
-                            | `Room r when r.Muc.autojoin -> r :: acc
-                            | _ -> acc)
-                         users []
+          Lwt.async (fun () -> selflog ui_mvar "resolving" host) ;
+          Lwt.catch (fun () ->
+              Happy_eyeballs_lwt.connect he host [port] >>= function
+              | Error (`Msg m) -> failure ("failed to connect: " ^ m)
+              | Ok ((ip, _), socket) ->
+                Lwt.async (fun () ->
+                    selflog ui_mvar "connected" ("to " ^ Ipaddr.to_string ip));
+                (let a, certname =
+                   match config.Xconfig.authenticator with
+                   | `Trust_anchor x ->
+                     let h =
+                       Option.value
+                         ~default:(JID.to_idn (Xjid.jid_to_xmpp_jid (`Full config.Xconfig.jid)))
+                         config.Xconfig.certificate_hostname
                      in
-                     Lwt_list.iter_s (fun r ->
-                         let nick = r.Muc.my_nick
-                         and jid = Xjid.jid_to_xmpp_jid (`Bare r.Muc.room_jid)
-                         and password = r.Muc.password
-                         and maxstanzas = config.Xconfig.muc_max_stanzas
+                     `Ca_file x, Some (Domain_name.(host_exn (of_string_exn h)))
+                   | `Fingerprint fp ->
+                     if Option.is_some config.Xconfig.certificate_hostname then
+                       Lwt.async (fun () ->
+                           selflog ui_mvar "ignoring certificate hostname"
+                             "The certificate hostname is not considered when using fingerprint authenticator");
+                     `Hex_cert_fingerprint (`SHA256, fp), None
+                 in
+                 X509_lwt.authenticator a >|= fun a -> a, certname)
+                >>= fun (authenticator, host) ->
+                let kind, show = Xmpp_callbacks.presence_to_xmpp p in
+                Lwt.catch (fun () ->
+                    Xmpp_callbacks.connect
+                      socket
+                      config.Xconfig.jid
+                      ?host
+                      password
+                      (kind, show, s, prio) authenticator user_data
+                      (fun session ->
+                         Lwt_mvar.put mvar (Success user_data) >>= fun () ->
+                         let auto_rooms =
+                           Contact.fold
+                             (fun _ v acc ->
+                                match v with
+                                | `Room r when r.Muc.autojoin -> r :: acc
+                                | _ -> acc)
+                             users []
                          in
-                         Xmpp_callbacks.Xep_muc.enter_room session ?maxstanzas ?password ~nick jid) auto_rooms) >|= fun session ->
-                xmpp_session := Some session ;
-                Lwt.async (fun () -> Xmpp_callbacks.parse_loop session))
-              (fun exn -> Lwt_unix.close socket >>= fun () -> failure (Printexc.to_string exn)))
-          (fun exn -> failure (Printexc.to_string exn))
+                         Lwt_list.iter_s (fun r ->
+                             let nick = r.Muc.my_nick
+                             and jid = Xjid.jid_to_xmpp_jid (`Bare r.Muc.room_jid)
+                             and password = r.Muc.password
+                             and maxstanzas = config.Xconfig.muc_max_stanzas
+                             in
+                             Xmpp_callbacks.Xep_muc.enter_room session ?maxstanzas ?password ~nick jid) auto_rooms) >|= fun session ->
+                    xmpp_session := Some session ;
+                    Lwt.async (fun () -> Xmpp_callbacks.parse_loop session))
+                  (fun exn -> Lwt_unix.close socket >>= fun () -> failure (Printexc.to_string exn)))
+            (fun exn -> failure (Printexc.to_string exn))
     in
     let rec reconnect_loop user_data presence =
       Lwt_mvar.take mvar >>= function

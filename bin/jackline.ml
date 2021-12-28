@@ -104,7 +104,8 @@ let start_client cfgdir debug unicode fd_gui fd_nfy () =
 
   Cli_state.Notify.notify_writer myjid config.Xconfig.notification_callback fd_nfy >>= fun state_mvar ->
   Cli_state.Notify.gui_focus_reader fd_gui ui_mvar ;
-  let connect_mvar = Cli_state.Connect.connect_me config ui_mvar state_mvar users in
+  let he = Happy_eyeballs_lwt.create () in
+  let connect_mvar = Cli_state.Connect.connect_me he config ui_mvar state_mvar users in
   let state = Cli_state.empty_state cfgdir config users connect_mvar state_mvar in
 
   let greetings = [
