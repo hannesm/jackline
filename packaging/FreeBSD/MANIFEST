@@ -1,0 +1,20 @@
+name:         jackline
+version:      %%VERSION_NUM%%
+origin:	      local/jackline
+comment:      Jackline - an XMPP client
+www:	      https://github.com/hannesm/jackline
+maintainer:   Robur <team@robur.coop>
+prefix:	      /usr/local
+licenselogic: single
+licenses:     [BSD2CLAUSE]
+flatsize:     %%FLATSIZE%%
+categories:   [local]
+deps {
+    gmp {
+        origin = "math/gmp";
+    },
+}
+desc = <<EOD
+A minimalistic secure XMPP client
+
+EOD;

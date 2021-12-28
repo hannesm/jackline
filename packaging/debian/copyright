@@ -1,0 +1,8 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: jackline
+Upstream-Contact: Robur Team <team@robur.coop>
+Source: https://github.com/hannesm/jackline
+
+Files: *
+Copyright: "Hannes Mehnert <hannes@mehnert.org>"
+License: BSD2

@@ -1,0 +1,15 @@
+#!/bin/sh
+BUILDER_USER=builder
+
+if ! getent group "$BUILDER_USER" >/dev/null; then
+	groupadd -g 497 $BUILDER_USER
+fi
+if ! getent passwd "$BUILDER_USER" >/dev/null; then
+	useradd -g 497 -u 497 -d /nonexistent -s /usr/sbin/nologin $BUILDER_USER
+fi
+mkdir -m 0700 -p /var/lib/builder
+chown $BUILDER_USER:$BUILDER_USER /var/lib/builder
+
+if [ -d /run/systemd/system ]; then
+	systemctl --system daemon-reload >/dev/null || true
+fi
