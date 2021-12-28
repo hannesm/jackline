@@ -61,9 +61,9 @@ struct
     dbg ("OUT TLS: " ^ str) >>= fun () ->
     Tls_lwt.Unix.write s (Cstruct.of_string str)
 
-  let switch fd host authenticator =
+  let switch fd ?host authenticator =
     let config = Tls.Config.client ~authenticator () in
-    Tls_lwt.Unix.client_of_fd config ~host fd
+    Tls_lwt.Unix.client_of_fd config ?host fd
 
   let close s =
     Tls_lwt.Unix.close s

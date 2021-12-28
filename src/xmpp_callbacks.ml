@@ -450,7 +450,7 @@ let resolve ~(selflog:?kind:User.chatkind -> string -> string -> unit Lwt.t) (ho
       | Ipaddr.V6 ip -> `V6, Lwt_unix.ADDR_INET (Ipaddr_unix.V6.to_inet_addr ip, port))
     ips
 
-let connect socket_data myjid certname password presence authenticator user_data mvar =
+let connect socket_data myjid ?host password presence authenticator user_data mvar =
   let module Socket_module =
     struct type t = PlainSocket.socket
            let socket = socket_data
@@ -459,7 +459,7 @@ let connect socket_data myjid certname password presence authenticator user_data
   in
 
   let tls_socket () =
-    TLSSocket.switch socket_data certname authenticator >>= fun socket_data ->
+    TLSSocket.switch socket_data ?host authenticator >>= fun socket_data ->
     (match tls_epoch_to_line socket_data with
      | Ok str -> user_data.locallog ~kind:`Success "TLS session info" str
      | Error str -> user_data.locallog ~kind:`Error "TLS session info" str) >>= fun () ->

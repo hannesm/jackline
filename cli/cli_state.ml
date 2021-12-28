@@ -243,16 +243,24 @@ module Connect = struct
       | Some password ->
         Lwt.catch (fun () ->
           resolve config ui_mvar >>= fun sockaddrs ->
-          let certname = match config.Xconfig.certificate_hostname with
-            | None -> JID.to_idn (Xjid.jid_to_xmpp_jid (`Full config.Xconfig.jid))
-            | Some x -> x
-          in
-          (let a =
+          (let a, certname =
              match config.Xconfig.authenticator with
-             | `Trust_anchor x -> `Ca_file x
-             | `Fingerprint fp -> `Hex_cert_fingerprint (`SHA256, fp)
+             | `Trust_anchor x ->
+               let h =
+                 Option.value
+                   ~default:(JID.to_idn (Xjid.jid_to_xmpp_jid (`Full config.Xconfig.jid)))
+                   config.Xconfig.certificate_hostname
+               in
+               `Ca_file x, Some (Domain_name.(host_exn (of_string_exn h)))
+             | `Fingerprint fp ->
+               if Option.is_some config.Xconfig.certificate_hostname then
+                 Lwt.async (fun () ->
+                     selflog ui_mvar "ignoring certificate hostname"
+                       "The certificate hostname is not considered when using fingerprint authenticator");
+               `Hex_cert_fingerprint (`SHA256, fp), None
            in
-           X509_lwt.authenticator a) >>= fun authenticator ->
+           X509_lwt.authenticator a >|= fun a -> a, certname)
+          >>= fun (authenticator, host) ->
           let kind, show = Xmpp_callbacks.presence_to_xmpp p in
 
           let rec connect_sa = function
@@ -277,7 +285,7 @@ module Connect = struct
                 Xmpp_callbacks.connect
                   socket
                   config.Xconfig.jid
-                  (Domain_name.host_exn (Domain_name.of_string_exn certname))
+                  ?host
                   password
                   (kind, show, s, prio) authenticator user_data
                   (fun session ->
