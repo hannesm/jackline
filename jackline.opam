@@ -68,6 +68,6 @@ build: [
 ]
 dev-repo: "git+https://github.com/hannesm/jackline.git"
 pin-depends: [
-  [ "erm_xml.0.4~dev" "git+https://github.com/hannesm/xml.git" ]
-  [ "erm_xmpp.0.4~dev" "git+https://github.com/hannesm/xmpp.git#otr" ]
+  [ "erm_xml.0.4~dev" "git+https://github.com/hannesm/xml.git#a2b4db61ca93dc265ca47b51d01fa147d3b267c3" ]
+  [ "erm_xmpp.0.4~dev" "git+https://github.com/hannesm/xmpp.git#9916901b2ea865d01d5b7888170d9aa21976d9a8" ]
 ]
