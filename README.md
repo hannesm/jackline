@@ -1,13 +1,13 @@
-[![Build Status](https://travis-ci.org/hannesm/jackline.svg?branch=master)](https://travis-ci.org/hannesm/jackline)
-
 ### [Jackline](https://en.wikipedia.org/wiki/Jackline) - a minimalistic secure XMPP client
 
-![Screenshot](http://berlin.ccc.de/~hannes/jackline2.png)
+![Screenshot](https://data.robur.coop/jackline2.png)
+
+[Binary packages](https://builds.robur.coop/job/jackline/)
 
 This is unreleased software... feedback welcome!
 
 You can [read more about jackline (January
-2017)](https://hannes.nqsb.io/Posts/Jackline).
+2017)](https://hannes.robur.coop/Posts/Jackline).
 
 Jackline uses several clean-slate libraries (OCaml-TLS,
 OCaml-OTR) and only has a minimal few features: no support for HTML markup, avatars,
