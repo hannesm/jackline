@@ -67,3 +67,7 @@ build: [
   ["sh" "-ex" "packaging/debian/create_package.sh"] {os-family = "debian"}
 ]
 dev-repo: "git+https://github.com/hannesm/jackline.git"
+pin-depends: [
+  [ "erm_xml.0.4~dev" "git+https://github.com/hannesm/xml.git" ]
+  [ "erm_xmpp.0.4~dev" "git+https://github.com/hannesm/xmpp.git#otr" ]
+]
