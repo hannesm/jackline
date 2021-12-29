@@ -10,3 +10,5 @@ Vcs-Git: https://github.com/hannesm/jackline.git
 Architecture: all
 Depends: libgmp10
 Description: A minimalistic secure XMPP client
+  Jackline is a minimalistic and secure XMPP client developed in OCaml with a
+  lean dependency chain.
