@@ -26,7 +26,7 @@ install -U $bdir/jackline $bindir/jackline
 flatsize=$(find "$rootdir" -type f -exec stat -f %z {} + |
                awk 'BEGIN {s=0} {s+=$1} END {print s}')
 
-sed -e "s:%%FLATSIZE%%:${flatsize}:" "$pdir/MANIFEST" > "$manifest"
+sed -e "s:%%FLATSIZE%%:${flatsize}:" -e "/^[Vv]ersion:/s/-/./g" "$pdir/MANIFEST" > "$manifest"
 
 {
     printf '\nfiles {\n'
