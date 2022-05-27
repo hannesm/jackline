@@ -275,18 +275,22 @@ let render_state (width, height) state =
 
       let split_lines lines =
         let line_of_list lst img =
-          Notty.Infix.(I.uchars A.empty (Array.of_list lst) <-> img) in
-        List.fold_right
-          (fun ch (line_acc, acc) ->
-             if Uchar.(equal (of_char '\n')) ch
-             then [], line_of_list line_acc acc
-             else ch::line_acc, acc)
-          lines ([], I.empty)
-        |> function | [], acc -> acc
-                    | last, img -> line_of_list last img
+          Notty.Infix.(I.uchars A.empty (Array.of_list lst) <-> img)
+        in
+        match
+          List.fold_right
+            (fun ch (line_acc, acc) ->
+               if Uchar.(equal (of_char '\n')) ch
+               then [], line_of_list line_acc acc
+               else ch::line_acc, acc)
+            lines ([], I.empty)
+        with
+        | [], acc -> acc
+        | last, img -> line_of_list last img
       in
       let iinp = split_lines pre
-      and iinp2 = split_lines post in
+      and iinp2 = split_lines post
+      in
       let r = match post with
         | [] ->
           let input = char_list_to_str pre in
