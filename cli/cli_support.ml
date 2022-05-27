@@ -209,32 +209,51 @@ let char_list_to_str xs =
   Array.iter (Uutf.Buffer.add_utf_8 buf) inp ;
   Buffer.contents buf
 
-let readline_input = function
-  | `Key (`Backspace, []) ->
+let readline_input : [ `Key of Notty.Unescape.key
+                     | `Mouse of Notty.Unescape.mouse
+                     | `Resize of int * int
+                     | `Paste of Notty.Unescape.paste ] -> 'b =
+  let pasting = ref false in
+  (* ^-- TODO this keeps state across calls, not so nice*)
+  fun event -> match event, !pasting with
+  | `Paste (`Start | `End as mode), _ ->
+    pasting := (mode = `Start);
+    `Ok Fun.id
+  | `Key (`Enter, []), true ->
+    `Ok (fun (pre, post) -> (pre @ [Uchar.of_char '\n'], post))
+  | `Key (`Backspace, []), false ->
     `Ok (fun (pre, post) ->
         match List.rev pre with
         | [] -> (pre, post)
         | _::tl -> (List.rev tl, post))
-  | `Key (`Delete, []) ->
+  | `Key (`Delete, []), false ->
     `Ok (fun (pre, post) ->
         match post with
         | [] -> (pre, post)
         | _::tl -> (pre, tl))
-  | `Key (`Home, []) -> `Ok (fun (pre, post) -> [], pre @ post)
-  | `Key (`End, []) -> `Ok (fun (pre, post) -> pre @ post, [])
-  | `Key (`Arrow `Right, []) ->
+  | `Key (`Home, []), false -> `Ok (fun (pre, post) -> [], pre @ post)
+  | `Key (`End, []), false -> `Ok (fun (pre, post) -> pre @ post, [])
+  | `Key (`Arrow `Right, []), false ->
     `Ok (fun (pre, post) ->
         match post with
         | [] -> (pre, post)
         | hd::tl -> (pre @ [hd], tl))
-  | `Key (`Arrow `Left, []) ->
+  | `Key (`Arrow `Left, []), false ->
     `Ok (fun (pre, post) ->
         match List.rev pre with
         | [] -> ([], post)
         | hd::tl -> (List.rev tl, hd :: post))
-  | `Key (`ASCII chr, []) -> `Ok (fun (pre, post) -> pre @ [Notty.Unescape.uchar (`ASCII chr)], post)
-  | `Key (`Uchar chr, []) -> `Ok (fun (pre, post) -> pre @ [chr], post)
-  | k -> `Unhandled k
+  | `Key (`ASCII chr, []), _ ->
+    `Ok (fun (pre, post) ->
+        let ch = Notty.Unescape.uchar (`ASCII chr) in
+        if `Cc = Uucp.Gc.general_category ch
+        then (pre @ [Uchar.of_int 0xFFFD], post)
+        else (pre @ [ch], post))
+  | `Key (`Uchar chr, []), _ when `Cc = Uucp.Gc.general_category chr ->
+    (* control characters get replaced with the replacement character: *)
+    `Ok (fun (pre, post) -> pre @ [Uchar.of_int 0xFFFD], post)
+  | `Key (`Uchar chr, []), _ -> `Ok (fun (pre, post) -> pre @ [chr], post)
+  | (`Key _ | `Resize _ | `Mouse _) as k, _  -> `Unhandled k
 
 let split_forward post =
   let inp, middle = match post with
