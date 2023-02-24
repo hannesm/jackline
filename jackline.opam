@@ -47,7 +47,6 @@ depends: [
   "uucp" {>= "2.0.0"}
   "uuseg" {>= "1.0.0"}
   "uutf" {>= "1.0.0"}
-  "dns-client-lwt" {>= "7.0.0"}
   "cstruct" {>= "6.0.0"}
   "base64" {>= "3.4.0"}
   "happy-eyeballs-lwt" {>= "0.1.1"}
