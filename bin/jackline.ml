@@ -32,7 +32,7 @@ let start_client cfgdir debug unicode fd_gui fd_nfy () =
       | Tls_lwt.Tls_failure f -> Some ("TLS failure: " ^ Tls.Engine.string_of_failure f)
       | _ -> None) ;
 
-  Mirage_crypto_rng_unix.initialize ();
+  Mirage_crypto_rng_unix.initialize (module Mirage_crypto_rng.Fortuna);
 
   Utils.unicode := unicode ;
 
