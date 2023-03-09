@@ -378,9 +378,9 @@ let tls_epoch_to_line t =
     let version = epoch.Core.protocol_version
     and cipher = epoch.Core.ciphersuite
     in
-    Ok Sexplib.Sexp.(to_string_hum (List [
-        Core.sexp_of_tls_version version ;
-        Ciphersuite.sexp_of_ciphersuite cipher ]))
+    Ok (Fmt.str "verion %a cipher %a"
+          Core.pp_tls_version version
+          Ciphersuite.pp_ciphersuite cipher)
   | Error () -> Error "error while fetching TLS parameters"
 
 let connect socket_data myjid ?host password presence authenticator user_data mvar =
