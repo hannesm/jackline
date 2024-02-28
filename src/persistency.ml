@@ -199,10 +199,16 @@ let load_password cfgdir =
 
 let otr_dsa = "otr_dsa.sexp"
 
+let sexp_of_priv Mirage_crypto_pk.Dsa.{ p ; q ; gg ; x ; y } =
+  let open Conv in
+  let sexp_of_z z = sexp_of_string (Z.to_string z) in
+  sexp_of_list (sexp_of_pair sexp_of_string sexp_of_z)
+    [ "p", p; "q", q; "gg", gg; "x", x; "y", y ]
+
 let dump_dsa cfgdir dsa =
-  write cfgdir otr_dsa (Bytes.of_string (Sexp.to_string_hum (Mirage_crypto_pk.Dsa.sexp_of_priv dsa)))
+  write cfgdir otr_dsa (Bytes.of_string (Sexp.to_string_hum (sexp_of_priv dsa)))
 
 let load_dsa cfgdir =
   read cfgdir otr_dsa >|= function
   | None -> None
-  | Some x -> Some (Mirage_crypto_pk.Dsa.priv_of_sexp (Sexp.of_string x))
+  | Some x -> Some (Xconfig.dsa_priv_of_sexp (Sexp.of_string x))
