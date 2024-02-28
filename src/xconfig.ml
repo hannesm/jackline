@@ -25,6 +25,15 @@ type t = {
 
 let current_version = 3
 
+let dsa_priv_of_sexp s =
+  let z_of_sexp s = Z.of_string (string_of_sexp s) in
+  match list_of_sexp (pair_of_sexp string_of_sexp z_of_sexp) s with
+  | [ "p", p; "q", q; "gg", gg; "x", x; "y", y ] ->
+    (match Mirage_crypto_pk.Dsa.priv ?fips:None ~p ~q ~gg ~x ~y () with
+     | Ok p -> p
+     | Error (`Msg m) -> invalid_arg ("bad private " ^ m))
+  | _ -> raise (Of_sexp_error (Failure "expected p, q, gg, x, and y'", s))
+
 let dsa_of_cfg_sexp t =
   match t with
   | Sexp.List l ->
@@ -33,7 +42,7 @@ let dsa_of_cfg_sexp t =
            List.fold_left (fun (dsa, cfg) -> function
                | Sexp.List [ Sexp.Atom "policies" ; _ ] as p -> (dsa, p :: cfg)
                | Sexp.List [ Sexp.Atom "versions" ; _ ] as v -> (dsa, v :: cfg)
-               | Sexp.List [ Sexp.Atom "dsa" ; d ] -> (Some (Mirage_crypto_pk.Dsa.priv_of_sexp d), cfg)
+               | Sexp.List [ Sexp.Atom "dsa" ; d ] -> (Some (dsa_priv_of_sexp d), cfg)
                | _ -> raise (Invalid_argument "broken sexp while trying to find dsa"))
              (dsa, cfg) data
          | _ -> (dsa, cfg))
