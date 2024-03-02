@@ -233,6 +233,7 @@ type message = {
 type user = {
   bare_jid          : Xjid.bare_jid ;
   name              : string option ;
+  alias             : string option ;
   groups            : string list ;
   subscription      : subscription ;
   properties        : property list ;
@@ -282,7 +283,7 @@ let info u s =
   in
   groups @ add @ sessions
 
-let new_user ~jid ?(name=None) ?(groups=[]) ?(subscription=`None) ?(otr_fingerprints=[]) ?(preserve_messages=false) ?(properties=[]) ?(active_sessions=[]) ?(otr_custom_config=None) () =
+let new_user ~jid ?(name=None) ?(alias=None) ?(groups=[]) ?(subscription=`None) ?(otr_fingerprints=[]) ?(preserve_messages=false) ?(properties=[]) ?(active_sessions=[]) ?(otr_custom_config=None) () =
   let message_history = []
   and expand = false
   and self = false
@@ -290,7 +291,7 @@ let new_user ~jid ?(name=None) ?(groups=[]) ?(subscription=`None) ?(otr_fingerpr
   and readline_history = []
   and history_position = 0
   in
-  { bare_jid = jid ; name ; groups ; subscription ; properties ; otr_fingerprints ; preserve_messages ; active_sessions ; message_history ; input_buffer ; readline_history ; otr_custom_config ; expand ; self ; history_position }
+  { bare_jid = jid ; name ; alias ; groups ; subscription ; properties ; otr_fingerprints ; preserve_messages ; active_sessions ; message_history ; input_buffer ; readline_history ; otr_custom_config ; expand ; self ; history_position }
 
 let active_session user =
   let sorted = sorted_sessions user in
@@ -305,14 +306,21 @@ let oneline user =
       ("{", "}")
     else
       subscription_to_chars user.subscription
-  and jid = Xjid.bare_jid_to_string user.bare_jid
   and presence =
     match active_session user with
     | None -> `Offline
     | Some s -> s.presence
   in
   let p = presence_to_char presence in
-  Printf.sprintf "%s%s%s %s" pr p po jid
+  let name =
+    match user.alias with
+    | Some alias -> alias
+    | None ->
+       match user.name with
+       | Some name -> name
+       | None -> Xjid.bare_jid_to_string user.bare_jid
+  in
+  Printf.sprintf "%s%s%s %s" pr p po name
 
 let oneline_with_session _ s =
   let presence = s.presence
@@ -556,7 +564,11 @@ let t_of_sexp t version =
   match t with
   | Sexp.List l ->
     (match
-       List.fold_left (fun (name, jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config) v -> match v with
+       List.fold_left (fun (alias, name, jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config) v -> match v with
+           | Sexp.List [ Sexp.Atom "alias" ; al ] ->
+             assert (alias = None);
+             let alias = option_of_sexp string_of_sexp al in
+             (Some alias, name, jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config)
            | Sexp.List [ Sexp.Atom "name" ; nam ] ->
              assert (name = None);
              let name = match version with
@@ -564,50 +576,53 @@ let t_of_sexp t version =
                  if str = "" then None else Some str
                | _ -> option_of_sexp string_of_sexp nam
              in
-             (Some name, jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config)
+             (alias, Some name, jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config)
            | Sexp.List [ Sexp.Atom "jid" ; Sexp.Atom jabberid ] ->
              assert (jid = None);
              let bare_jid = Xjid.string_to_bare_jid jabberid in
-             (name, bare_jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config)
+             (alias, name, bare_jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config)
            | Sexp.List [ Sexp.Atom "bare_jid" ; jabberid ] ->
              assert (jid = None);
              let bare_jid = Xjid.bare_jid_of_sexp jabberid in
-             (name, Some bare_jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config)
+             (alias, name, Some bare_jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config)
            | Sexp.List [ Sexp.Atom "groups" ; gps ] ->
              assert (groups = None);
              let groups = list_of_sexp string_of_sexp gps in
-             (name, jid, Some groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config)
+             (alias, name, jid, Some groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config)
            (* TODO: rename to preserve_messages and bump version *)
            | Sexp.List [ Sexp.Atom "preserve_history" ; hf ] ->
              assert (preserve_messages = None) ;
              let preserve_messages = bool_of_sexp hf in
-             (name, jid, groups, Some preserve_messages, properties, subscription, otr_fingerprints, otr_config)
+             (alias, name, jid, groups, Some preserve_messages, properties, subscription, otr_fingerprints, otr_config)
            | Sexp.List [ Sexp.Atom "properties" ; p ] ->
              assert (properties = None) ;
              let properties = list_of_sexp property_of_sexp p in
-             (name, jid, groups, preserve_messages, Some properties, subscription, otr_fingerprints, otr_config)
+             (alias, name, jid, groups, preserve_messages, Some properties, subscription, otr_fingerprints, otr_config)
            | Sexp.List [ Sexp.Atom "subscription" ; s ] ->
              assert (subscription = None) ;
              let subscription = subscription_of_sexp s in
-             (name, jid, groups, preserve_messages, properties, Some subscription, otr_fingerprints, otr_config)
+             (alias, name, jid, groups, preserve_messages, properties, Some subscription, otr_fingerprints, otr_config)
            | Sexp.List [ Sexp.Atom "otr_fingerprints" ; Sexp.List fps ] ->
              assert (otr_fingerprints = None);
              let otr_fingerprints = List.map fingerprint_of_sexp (List.map fix_fp fps) in
-             (name, jid, groups, preserve_messages, properties, subscription, Some otr_fingerprints, otr_config)
+             (alias, name, jid, groups, preserve_messages, properties, subscription, Some otr_fingerprints, otr_config)
            | Sexp.List [ Sexp.Atom "otr_custom_config" ; cfg ] ->
              assert (otr_config = None);
              let otr_config = option_of_sexp Otr.State.config_of_sexp cfg in
-             (name, jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config)
-           | _ -> (name, jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config))
-         (None, None, None, None, None, None, None, None) l
+             (alias, name, jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config)
+           | _ -> (alias, name, jid, groups, preserve_messages, properties, subscription, otr_fingerprints, otr_config))
+         (None, None, None, None, None, None, None, None, None) l
      with
-     | Some name, Some jid, Some groups, Some preserve_messages, Some properties, Some subscription, Some otr_fingerprints, otr_custom_config ->
+     | Some alias, Some name, Some jid, Some groups, Some preserve_messages, Some properties, Some subscription, Some otr_fingerprints, otr_custom_config ->
+       Some (new_user ~jid ~name ~alias ~groups ~subscription ~properties ~otr_fingerprints ~preserve_messages ~otr_custom_config ())
+     | None, Some name, Some jid, Some groups, Some preserve_messages, Some properties, Some subscription, Some otr_fingerprints, otr_custom_config ->
        Some (new_user ~jid ~name ~groups ~subscription ~properties ~otr_fingerprints ~preserve_messages ~otr_custom_config ())
      | _ -> None )
   | _ -> None
 
 let sexp_of_t t =
   record [
+    "alias"            , sexp_of_option sexp_of_string t.alias ;
     "name"             , sexp_of_option sexp_of_string t.name ;
     "bare_jid"         , Xjid.sexp_of_bare_jid t.bare_jid ;
     "groups"           , sexp_of_list sexp_of_string t.groups ;

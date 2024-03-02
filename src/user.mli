@@ -120,6 +120,7 @@ val message : ?timestamp:Ptime.t -> ?kind:chatkind -> direction -> bool -> bool 
 type user = {
   bare_jid          : Xjid.bare_jid ;
   name              : string option ;
+  alias             : string option ;
   groups            : string list ;
   subscription      : subscription ;
   properties        : property list ;
@@ -137,6 +138,7 @@ type user = {
 
 val new_user : jid:Xjid.bare_jid ->
                ?name:string option ->
+               ?alias:string option ->
                ?groups:string list ->
                ?subscription:subscription ->
                ?otr_fingerprints:fingerprint list ->
