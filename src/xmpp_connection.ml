@@ -47,22 +47,21 @@ end
 module TLSSocket =
 struct
   let read s buf start len =
-    let cs = Cstruct.create len in
-    Tls_lwt.Unix.read s cs >>= fun size ->
+    Tls_lwt.Unix.read s ~off:start buf >>= fun size ->
     ( if size > 0 then
-        (Cstruct.blit_to_bytes cs start buf 0 size ;
-         dbg ("IN TLS: " ^ Bytes.to_string (Bytes.sub buf start size)))
+        dbg ("IN TLS: " ^ Bytes.sub_string buf start size)
       else
         Lwt.return () ) >|= fun () ->
+    assert (len >= size);
     size
 
   let write s bs =
     let str = Bytes.to_string bs in
     dbg ("OUT TLS: " ^ str) >>= fun () ->
-    Tls_lwt.Unix.write s (Cstruct.of_string str)
+    Tls_lwt.Unix.write s str
 
   let switch fd ?host authenticator =
-    let config = Tls.Config.client ~authenticator () in
+    let config = Result.get_ok (Tls.Config.client ~authenticator ()) in
     Tls_lwt.Unix.client_of_fd config ?host fd
 
   let close s =
