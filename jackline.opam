@@ -30,14 +30,14 @@ depends: [
   "ppx_sexp_conv" {build}
   "ppx_deriving" {>= "0.14.0"}
   "erm_xmpp" {> "0.3"}
-  "tls" {>= "0.17.0"}
-  "tls-lwt" {>= "0.17.0"}
-  "mirage-crypto-pk" {>= "0.8.3"}
-  "mirage-crypto-rng" {>= "0.11.0"}
-  "x509" {>= "0.10.0"}
+  "tls" {>= "1.0.0"}
+  "tls-lwt" {>= "1.0.2"}
+  "mirage-crypto-pk" {>= "1.0.0"}
+  "mirage-crypto-rng" {>= "1.0.0"}
+  "x509" {>= "1.0.0"}
   "domain-name" {>= "0.2.0"}
   "lwt" {>= "0.5.3"}
-  "otr" {>= "0.2.1"}
+  "otr" {>= "1.0.0"}
   "astring" {>= "0.8.3"}
   "ptime" {>= "0.8.0"}
   "notty" {>= "0.2.2"}
@@ -47,7 +47,6 @@ depends: [
   "uucp" {>= "2.0.0"}
   "uuseg" {>= "1.0.0"}
   "uutf" {>= "1.0.0"}
-  "cstruct" {>= "6.0.0"}
   "base64" {>= "3.4.0"}
   "happy-eyeballs-lwt" {>= "0.1.1"}
 ]
@@ -70,5 +69,5 @@ build: [
 dev-repo: "git+https://github.com/hannesm/jackline.git"
 pin-depends: [
   [ "erm_xml.0.4~dev" "git+https://github.com/hannesm/xml.git#a2b4db61ca93dc265ca47b51d01fa147d3b267c3" ]
-  [ "erm_xmpp.0.4~dev" "git+https://github.com/hannesm/xmpp.git#e54d54e142ac9770c37e144693473692bf473530" ]
+  [ "erm_xmpp.0.4~dev" "git+https://github.com/hannesm/xmpp.git#54418f77abf47b175e9c1b68a4f745a12b640d6a" ]
 ]

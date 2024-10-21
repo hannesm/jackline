@@ -1,7 +1,7 @@
 (library
   (name xmpp_client)
   (wrapped false)
-  (libraries astring base64 cstruct erm_xmpp hex lwt lwt.unix
+  (libraries astring base64 erm_xmpp hex lwt lwt.unix
              mirage-crypto-pk otr ptime ptime.clock.os sexplib tls tls-lwt
              uchar uutf x509 ipaddr.unix)
   (preprocess
